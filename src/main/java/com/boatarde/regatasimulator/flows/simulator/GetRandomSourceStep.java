@@ -15,8 +15,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Objects;
 import java.util.Random;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Slf4j
@@ -27,7 +27,7 @@ public class GetRandomSourceStep implements WorkflowStep {
     public WorkflowAction run(WorkflowDataBag bag) {
         try {
             ClassLoader classLoader = GetRandomSourceStep.class.getClassLoader();
-            Path sourcesDir = Paths.get(classLoader.getResource("sources").toURI());
+            Path sourcesDir = Paths.get(Objects.requireNonNull(classLoader.getResource("sources")).toURI());
             // Listar todos os arquivos .jpg e .png dentro de "resources/templates" e seus subdiretórios
             try (Stream<Path> filesStream = Files.walk(sourcesDir)) {
                 List<File> imageFiles = filesStream

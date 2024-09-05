@@ -9,18 +9,13 @@ import com.boatarde.regatasimulator.models.Coordinates;
 import com.boatarde.regatasimulator.models.Picture;
 import lombok.extern.slf4j.Slf4j;
 
-import javax.imageio.ImageIO;
 import java.awt.Graphics;
 import java.awt.Image;
 import java.awt.image.BufferedImage;
 import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Scanner;
-import java.util.UUID;
 
 @Slf4j
 @WorkflowStepRegistration(WorkflowAction.BUILD_MEME_STEP)
@@ -70,7 +65,7 @@ public class BuildMemeStep implements WorkflowStep {
         return coordinates;
     }
 
-    private Picture buildMeme(Picture sourceFile, Picture templateFile, Coordinates coordinates) throws IOException {
+    private Picture buildMeme(Picture sourceFile, Picture templateFile, Coordinates coordinates) {
         BufferedImage result = layer(sourceFile.getImage(), templateFile.getImage(), coordinates);
         return new Picture(result);
     }

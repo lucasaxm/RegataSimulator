@@ -24,7 +24,7 @@ public class SendMessageStep implements WorkflowStep {
             BotApiObject response = regataSimulatorBot.execute(message);
             log.info("Response: {}", TelegramUtils.toJson(response, true));
         } catch (TelegramApiException e) {
-            e.printStackTrace();
+            log.error(e.getLocalizedMessage(), e);
         }
         return WorkflowAction.NONE;
     }

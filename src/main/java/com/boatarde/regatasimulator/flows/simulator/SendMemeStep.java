@@ -65,7 +65,7 @@ public class SendMemeStep implements WorkflowStep {
     }
 
     private File saveOutput(Picture shitpost) throws IOException {
-        File tempFile = null;
+        File tempFile;
         // Create a temporary file
         tempFile = File.createTempFile(UUID.randomUUID().toString(), ".png");
         System.out.println("Temporary file created at: " + tempFile.getAbsolutePath());

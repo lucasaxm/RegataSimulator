@@ -13,7 +13,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Objects;
 import java.util.Random;
+import java.util.stream.Stream;
 
 @Slf4j
 @WorkflowStepRegistration(WorkflowAction.GET_RANDOM_TEMPLATE)
@@ -21,14 +23,18 @@ public class GetRandomTemplateStep implements WorkflowStep {
 
     @Override
     public WorkflowAction run(WorkflowDataBag bag) {
+        Path templatesDir;
         try {
             ClassLoader classLoader = GetRandomTemplateStep.class.getClassLoader();
-            Path templatesDir = Paths.get(classLoader.getResource("templates").toURI());
-
-            List<Path> directories = Files.list(templatesDir)
+            templatesDir = Paths.get(Objects.requireNonNull(classLoader.getResource("templates")).toURI());
+        } catch (URISyntaxException e) {
+            log.error(e.getLocalizedMessage(), e);
+            return WorkflowAction.NONE;
+        }
+        try (Stream<Path> directoriesStream = Files.list(templatesDir)) {
+            List<Path> directories = directoriesStream
                 .filter(Files::isDirectory)
                 .toList();
-
             if (directories.isEmpty()) {
                 System.out.println("No template directory.");
                 return WorkflowAction.NONE;
@@ -41,9 +47,10 @@ public class GetRandomTemplateStep implements WorkflowStep {
 
             bag.put(WorkflowDataKey.TEMPLATE_DIRECTORY, selectedDirectory);
             return WorkflowAction.GET_RANDOM_SOURCE;
-        } catch (IOException | URISyntaxException e) {
+        } catch (IOException e) {
             log.error(e.getLocalizedMessage(), e);
             return WorkflowAction.NONE;
         }
+
     }
 }

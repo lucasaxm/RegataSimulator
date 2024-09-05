@@ -1,7 +1,6 @@
 package com.boatarde.regatasimulator;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
@@ -16,7 +15,7 @@ public class RegataSimulatorApplication {
 
     private final RegataSimulatorBot regataSimulatorBot;
 
-    public RegataSimulatorApplication(RegataSimulatorBot regataSimulatorBot, ObjectMapper objectMapper) {
+    public RegataSimulatorApplication(RegataSimulatorBot regataSimulatorBot) {
         this.regataSimulatorBot = regataSimulatorBot;
     }
 

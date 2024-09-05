@@ -3,6 +3,7 @@ package com.boatarde.regatasimulator.util;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.experimental.UtilityClass;
+import lombok.extern.slf4j.Slf4j;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendAnimation;
 import org.telegram.telegrambots.meta.api.methods.send.SendAudio;
@@ -26,6 +27,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 @UtilityClass
+@Slf4j
 public class TelegramUtils {
     private static final ObjectMapper mapper = new ObjectMapper();
 
@@ -172,7 +174,7 @@ public class TelegramUtils {
             }
             return mapper.writeValueAsString(o);
         } catch (JsonProcessingException e) {
-            e.printStackTrace();
+            log.error(e.getLocalizedMessage(), e);
         }
         // fallback to string
         return o.toString();
