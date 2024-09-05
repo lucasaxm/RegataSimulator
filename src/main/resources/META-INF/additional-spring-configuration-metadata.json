@@ -1,0 +1,9 @@
+{
+  "properties": [
+    {
+      "name": "telegram.creator.id",
+      "type": "java.lang.String",
+      "description": "Telegram ID for the bot creator."
+    }
+  ]
+}

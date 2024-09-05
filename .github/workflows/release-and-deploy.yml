@@ -41,12 +41,12 @@ jobs:
       - name: Generate JAR artifact
         run: ./gradlew bootJar
       - name: Rename JAR with commit hash
-        run: mv -v build/libs/bilubot-0.0.1.jar build/libs/bilubot-${{ github.sha }}.jar
+        run: mv -v build/libs/RegataSimulator-0.0.1.jar build/libs/RegataSimulator-${{ github.sha }}.jar
       - name: Upload JAR to run artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: bilubot-${{ github.sha }}.jar
-          path: build/libs/bilubot-${{ github.sha }}.jar
+          name: RegataSimulator-${{ github.sha }}.jar
+          path: build/libs/RegataSimulator-${{ github.sha }}.jar
           if-no-files-found: error
           overwrite: true
   release-and-deploy:
@@ -62,16 +62,16 @@ jobs:
       - name: Download JAR artifact
         uses: actions/download-artifact@v4
         with:
-          name: bilubot-${{ github.sha }}.jar
+          name: RegataSimulator-${{ github.sha }}.jar
       - name: Release with semantic-release
         if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.create_release }}
         uses: cycjimmy/semantic-release-action@v4
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-      - name: Check for bilubot-${{ github.sha }}.jar
+      - name: Check for RegataSimulator-${{ github.sha }}.jar
         run: |
-          if [ ! -f "bilubot-${{ github.sha }}.jar" ]; then
-            echo "Error: bilubot-${{ github.sha }}.jar not found!"
+          if [ ! -f "RegataSimulator-${{ github.sha }}.jar" ]; then
+            echo "Error: RegataSimulator-${{ github.sha }}.jar not found!"
             exit 1
           fi
       - name: Add server to known_hosts
@@ -84,13 +84,13 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             echo "Create the directory if it doesn't exist"
-            mkdir -p /home/${{ secrets.SERVER_USERNAME }}/bots/bilubot-java
-            ls -lR /home/${{ secrets.SERVER_USERNAME }}/bots/bilubot-java
+            mkdir -p /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator
+            ls -lR /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator
 
             script_pid=$$
             echo "Script PID: ${script_pid}"
-            # Assume bilubot.jar is run with Java, try to be more specific
-            pids=$(pgrep -f "java.*bilubot.jar" | grep -v "^$script_pid$")
+            # Assume RegataSimulator.jar is run with Java, try to be more specific
+            pids=$(pgrep -f "java.*RegataSimulator.jar" | grep -v "^$script_pid$")
             
             # Check if PIDs were found
             if [ ! -z "$pids" ]; then
@@ -117,28 +117,25 @@ jobs:
             fi
             
             # Backup the old JAR file
-            mv /home/${{ secrets.SERVER_USERNAME }}/bots/bilubot-java/bilubot.jar /home/${{ secrets.SERVER_USERNAME }}/bots/bilubot-java/bilubot-backup.jar
+            mv /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator.jar /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator-backup.jar
       - name: Copy jar to server via scp
         run: |
-          scp bilubot-${{ github.sha }}.jar ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }}:/home/${{ secrets.SERVER_USERNAME }}/bots/bilubot-java/bilubot.jar
+          scp RegataSimulator-${{ github.sha }}.jar ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }}:/home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator.jar
       - name: Start the application
         uses: appleboy/ssh-action@v1.0.3
         env:
-          BILUBOT_ENC_PASSWORD: ${{ secrets.BILUBOT_ENC_PASSWORD }}
-          FFPROBE_BINARY_PATH: ${{ secrets.FFPROBE_BINARY_PATH }}
-          GALLERYDL_BINARY_PATH: ${{ secrets.GALLERYDL_BINARY_PATH }}
-          GALLERYDL_CONFIG_PATH: ${{ secrets.GALLERYDL_CONFIG_PATH }}
+          REGATA_SIMULATOR_ENC_PASSWORD: ${{ secrets.REGATA_SIMULATOR_ENC_PASSWORD }}
           SPRING_PROFILES_ACTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'stage' }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          envs: BILUBOT_ENC_PASSWORD,FFPROBE_BINARY_PATH,GALLERYDL_BINARY_PATH,GALLERYDL_CONFIG_PATH,SPRING_PROFILES_ACTIVE
+          envs: REGATA_SIMULATOR_ENC_PASSWORD,FFPROBE_BINARY_PATH,GALLERYDL_BINARY_PATH,GALLERYDL_CONFIG_PATH,SPRING_PROFILES_ACTIVE
           script: |
-            ls -lhrt /home/${{ secrets.SERVER_USERNAME }}/bots/bilubot-java
+            ls -lhrt /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator
             
             # Start the new version of the application
-            nohup /home/${{ secrets.SERVER_USERNAME }}/.asdf/installs/java/openjdk-21.0.2/bin/java -Dspring.profiles.active=$SPRING_PROFILES_ACTIVE -jar /home/${{ secrets.SERVER_USERNAME }}/bots/bilubot-java/bilubot.jar > /home/${{ secrets.SERVER_USERNAME }}/bots/bilubot-java/bilubot.log 2>&1 &
+            nohup /home/${{ secrets.SERVER_USERNAME }}/.asdf/installs/java/openjdk-21.0.2/bin/java -Dspring.profiles.active=$SPRING_PROFILES_ACTIVE -jar /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator.jar > /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator.log 2>&1 &
       - name: Check application startup
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -148,12 +145,12 @@ jobs:
           script: |
             # Wait for 1 minute for the application to start
             for i in {1..60}; do
-              if grep -q "Started BilubotApplication" /home/${{ secrets.SERVER_USERNAME }}/bots/bilubot-java/bilubot.log; then
+              if grep -q "Started BilubotApplication" /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator.log; then
                 echo "Application started successfully"
                 exit 0
-              elif grep -q "Application run failed" /home/${{ secrets.SERVER_USERNAME }}/bots/bilubot-java/bilubot.log; then
+              elif grep -q "Application run failed" /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator.log; then
                 echo "Application failed to start"
-                cat /home/${{ secrets.SERVER_USERNAME }}/bots/bilubot-java/bilubot.log
+                cat /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator.log
                 exit 1
               fi
               sleep 1

@@ -1,8 +1,9 @@
+server:
+  port: 8090
 telegram:
   creator:
     id: ENC(XTQfepj29h3jk+kwHcDfIt/lzvLcvaMpWxLme6VEodP8Rpz26t/g98sXvUC/gtah)
   bots:
-    bilubot:
-      token: ENC(lj4Z8Mnv218sz8/d73/2nqCf7/y5n+prVg5951ISY6O4DU5TPd45L6h5zuJippVsp97uLWgT5VbQ1REbbnqaOj5MGDKUlscriwJy8SZ1tI0=)
-      username: ENC(oSlTZJFM6KTmANNvXvpAk+DRtogMaRJZjF5NghvrGX2EyxIg223aCXhBlhrJaoDe)
-      upload-channel-id: ENC(CZejpeFij0pRY6Wo7qXrH+f44AjGSRUUtRcXOQqRzimLDMtMQs53SRTrslllGOeP)
+    regata-simulator:
+      token: ENC(dtSase99ZO5H3VM+xGZyDSfs/SXusR6aYKoWk9dNUjc29raaB/PYk4k0wftQ89L3h6bKB74wfnoLAtFF90xNraA32DiJq11aBpkZpoQU0xg=)
+      username: ENC(pNyHJWQxcfDqIk2TbQwG5rig8UpbmGtp5vQNygg3FNJ1boz3eY6NkUshYV1OJFMmrI+ApaHjW3ZVLdQ6Ag0iVA==)

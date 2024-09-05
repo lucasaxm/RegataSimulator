@@ -28,8 +28,6 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind'
     implementation 'org.telegram:telegrambots:6.9.7.1'
     implementation 'com.github.ulisesbocchio:jasypt-spring-boot-starter:3.0.5'
-    implementation 'com.github.lucasaxm:gallerydl-java:v0.0.5'
-    implementation 'net.bramp.ffmpeg:ffmpeg:0.8.0'
     implementation 'org.apache.tika:tika-core:2.9.0'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     compileOnly 'org.projectlombok:lombok'

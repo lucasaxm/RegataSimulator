@@ -11,41 +11,4 @@ management:
         include: health
 jasypt:
   encryptor:
-    password: ${BILUBOT_ENC_PASSWORD}
-ffprobe:
-  path: ${FFPROBE_BINARY_PATH}
-gallerydl:
-  binary-path: ${GALLERYDL_BINARY_PATH}
-  config-path: ${GALLERYDL_CONFIG_PATH}
-  secrets:
-    ytdl-basic: ENC(lmOSRoOe38EABqQdtWz3+ZXG2idf/xIXr+/nWE2mpquTSeGBWIn0odZ+0bCs3Qo71UI1f1QGJr6MP8w0u+Yk0hT2G4+ToFoONVq9CNaFysM=)
-    reddit-user: ENC(tboA/kO8igtNUCt9LKlU/0vXciNXLG/fWMiD3LrUU3TYQf8za31nNp1eafb76GWp)
-  config:
-    extractor:
-      filename: '{filename|id}.{extension|ext}'
-      reddit:
-        client-id: ENC(8gP4RqTBzEryWMY9eUfrRUYJOXKUVC4hlce6ZM3JvSLE1RT/gskB8e+aP4P9xH3e6jZYcVRl8iucwORNpZMJ9Q==)
-        client-secret: ENC(I8UIx8Ywr0c26tlI2yH0nRyefDyNGfTWzVWWoFIjERuwlLA1uaLmLwMfFMXC91cEBQxBAhjEbNxWyMdekPqOMg==)
-        user-agent: Python::v1.0 (by /u/${gallerydl.secrets.reddit-user})
-      twitter:
-        cards: ytdl
-        username: ENC(1KNdEKzrNizDzS2AsJF0kyTji2atNtgQgWdOP735K53qXjry2yRdAXJzcg5muh2W)
-        password: ENC(mbMxxhwTVkoVYrSrhAPdiD0Cr313EjLpmNVWJjdnkjuqqsbk3ZZ/OMjFzhUCIM+d)
-        text-tweets: true
-        quoted: true
-        retweets: true
-      ytdl:
-        enabled: true
-        format: 'bestvideo[filesize<35M][ext=mp4]+bestaudio[filesize<15M][ext=m4a]/bestvideo[filesize_approx<35M][ext=mp4]+bestaudio[filesize_approx<15M][ext=m4a]/bestvideo[filesize<40M][ext=mp4]+bestaudio[filesize<10M][ext=m4a]/bestvideo[filesize_approx<40M][ext=mp4]+bestaudio[filesize_approx<10M][ext=m4a]/bestvideo[filesize<15M][ext=mp4]+bestaudio[filesize<35M][ext=m4a]/bestvideo[filesize_approx<15M][ext=mp4]+bestaudio[filesize_approx<35M][ext=m4a]/bestvideo[filesize<10M][ext=mp4]+bestaudio[filesize<40M][ext=m4a]/bestvideo[filesize_approx<10M][ext=mp4]+bestaudio[filesize_approx<40M][ext=m4a]/best[filesize<50M][ext=mp4]/best[filesize_approx<50M][ext=mp4]/bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/bestvideo[filesize<35M]+bestaudio[filesize<15M][ext=m4a]/bestvideo[filesize_approx<35M]+bestaudio[filesize_approx<15M][ext=m4a]/bestvideo[filesize<40M]+bestaudio[filesize<10M][ext=m4a]/bestvideo[filesize_approx<40M]+bestaudio[filesize_approx<10M][ext=m4a]/bestvideo[filesize<15M]+bestaudio[filesize<35M][ext=m4a]/bestvideo[filesize_approx<15M]+bestaudio[filesize_approx<35M][ext=m4a]/bestvideo[filesize<10M]+bestaudio[filesize<40M][ext=m4a]/bestvideo[filesize_approx<10M]+bestaudio[filesize_approx<40M][ext=m4a]/best[filesize<50M]/best[filesize_approx<50M]/bestvideo[height<=360]+bestaudio[ext=m4a]/best'
-        logging: true
-        cmdline-args: '--write-thumbnail --convert-thumbnails jpg --http-chunk-size 8M --max-filesize 52428800 --merge-output-format mp4'
-        module: yt_dlp
-        Facebook:
-          filename: '{id}.{extension}'
-        Steam:
-          filename: '{id}.{extension}'
-    downloader:
-      filesize-max: 50M
-      ytdl:
-        module: yt_dlp
-        cmdline-args: --add-headers 'Authorization:Basic ${gallerydl.secrets.ytdl-basic}'
+    password: ${REGATA_SIMULATOR_ENC_PASSWORD}
