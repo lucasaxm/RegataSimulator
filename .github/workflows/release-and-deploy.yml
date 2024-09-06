@@ -14,7 +14,7 @@ on:
       environment:
         description: 'Environment to deploy to'
         type: environment
-        default: stage
+        default: dev
         required: true
 
 jobs:
@@ -49,11 +49,12 @@ jobs:
           path: build/libs/RegataSimulator-${{ github.sha }}.jar
           if-no-files-found: error
           overwrite: true
+
   release-and-deploy:
     needs: build-and-test
     runs-on: ubuntu-latest
     environment:
-      name: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'stage' }}
+      name: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'dev' }}
     steps:
       - uses: actions/checkout@v4
       - uses: webfactory/ssh-agent@v0.9.0
@@ -63,11 +64,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: RegataSimulator-${{ github.sha }}.jar
-      - name: Release with semantic-release
-        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.create_release }}
-        uses: cycjimmy/semantic-release-action@v4
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
       - name: Check for RegataSimulator-${{ github.sha }}.jar
         run: |
           if [ ! -f "RegataSimulator-${{ github.sha }}.jar" ]; then
@@ -83,59 +79,99 @@ jobs:
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            echo "Create the directory if it doesn't exist"
-            mkdir -p /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator
-            ls -lR /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator
-
             script_pid=$$
             echo "Script PID: ${script_pid}"
-            # Assume RegataSimulator.jar is run with Java, try to be more specific
-            pids=$(pgrep -f "java.*RegataSimulator.jar" | grep -v "^$script_pid$")
-            
-            # Check if PIDs were found
-            if [ ! -z "$pids" ]; then
-                echo "Found process(es): $pids"
-                # Loop through all PIDs (in case there are multiple)
-                for pid in $pids; do
-                    echo "Checking PID $pid before attempting kill..."
-                    if ps -p $pid > /dev/null; then
-                        echo "Full command of PID $pid:"
-                        ps -o cmd= -p $pid
-                        # Kill the process
-                        kill $pid
-                        if [ $? -eq 0 ]; then
-                            echo "Successfully killed PID $pid."
-                        else
-                            echo "Failed to kill PID $pid."
-                        fi
-                    else
-                        echo "Process $pid no longer exists."
-                    fi
-                done
+            if [ -f /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/app.pid ]; then
+              pid=$(cat /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/app.pid)
+              if ps -p $pid > /dev/null; then
+                echo "Stopping process $pid"
+                kill $pid
+                sleep 5
+                if ps -p $pid > /dev/null; then
+                  echo "Process didn't stop, force killing"
+                  kill -9 $pid
+                fi
+              else
+                echo "Process $pid not found"
+              fi
+              rm /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/app.pid
             else
+              echo "PID file not found, checking for any running instances"
+              pids=$(pgrep -f "start_regata_simulator.sh" | grep -v "^$script_pid$")
+              if [ ! -z "$pids" ]; then
+                echo "Found process(es): $pids"
+                kill -9 $pids
+                if [ $? -eq 0 ]; then
+                  echo "Successfully killed PID $pid."
+                else
+                  echo "Failed to kill PID $pid."
+                fi
+              else
                 echo "No matching processes running."
+              fi
+            fi
+            
+            JAVA_PIDS=$(pgrep -f "java.*RegataSimulator.jar" | grep -v "^$script_pid$")
+            if [ ! -z "$JAVA_PIDS" ]; then
+              echo "Found Java process(es): $JAVA_PIDS"
+              for PID in $JAVA_PIDS; do
+                echo "Stopping Java process $PID"
+                kill $PID
+                sleep 2
+                if ps -p $PID > /dev/null; then
+                  echo "Java process $PID didn't stop, force killing"
+                  kill -9 $PID
+                fi
+              done
+            else
+              echo "No Java processes found for RegataSimulator"
             fi
             
             # Backup the old JAR file
-            mv /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator.jar /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator-backup.jar
+            [ -f /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator.jar ] && mv /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator.jar /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator-backup.jar || exit 0
       - name: Copy jar to server via scp
         run: |
           scp RegataSimulator-${{ github.sha }}.jar ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }}:/home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator.jar
-      - name: Start the application
+      - name: Create startup script
         uses: appleboy/ssh-action@v1.0.3
         env:
-          REGATA_SIMULATOR_ENC_PASSWORD: ${{ secrets.REGATA_SIMULATOR_ENC_PASSWORD }}
-          SPRING_PROFILES_ACTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'stage' }}
+          SPRING_PROFILES_ACTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'dev' }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          envs: REGATA_SIMULATOR_ENC_PASSWORD,FFPROBE_BINARY_PATH,GALLERYDL_BINARY_PATH,GALLERYDL_CONFIG_PATH,SPRING_PROFILES_ACTIVE
+          envs: SPRING_PROFILES_ACTIVE
           script: |
-            ls -lhrt /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator
-            
-            # Start the new version of the application
-            nohup /home/${{ secrets.SERVER_USERNAME }}/.asdf/installs/java/openjdk-21.0.2/bin/java -Dspring.profiles.active=$SPRING_PROFILES_ACTIVE -jar /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator.jar > /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator.log 2>&1 &
+            cat << EOF > /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/start_regata_simulator.sh
+            #!/bin/bash
+
+            APP_DIR="/home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator"
+            JAR_FILE="\$APP_DIR/RegataSimulator.jar"
+            LOG_FILE="\$APP_DIR/RegataSimulator.log"
+            JAVA_PATH="/home/${{ secrets.SERVER_USERNAME }}/.asdf/installs/java/openjdk-21.0.2/bin/java"
+
+            while true; do
+                echo "Starting RegataSimulator..." >> \$LOG_FILE
+                \$JAVA_PATH -Dspring.profiles.active=$SPRING_PROFILES_ACTIVE -jar \$JAR_FILE >> \$LOG_FILE 2>&1
+                echo "RegataSimulator exited with code \$?. Restarting in 5 seconds..." >> \$LOG_FILE
+                sleep 5
+            done
+            EOF
+            chmod +x /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/start_regata_simulator.sh
+      - name: Start the application
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          REGATA_SIMULATOR_ENC_PASSWORD: ${{ secrets.REGATA_SIMULATOR_ENC_PASSWORD }}
+          SPRING_PROFILES_ACTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'dev' }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          envs: REGATA_SIMULATOR_ENC_PASSWORD,SPRING_PROFILES_ACTIVE
+          script: |
+            nohup /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/start_regata_simulator.sh >> start_regata_simulator.log 2>&1 &
+            echo $! > /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/app.pid
+            echo "start script pid: $(cat app.pid)"
       - name: Check application startup
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -143,17 +179,34 @@ jobs:
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            # Wait for 1 minute for the application to start
-            for i in {1..60}; do
-              if grep -q "Started BilubotApplication" /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator.log; then
-                echo "Application started successfully"
-                exit 0
-              elif grep -q "Application run failed" /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator.log; then
-                echo "Application failed to start"
-                cat /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator.log
-                exit 1
+            LOG_FILE="/home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator.log"
+            
+            # Get the initial number of lines in the log file
+            initial_lines=$(wc -l < "$LOG_FILE")
+            
+            # Wait for 2 minutes for the application to start
+            for i in {1..120}; do
+              # Get the current number of lines
+              current_lines=$(wc -l < "$LOG_FILE")
+              
+              # Calculate new lines
+              new_lines=$((current_lines - initial_lines))
+              
+              if [ $new_lines -gt 0 ]; then
+                # Check only the new lines
+                if tail -n $new_lines "$LOG_FILE" | grep -q "Started RegataSimulatorApplication"; then
+                  echo "Application started successfully"
+                  exit 0
+                elif tail -n $new_lines "$LOG_FILE" | grep -q "Application run failed"; then
+                  echo "Application failed to start"
+                  tail -n $new_lines "$LOG_FILE"
+                  exit 1
+                fi
               fi
+              
               sleep 1
             done
-            echo "Application did not start within 1 minute"
+            
+            echo "Application did not start within 2 minutes"
+            tail -n 50 "$LOG_FILE"  # Show the last 50 lines of the log for debugging
             exit 1
