@@ -6,14 +6,13 @@ import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.flows.WorkflowStep;
 import com.boatarde.regatasimulator.flows.WorkflowStepRegistration;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.io.IOException;
-import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
-import java.util.Objects;
 import java.util.Random;
 import java.util.stream.Stream;
 
@@ -21,16 +20,15 @@ import java.util.stream.Stream;
 @WorkflowStepRegistration(WorkflowAction.GET_RANDOM_TEMPLATE)
 public class GetRandomTemplateStep implements WorkflowStep {
 
+    private final String templatesPathString;
+
+    public GetRandomTemplateStep(@Value("${regata-simulator.templates.path}") String templatesPathString) {
+        this.templatesPathString = templatesPathString;
+    }
+
     @Override
     public WorkflowAction run(WorkflowDataBag bag) {
-        Path templatesDir;
-        try {
-            ClassLoader classLoader = GetRandomTemplateStep.class.getClassLoader();
-            templatesDir = Paths.get(Objects.requireNonNull(classLoader.getResource("templates")).toURI());
-        } catch (URISyntaxException e) {
-            log.error(e.getLocalizedMessage(), e);
-            return WorkflowAction.NONE;
-        }
+        Path templatesDir = Paths.get(templatesPathString);
         try (Stream<Path> directoriesStream = Files.list(templatesDir)) {
             List<Path> directories = directoriesStream
                 .filter(Files::isDirectory)

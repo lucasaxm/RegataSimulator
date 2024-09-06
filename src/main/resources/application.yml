@@ -15,3 +15,5 @@ jasypt:
 regata-simulator:
   sources:
     path: ${REGATA_SIMULATOR_SOURCES_PATH}
+  templates:
+    path: ${REGATA_SIMULATOR_TEMPLATES_PATH}
