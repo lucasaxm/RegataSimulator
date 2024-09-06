@@ -7,15 +7,14 @@ import com.boatarde.regatasimulator.flows.WorkflowStep;
 import com.boatarde.regatasimulator.flows.WorkflowStepRegistration;
 import com.boatarde.regatasimulator.models.Picture;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
-import java.util.Objects;
 import java.util.Random;
 import java.util.stream.Stream;
 
@@ -23,11 +22,16 @@ import java.util.stream.Stream;
 @WorkflowStepRegistration(WorkflowAction.GET_RANDOM_SOURCE)
 public class GetRandomSourceStep implements WorkflowStep {
 
+    private final String sourcesPathString;
+
+    public GetRandomSourceStep(@Value("${regata-simulator.sources.path}") String sourcesPathString) {
+        this.sourcesPathString = sourcesPathString;
+    }
+
     @Override
     public WorkflowAction run(WorkflowDataBag bag) {
         try {
-            ClassLoader classLoader = GetRandomSourceStep.class.getClassLoader();
-            Path sourcesDir = Paths.get(Objects.requireNonNull(classLoader.getResource("sources")).toURI());
+            Path sourcesDir = Paths.get(sourcesPathString);
             // Listar todos os arquivos .jpg e .png dentro de "resources/templates" e seus subdiretórios
             try (Stream<Path> filesStream = Files.walk(sourcesDir)) {
                 List<File> imageFiles = filesStream
@@ -53,7 +57,7 @@ public class GetRandomSourceStep implements WorkflowStep {
                 bag.put(WorkflowDataKey.SOURCE_FILE, new Picture(selectedFile));
                 return WorkflowAction.BUILD_MEME_STEP;
             }
-        } catch (IOException | URISyntaxException e) {
+        } catch (IOException e) {
             log.error(e.getLocalizedMessage(), e);
         }
         return WorkflowAction.NONE;

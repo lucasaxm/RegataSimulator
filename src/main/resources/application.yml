@@ -12,3 +12,6 @@ management:
 jasypt:
   encryptor:
     password: ${REGATA_SIMULATOR_ENC_PASSWORD}
+regata-simulator:
+  sources:
+    path: ${REGATA_SIMULATOR_SOURCES_PATH}
