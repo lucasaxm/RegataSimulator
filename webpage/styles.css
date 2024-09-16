@@ -1,0 +1,41 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow: hidden;
+}
+
+h1 {
+    text-align: center;
+    margin: 20px 0;
+}
+
+#canvas {
+    border: 1px solid black;
+    cursor: crosshair;
+    max-width: 100%;
+    height: auto;
+}
+
+#coordinates {
+    margin-top: 10px;
+    text-align: center;
+}
+
+.form-group {
+    margin-top: 20px; /* Add margin to the top of the file input */
+}
+
+@media (max-width: 600px) {
+    h1 {
+        font-size: 1.5em;
+    }
+
+    #canvas {
+        width: 100%;
+        height: auto;
+    }
+}
