@@ -143,7 +143,7 @@ function updateCoordinates() {
         x: Math.round(corner.x / scale),
         y: Math.round(corner.y / scale)
     }));
-    document.getElementById('coordinates').innerText = `Corners: ${scaledCorners.map(corner => `${corner.position}: (${corner.x}, ${corner.y})`).join(', ')}`;
+    document.getElementById('coordinates').innerText = `Template: ${scaledCorners.map(corner => `${corner.position}: (${corner.x}, ${corner.y})`).join(', ')}`;
 }
 
 let resetCornersButton = document.getElementById('resetCornersButton');
