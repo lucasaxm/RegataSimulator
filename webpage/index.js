@@ -4,8 +4,10 @@ let imageLoader = document.getElementById('imageLoader');
 let img = new Image();
 let corners = [];
 let draggingCorner = null;
+let draggingPolygon = false;
+let lastMousePos = null;
 let scale = 1;
-
+const tg = window.Telegram.WebApp; //Initializes the TELEGRAM BOT
 // Define maximum canvas dimensions
 const MAX_WIDTH = 800;
 const MAX_HEIGHT = 600;
@@ -61,44 +63,81 @@ function dragCorner(x, y) {
 }
 
 canvas.addEventListener('mousedown', function (e) {
-    let {offsetX, offsetY} = e;
-    draggingCorner = getNearestCorner(offsetX, offsetY);
+    let { offsetX, offsetY } = e;
+    if (isCloserToCenter(offsetX, offsetY)) {
+        draggingPolygon = true;
+        lastMousePos = { x: offsetX, y: offsetY };
+    } else {
+        draggingCorner = getNearestCorner(offsetX, offsetY);
+    }
 });
 
 canvas.addEventListener('mousemove', function (e) {
-    let {offsetX, offsetY} = e;
-    dragCorner(offsetX, offsetY);
+    let { offsetX, offsetY } = e;
+    updateCursorStyle(offsetX, offsetY);
+    if (draggingPolygon && lastMousePos) {
+        let dx = offsetX - lastMousePos.x;
+        let dy = offsetY - lastMousePos.y;
+        let newCorners = corners.map(corner => ({
+            position: corner.position, // Preserve the position property
+            x: corner.x + dx,
+            y: corner.y + dy
+        }));
+        if (newCorners.every(corner => corner.x >= 0 && corner.x <= canvas.width && corner.y >= 0 && corner.y <= canvas.height)) {
+            corners = newCorners;
+            lastMousePos = { x: offsetX, y: offsetY };
+            draw();
+        }
+    } else {
+        dragCorner(offsetX, offsetY);
+    }
 });
 
 canvas.addEventListener('mouseup', function (e) {
-    let {offsetX, offsetY} = e;
-    dragCorner(offsetX, offsetY);
-    updateCoordinates();
+    draggingPolygon = false;
+    lastMousePos = null;
     draggingCorner = null;
+    updateCoordinates();
 });
 
 canvas.addEventListener('touchstart', function (e) {
-    e.preventDefault(); // Prevent scrolling when touching the canvas
+    e.preventDefault();
     let touch = getTouchPos(canvas, e);
-    draggingCorner = getNearestCorner(touch.x, touch.y);
+    if (isCloserToCenter(touch.x, touch.y)) {
+        draggingPolygon = true;
+        lastMousePos = { x: touch.x, y: touch.y };
+    } else {
+        draggingCorner = getNearestCorner(touch.x, touch.y);
+    }
 });
 
 canvas.addEventListener('touchmove', function (e) {
-    e.preventDefault(); // Prevent scrolling when touching the canvas
-    if (draggingCorner !== null) {
-        let touch = getTouchPos(canvas, e);
+    e.preventDefault();
+    let touch = getTouchPos(canvas, e);
+    if (draggingPolygon && lastMousePos) {
+        let dx = touch.x - lastMousePos.x;
+        let dy = touch.y - lastMousePos.y;
+        let newCorners = corners.map(corner => ({
+            position: corner.position, // Preserve the position property
+            x: corner.x + dx,
+            y: corner.y + dy
+        }));
+        if (newCorners.every(corner => corner.x >= 0 && corner.x <= canvas.width && corner.y >= 0 && corner.y <= canvas.height)) {
+            corners = newCorners;
+            lastMousePos = { x: touch.x, y: touch.y };
+            draw();
+        }
+    } else {
         dragCorner(touch.x, touch.y);
     }
 });
 
 canvas.addEventListener('touchend', function (e) {
-    e.preventDefault(); // Prevent scrolling when touching the canvas
-    if (draggingCorner !== null) {
-        let touch = getTouchPos(canvas, e);
-        dragCorner(touch.x, touch.y);
-        updateCoordinates();
-        draggingCorner = null;
-    }
+    e.preventDefault();
+    draggingPolygon = false;
+    lastMousePos = null;
+    draggingCorner = null;
+    updateCoordinates();
 });
 
 function resetCorners() {
@@ -153,7 +192,13 @@ resetCornersButton.addEventListener('click', function () {
 });
 
 document.addEventListener('DOMContentLoaded', function () {
+    document.body.style.height = `${tg.viewportHeight}px`;
+    document.body.style.width = '100%';
     resetCanvas();
+});
+
+tg.onEvent('viewport_changed', function() {
+    document.body.style.height = `${tg.viewportHeight}px`;
 });
 
 function resetCanvas() {
@@ -166,6 +211,8 @@ let copyCoordinatesButton = document.getElementById('copyCoordinatesButton');
 
 copyCoordinatesButton.addEventListener('click', function () {
     let coordinatesText = document.getElementById('coordinates').innerText;
+
+    // Try to use the Clipboard API
     navigator.clipboard.writeText(coordinatesText).then(function() {
         Toastify({
             text: "Coordinates copied to clipboard",
@@ -177,7 +224,78 @@ copyCoordinatesButton.addEventListener('click', function () {
                 background: "#007bff", // Background color
             }
         }).showToast();
-    }, function(err) {
-        console.error('Could not copy text: ', err);
+    }).catch(function(err) {
+        // Fallback method
+        let textArea = document.createElement("textarea");
+        textArea.value = coordinatesText;
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            Toastify({
+                text: "Coordinates copied to clipboard",
+                duration: 3000, // Duration in milliseconds
+                close: true, // Show close button
+                gravity: "bottom", // Position: top or bottom
+                position: "right", // Position: left, center or right
+                style: {
+                    background: "#007bff", // Background color
+                }
+            }).showToast();
+        } catch (err) {
+            console.error('Could not copy text: ', err);
+            Toastify({
+                text: "Could not copy text",
+                duration: 3000, // Duration in milliseconds
+                close: true, // Show close button
+                gravity: "bottom", // Position: top or bottom
+                position: "right", // Position: left, center or right
+                style: {
+                    background: "#dc3545", // Background color
+                }
+            }).showToast();
+        }
+        document.body.removeChild(textArea);
     });
+});
+
+function getPolygonCenter() {
+    let sumX = 0, sumY = 0;
+    corners.forEach(corner => {
+        sumX += corner.x;
+        sumY += corner.y;
+    });
+    return { x: sumX / corners.length, y: sumY / corners.length };
+}
+
+function isCloserToCenter(x, y) {
+    let center = getPolygonCenter();
+    let centerDist = Math.sqrt((center.x - x) ** 2 + (center.y - y) ** 2);
+    let minCornerDist = Math.min(...corners.map(corner => Math.sqrt((corner.x - x) ** 2 + (corner.y - y) ** 2)));
+    return centerDist < minCornerDist;
+}
+
+function updateCursorStyle(x, y) {
+    if (isCloserToCenter(x, y)) {
+        canvas.style.cursor = 'move';
+    } else {
+        canvas.style.cursor = 'crosshair';
+    }
+}
+
+// Handle mouse leave event
+canvas.addEventListener('mouseleave', function (e) {
+    draggingPolygon = false;
+    lastMousePos = null;
+    draggingCorner = null;
+    updateCoordinates();
+});
+
+// Handle touch leave event
+canvas.addEventListener('touchleave', function (e) {
+    e.preventDefault();
+    draggingPolygon = false;
+    lastMousePos = null;
+    draggingCorner = null;
+    updateCoordinates();
 });

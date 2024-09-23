@@ -1,4 +1,5 @@
 html, body {
+    width: 100%;
     height: 100%;
     margin: 0;
     padding: 0;
@@ -6,6 +7,7 @@ html, body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    overflow: hidden;
 }
 
 body {
@@ -31,6 +33,16 @@ h1 {
 
 .form-group {
     margin-top: 20px; /* Add margin to the top of the file input */
+}
+
+#canvas {
+    display: block;
+    margin: 0 auto;
+}
+
+button {
+    display: block;
+    margin: 10px auto;
 }
 
 @media (max-width: 600px) {
