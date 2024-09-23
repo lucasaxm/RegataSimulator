@@ -150,9 +150,12 @@ function resetCorners() {
 }
 
 function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
+    const checkerboardSize = 10; // Size of the checkerboard squares
+    drawCheckerboard(ctx, canvas.width, canvas.height, checkerboardSize);
+    const backgroundCheckbox = document.getElementById('backgroundCheckbox');
+    if (!backgroundCheckbox.checked) {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    }
     // Draw the polygon connecting the corners
     ctx.beginPath();
     ctx.moveTo(corners[0].x, corners[0].y);
@@ -160,10 +163,12 @@ function draw() {
     ctx.closePath();
     ctx.strokeStyle = 'blue';
     ctx.lineWidth = 2;
-    ctx.stroke();
     ctx.fillStyle = 'rgba(0, 0, 255, 0.2)'; // Translucent blue
     ctx.fill();
-
+    if (backgroundCheckbox.checked) {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    }
+    ctx.stroke();
     // Draw corner points
     ctx.strokeStyle = 'red'; // Ensure the plus sign is red
     corners.forEach(corner => {
@@ -174,6 +179,7 @@ function draw() {
         ctx.lineTo(corner.x, corner.y + 5);
         ctx.stroke();
     });
+
 }
 
 function updateCoordinates() {
@@ -299,3 +305,21 @@ canvas.addEventListener('touchleave', function (e) {
     draggingCorner = null;
     updateCoordinates();
 });
+
+function drawCheckerboard(ctx, width, height, size) {
+    ctx.fillStyle = '#cccccc';
+    ctx.fillRect(0, 0, width, height);
+
+    for (let y = 0; y < height; y += size) {
+        for (let x = 0; x < width; x += size) {
+            if ((x / size + y / size) % 2 === 0) {
+                ctx.fillStyle = '#ffffff';
+            } else {
+                ctx.fillStyle = '#cccccc';
+            }
+            ctx.fillRect(x, y, size, size);
+        }
+    }
+}
+
+document.getElementById('backgroundCheckbox').addEventListener('change', draw);
