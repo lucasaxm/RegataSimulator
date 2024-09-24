@@ -8,6 +8,7 @@
     word-break: break-word;
     max-height: 60px;
     overflow-y: auto;
+    font-family: monospace;
 }
 
 .form-check-input:checked {

@@ -24,23 +24,45 @@ class Polygon {
     }
 
     draw(ctx) {
-        if (!this.background) {
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        }
+        ctx.save();
         ctx.beginPath();
         this.corners.forEach((corner, index) => {
             if (index === 0) ctx.moveTo(corner.x, corner.y);
             else ctx.lineTo(corner.x, corner.y);
         });
         ctx.closePath();
-        ctx.strokeStyle = this.color;
-        ctx.lineWidth = 2;
-        ctx.fillStyle = `${this.color}33`;  // 33 is 20% opacity in hex
-        ctx.fill();
+
         if (this.background) {
+            // Draw fill behind the image
+            ctx.fillStyle = `${this.color}73`;  // 33 is 20% opacity in hex
+            ctx.fill();
+
+            // Clip and draw the image
+            ctx.clip();
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            // Reset clip and draw the outline
+            ctx.restore();
+            ctx.save();
+            ctx.beginPath();
+            this.corners.forEach((corner, index) => {
+                if (index === 0) ctx.moveTo(corner.x, corner.y);
+                else ctx.lineTo(corner.x, corner.y);
+            });
+            ctx.closePath();
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        } else {
+            // For non-background, draw fill and stroke over the image
+            ctx.fillStyle = `${this.color}73`;
+            ctx.fill();
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = 2;
+            ctx.stroke();
         }
-        ctx.stroke();
+
+        ctx.restore();
 
         if (this === polygons[activePolygonIndex]) {
             ctx.strokeStyle = 'red';
@@ -106,22 +128,31 @@ function updateBackgroundCheckbox() {
 }
 
 function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawCheckerboard(ctx, canvas.width, canvas.height, 10);
 
+    // Draw the full image
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    // Draw all polygons
     polygons.forEach(polygon => {
         polygon.draw(ctx);
     });
 }
 
 function updateCoordinates() {
-    const activePolygon = polygons[activePolygonIndex];
-    const scaledCorners = activePolygon.corners.map(corner => ({
-        position: corner.position,
-        x: Math.round(corner.x / scale),
-        y: Math.round(corner.y / scale)
-    }));
-    document.getElementById('coordinates').innerText = `Polygon ${activePolygonIndex + 1}: ` +
-        scaledCorners.map(corner => `${corner.position}(${corner.x},${corner.y})`).join(', ');
+    const header = 'Polygon,TLx,TLy,TRx,TRy,BRx,BRy,BLx,BLy,Background';
+    const lines = polygons.map((polygon, polygonIndex) => {
+        const scaledCorners = polygon.corners.map(corner => ({
+            position: corner.position,
+            x: Math.round(corner.x / scale),
+            y: Math.round(corner.y / scale)
+        }));
+        return `${polygonIndex + 1}`
+            + "," + scaledCorners.map(corner => `${corner.x},${corner.y}`).join(',')
+            + `,${polygon.background ? '1' : '0'}`;
+    });
+    document.getElementById('coordinates').innerText = header + '\n' + lines.join('\n');
 }
 
 function resetCanvas() {
@@ -292,6 +323,7 @@ backgroundCheckbox.addEventListener('change', (e) => {
     const newState = polygons[activePolygonIndex].toggleBackground();
     e.target.checked = newState;  // Ensure checkbox reflects the polygon's state
     draw();
+    updateCoordinates();
 });
 
 addPolygonButton.addEventListener('click', () => {
