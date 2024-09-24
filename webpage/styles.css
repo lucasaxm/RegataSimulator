@@ -1,57 +1,17 @@
 html, body {
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
     overflow: hidden;
 }
 
-body {
-    font-family: Arial, sans-serif;
-}
-
-h1 {
-    text-align: center;
-    margin: 20px 0;
-}
-
 #canvas {
-    border: 1px solid black;
-    cursor: crosshair;
     max-width: 100%;
-    height: auto;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.custom-control-label {
+    user-select: none;
 }
 
 #coordinates {
-    margin-top: 10px;
-    text-align: center;
-}
-
-.form-group {
-    margin-top: 20px; /* Add margin to the top of the file input */
-}
-
-#canvas {
-    display: block;
-    margin: 0 auto;
-}
-
-button {
-    display: block;
-    margin: 10px auto;
-}
-
-@media (max-width: 600px) {
-    h1 {
-        font-size: 1.5em;
-    }
-
-    #canvas {
-        width: 100%;
-        height: auto;
-    }
+    word-break: break-word;
 }
