@@ -3,6 +3,7 @@ const ctx = canvas.getContext('2d');
 const imageLoader = document.getElementById('imageLoader');
 const img = new Image();
 const tg = window.Telegram.WebApp;
+const clipboard = new ClipboardJS('#copyCoordinatesButton');
 const copyCoordinatesButton = document.getElementById('copyCoordinatesButton');
 const resetCornersButton = document.getElementById('resetCornersButton');
 const backgroundCheckbox = document.getElementById('backgroundCheckbox');
@@ -108,7 +109,7 @@ let lastMousePos = null;
 let scale = 1;
 
 function getRandomColor() {
-    return `#${Math.floor(Math.random() * 16777215).toString(16)}`;
+    return '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
 }
 
 function updatePolygonSelector() {
@@ -264,13 +265,8 @@ function drawCheckerboard(ctx, width, height, size) {
     }
 }
 
-function copyToClipboard(text) {
-    navigator.clipboard.writeText(text).then(() => {
-        showToast("Coordinates copied to clipboard", "#007bff");
-    }).catch(err => {
-        console.error('Could not copy text: ', err);
-        showToast("Could not copy text", "#dc3545");
-    });
+function copyToClipboard() {
+    copyCoordinatesButton.click();
 }
 
 function showToast(message, backgroundColor) {
@@ -373,7 +369,6 @@ canvas.addEventListener('touchcancel', handleEnd);
 
 window.addEventListener('resize', resizeCanvas);
 resetCornersButton.addEventListener('click', resetCanvas);
-copyCoordinatesButton.addEventListener('click', () => copyToClipboard(document.getElementById('coordinates').innerText));
 backgroundCheckbox.addEventListener('change', (e) => {
     const newState = polygons[activePolygonIndex].toggleBackground();
     e.target.checked = newState;  // Ensure checkbox reflects the polygon's state
@@ -399,15 +394,37 @@ polygonSelector.addEventListener('change', (e) => {
 document.addEventListener('DOMContentLoaded', () => {
     tg.expand();
     tg.disableVerticalSwipes();
+    tg.enableClosingConfirmation();
     resetCanvas();
     resizeCanvas();
-    applyTelegramTheme(); // Add this line
+    applyTelegramTheme();
+    tg.MainButton.setText("Copiar").show();
+    tg.SecondaryButton.setText("Reset").show();
+    if (tg.platform !== 'unknown') {
+        document.getElementById("bottomButtons").classList.add("d-none");
+    }
+    tg.ready();
 });
 
-tg.onEvent('viewport_changed', () => {
-    document.body.style.height = `${tg.viewportHeight}px`;
-    resizeCanvas();
-    applyTelegramTheme(); // Add this line
+tg.onEvent('viewportChanged', (e) => {
+    if (e.isStateStable) {
+        document.body.style.height = `${tg.viewportHeight}px`;
+        resizeCanvas();
+        applyTelegramTheme(); // Add this line
+    }
+});
+
+tg.onEvent('mainButtonClicked', copyToClipboard);
+
+tg.onEvent('secondaryButtonClicked', resetCanvas);
+
+clipboard.on('success', function (e) {
+    showToast("Coordinates copied to clipboard", "#007bff");
+    e.clearSelection();
+});
+
+clipboard.on('error', function (e) {
+    showToast("Failed to copy coordinates", "#dc3545");
 });
 
 updatePolygonSelector();
