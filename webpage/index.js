@@ -285,37 +285,57 @@ function showToast(message, backgroundColor) {
 }
 
 function applyTelegramTheme() {
-    if (tg.themeParams) {
-        document.body.style.backgroundColor = tg.themeParams.bg_color;
-        document.body.style.color = tg.themeParams.text_color;
+    const colorScheme = {
+        bg_color: tg.themeParams.bg_color ? tg.themeParams.bg_color : "#1e1e1e",
+        text_color: tg.themeParams.text_color ? tg.themeParams.text_color : "#ffffff",
+        hint_color: tg.themeParams.hint_color ? tg.themeParams.hint_color : "#7d7d7d",
+        destructive_text_color: tg.themeParams.destructive_text_color ? tg.themeParams.destructive_text_color : "#ee686f",
+        button_color: tg.themeParams.button_color ? tg.themeParams.button_color : "#738fed",
+        button_text_color: tg.themeParams.button_text_color ? tg.themeParams.button_text_color : "#ffffff",
+        secondary_button_color: tg.themeParams.header_bg_color ? tg.themeParams.header_bg_color : "#242326",
+        secondary_button_text_color: tg.themeParams.button_text_color ? tg.themeParams.button_text_color : "#ffffff"
+    };
+    // Set body background and text color
+    document.body.style.backgroundColor = colorScheme.bg_color;
+    document.body.style.color = colorScheme.text_color;
 
-        // Update button styles
-        const buttons = document.querySelectorAll('.btn');
-        buttons.forEach(button => {
-            button.style.backgroundColor = tg.themeParams.button_color;
-            button.style.color = tg.themeParams.button_text_color;
-        });
+    // Style for #coordinates
+    const coordinates = document.getElementById('coordinates');
+    coordinates.style.color = colorScheme.hint_color;
 
-        // Update form control styles
-        const formControls = document.querySelectorAll('.form-control, .form-select');
-        formControls.forEach(control => {
-            control.style.backgroundColor = tg.themeParams.secondary_bg_color;
-            control.style.color = tg.themeParams.text_color;
-            control.style.borderColor = tg.themeParams.hint_color;
-        });
-
-        // Update checkbox style
-        const checkbox = document.querySelector('.form-check-input');
-        if (checkbox) {
-            checkbox.style.backgroundColor = tg.themeParams.secondary_bg_color;
-            checkbox.style.borderColor = tg.themeParams.hint_color;
+    // Style for input file button, background checkbox, and addPolygonButton (SecondaryButton style)
+    const mainButtons = [
+        document.getElementById('imageLoader'),
+        document.getElementById('copyCoordinatesButton')
+    ];
+    mainButtons.forEach(button => {
+        if (button) {
+            button.style.backgroundColor = colorScheme.button_color;
+            button.style.color = colorScheme.button_text_color;
+            button.style.borderColor = colorScheme.button_text_color;
         }
+    });
 
-        // Update link color
-        const links = document.querySelectorAll('a');
-        links.forEach(link => {
-            link.style.color = tg.themeParams.link_color;
-        });
+    // Style for input file button, background checkbox, and addPolygonButton (SecondaryButton style)
+    const secondaryButtons = [
+        document.querySelector('.input-group-text'),
+        document.getElementById('addPolygonButton'),
+        document.getElementById('polygonSelector')
+    ];
+    secondaryButtons.forEach(button => {
+        if (button) {
+            button.style.backgroundColor = colorScheme.secondary_button_color;
+            button.style.color = colorScheme.secondary_button_text_color;
+            button.style.borderColor = colorScheme.secondary_button_text_color;
+        }
+    });
+
+    // Style for resetCornersButton
+    const resetCornersButton = document.getElementById('resetCornersButton');
+    if (resetCornersButton) {
+        resetCornersButton.style.backgroundColor = colorScheme.secondary_bg_color;
+        resetCornersButton.style.color = colorScheme.destructive_text_color;
+        resetCornersButton.style.borderColor = colorScheme.destructive_text_color;
     }
 }
 
@@ -377,8 +397,8 @@ polygonSelector.addEventListener('change', (e) => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
-    document.body.style.height = `${tg.viewportHeight}px`;
-    document.body.style.width = '100%';
+    tg.expand();
+    tg.disableVerticalSwipes();
     resetCanvas();
     resizeCanvas();
     applyTelegramTheme(); // Add this line
