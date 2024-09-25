@@ -7,10 +7,10 @@ const clipboard = new ClipboardJS('#copyCoordinatesButton');
 const copyCoordinatesButton = document.getElementById('copyCoordinatesButton');
 const resetCornersButton = document.getElementById('resetCornersButton');
 const backgroundCheckbox = document.getElementById('backgroundCheckbox');
-const addPolygonButton = document.getElementById('addPolygonButton');
+const addAreaButton = document.getElementById('addAreaButton');
 const polygonSelector = document.getElementById('polygonSelector');
 
-class Polygon {
+class Area {
     constructor(color) {
         this.corners = [
             {position: "TL", x: 0, y: 0},
@@ -65,7 +65,7 @@ class Polygon {
 
         ctx.restore();
 
-        if (this === polygons[activePolygonIndex]) {
+        if (this === polygons[activeAreaIndex]) {
             ctx.strokeStyle = 'red';
             this.corners.forEach(corner => {
                 ctx.beginPath();
@@ -101,10 +101,10 @@ class Polygon {
     }
 }
 
-let polygons = [new Polygon('blue')];
-let activePolygonIndex = 0;
+let polygons = [new Area('blue')];
+let activeAreaIndex = 0;
 let draggingCorner = null;
-let draggingPolygon = false;
+let draggingArea = false;
 let lastMousePos = null;
 let scale = 1;
 
@@ -112,20 +112,20 @@ function getRandomColor() {
     return '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
 }
 
-function updatePolygonSelector() {
+function updateAreaSelector() {
     polygonSelector.innerHTML = '';
     polygons.forEach((_, index) => {
         const option = document.createElement('option');
         option.value = index;
-        option.textContent = `Polygon ${index + 1}`;
+        option.textContent = `Area ${index + 1}`;
         polygonSelector.appendChild(option);
     });
-    polygonSelector.value = activePolygonIndex;
-    backgroundCheckbox.checked = polygons[activePolygonIndex].background;
+    polygonSelector.value = activeAreaIndex;
+    backgroundCheckbox.checked = polygons[activeAreaIndex].background;
 }
 
 function updateBackgroundCheckbox() {
-    backgroundCheckbox.checked = polygons[activePolygonIndex].background;
+    backgroundCheckbox.checked = polygons[activeAreaIndex].background;
 }
 
 function draw() {
@@ -142,7 +142,7 @@ function draw() {
 }
 
 function updateCoordinates() {
-    const header = 'Polygon,TLx,TLy,TRx,TRy,BRx,BRy,BLx,BLy,Background';
+    const header = 'Area,TLx,TLy,TRx,TRy,BRx,BRy,BLx,BLy,Background';
     const lines = polygons.map((polygon, polygonIndex) => {
         const scaledCorners = polygon.corners.map(corner => ({
             position: corner.position,
@@ -157,9 +157,9 @@ function updateCoordinates() {
 }
 
 function resetCanvas() {
-    polygons = [new Polygon('#0000ff')];
-    activePolygonIndex = 0;
-    updatePolygonSelector();
+    polygons = [new Area('#0000ff')];
+    activeAreaIndex = 0;
+    updateAreaSelector();
     draw();
     updateCoordinates();
 }
@@ -211,41 +211,41 @@ function resizeCanvas() {
 }
 
 function handleStart(x, y) {
-    const activePolygon = polygons[activePolygonIndex];
-    if (activePolygon.isCloserToCenter(x, y)) {
-        draggingPolygon = true;
+    const activeArea = polygons[activeAreaIndex];
+    if (activeArea.isCloserToCenter(x, y)) {
+        draggingArea = true;
         lastMousePos = {x, y};
     } else {
-        draggingCorner = activePolygon.getNearestCorner(x, y);
+        draggingCorner = activeArea.getNearestCorner(x, y);
     }
 }
 
 function handleMove(x, y) {
-    const activePolygon = polygons[activePolygonIndex];
-    canvas.style.cursor = activePolygon.isCloserToCenter(x, y) ? 'move' : 'crosshair';
+    const activeArea = polygons[activeAreaIndex];
+    canvas.style.cursor = activeArea.isCloserToCenter(x, y) ? 'move' : 'crosshair';
 
-    if (draggingPolygon && lastMousePos) {
+    if (draggingArea && lastMousePos) {
         const dx = x - lastMousePos.x;
         const dy = y - lastMousePos.y;
-        const newCorners = activePolygon.corners.map(corner => ({
+        const newCorners = activeArea.corners.map(corner => ({
             ...corner,
             x: corner.x + dx,
             y: corner.y + dy
         }));
         if (newCorners.every(corner => corner.x >= 0 && corner.x <= canvas.width && corner.y >= 0 && corner.y <= canvas.height)) {
-            activePolygon.corners = newCorners;
+            activeArea.corners = newCorners;
             lastMousePos = {x, y};
             draw();
         }
     } else if (draggingCorner !== null) {
-        activePolygon.corners[draggingCorner].x = Math.max(0, Math.min(x, canvas.width));
-        activePolygon.corners[draggingCorner].y = Math.max(0, Math.min(y, canvas.height));
+        activeArea.corners[draggingCorner].x = Math.max(0, Math.min(x, canvas.width));
+        activeArea.corners[draggingCorner].y = Math.max(0, Math.min(y, canvas.height));
         draw();
     }
 }
 
 function handleEnd() {
-    draggingPolygon = false;
+    draggingArea = false;
     lastMousePos = null;
     draggingCorner = null;
     updateCoordinates();
@@ -300,7 +300,7 @@ function applyTelegramTheme() {
     const coordinates = document.getElementById('coordinates');
     coordinates.style.color = colorScheme.hint_color;
 
-    // Style for input file button, background checkbox, and addPolygonButton (SecondaryButton style)
+    // Style for input file button, background checkbox, and addAreaButton (SecondaryButton style)
     const mainButtons = [
         document.getElementById('imageLoader'),
         document.getElementById('copyCoordinatesButton')
@@ -313,10 +313,10 @@ function applyTelegramTheme() {
         }
     });
 
-    // Style for input file button, background checkbox, and addPolygonButton (SecondaryButton style)
+    // Style for input file button, background checkbox, and addAreaButton (SecondaryButton style)
     const secondaryButtons = [
         document.querySelector('.input-group-text'),
-        document.getElementById('addPolygonButton'),
+        document.getElementById('addAreaButton'),
         document.getElementById('polygonSelector')
     ];
     secondaryButtons.forEach(button => {
@@ -371,23 +371,23 @@ canvas.addEventListener('touchcancel', handleEnd);
 window.addEventListener('resize', resizeCanvas);
 resetCornersButton.addEventListener('click', resetCanvas);
 backgroundCheckbox.addEventListener('change', (e) => {
-    const newState = polygons[activePolygonIndex].toggleBackground();
+    const newState = polygons[activeAreaIndex].toggleBackground();
     e.target.checked = newState;  // Ensure checkbox reflects the polygon's state
     draw();
     updateCoordinates();
 });
 
-addPolygonButton.addEventListener('click', () => {
-    polygons.push(new Polygon(getRandomColor()));
-    activePolygonIndex = polygons.length - 1;
-    updatePolygonSelector();
+addAreaButton.addEventListener('click', () => {
+    polygons.push(new Area(getRandomColor()));
+    activeAreaIndex = polygons.length - 1;
+    updateAreaSelector();
     draw();
     updateCoordinates();
 });
 
 polygonSelector.addEventListener('change', (e) => {
-    activePolygonIndex = parseInt(e.target.value);
-    backgroundCheckbox.checked = polygons[activePolygonIndex].background;
+    activeAreaIndex = parseInt(e.target.value);
+    backgroundCheckbox.checked = polygons[activeAreaIndex].background;
     draw();
     updateCoordinates();
 });
@@ -428,4 +428,4 @@ clipboard.on('error', function (e) {
     showToast("Erro ao copiar.", "#dc3545");
 });
 
-updatePolygonSelector();
+updateAreaSelector();
