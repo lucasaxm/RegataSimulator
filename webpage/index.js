@@ -267,6 +267,7 @@ function drawCheckerboard(ctx, width, height, size) {
 
 function copyToClipboard() {
     copyCoordinatesButton.click();
+    tg.showConfirm("Cole as coordenadas na descrição do template e envie para o bot", (ok) => ok ? tg.close() : null);
 }
 
 function showToast(message, backgroundColor) {
@@ -419,12 +420,12 @@ tg.onEvent('mainButtonClicked', copyToClipboard);
 tg.onEvent('secondaryButtonClicked', resetCanvas);
 
 clipboard.on('success', function (e) {
-    showToast("Coordinates copied to clipboard", "#007bff");
+    showToast("Copiado!", "#007bff");
     e.clearSelection();
 });
 
 clipboard.on('error', function (e) {
-    showToast("Failed to copy coordinates", "#dc3545");
+    showToast("Erro ao copiar.", "#dc3545");
 });
 
 updatePolygonSelector();
