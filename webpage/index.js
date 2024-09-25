@@ -284,6 +284,41 @@ function showToast(message, backgroundColor) {
     }).showToast();
 }
 
+function applyTelegramTheme() {
+    if (tg.themeParams) {
+        document.body.style.backgroundColor = tg.themeParams.bg_color;
+        document.body.style.color = tg.themeParams.text_color;
+
+        // Update button styles
+        const buttons = document.querySelectorAll('.btn');
+        buttons.forEach(button => {
+            button.style.backgroundColor = tg.themeParams.button_color;
+            button.style.color = tg.themeParams.button_text_color;
+        });
+
+        // Update form control styles
+        const formControls = document.querySelectorAll('.form-control, .form-select');
+        formControls.forEach(control => {
+            control.style.backgroundColor = tg.themeParams.secondary_bg_color;
+            control.style.color = tg.themeParams.text_color;
+            control.style.borderColor = tg.themeParams.hint_color;
+        });
+
+        // Update checkbox style
+        const checkbox = document.querySelector('.form-check-input');
+        if (checkbox) {
+            checkbox.style.backgroundColor = tg.themeParams.secondary_bg_color;
+            checkbox.style.borderColor = tg.themeParams.hint_color;
+        }
+
+        // Update link color
+        const links = document.querySelectorAll('a');
+        links.forEach(link => {
+            link.style.color = tg.themeParams.link_color;
+        });
+    }
+}
+
 imageLoader.addEventListener('change', e => {
     const reader = new FileReader();
     reader.onload = event => {
@@ -346,11 +381,13 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.style.width = '100%';
     resetCanvas();
     resizeCanvas();
+    applyTelegramTheme(); // Add this line
 });
 
 tg.onEvent('viewport_changed', () => {
     document.body.style.height = `${tg.viewportHeight}px`;
     resizeCanvas();
+    applyTelegramTheme(); // Add this line
 });
 
 updatePolygonSelector();
