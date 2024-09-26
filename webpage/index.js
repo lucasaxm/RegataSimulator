@@ -4,7 +4,6 @@ const imageLoader = document.getElementById('imageLoader');
 const img = new Image();
 const tg = window.Telegram.WebApp;
 const clipboard = new ClipboardJS('#copyCoordinatesButton');
-const copyCoordinatesButton = document.getElementById('copyCoordinatesButton');
 const resetCornersButton = document.getElementById('resetCornersButton');
 const backgroundCheckbox = document.getElementById('backgroundCheckbox');
 const addAreaButton = document.getElementById('addAreaButton');
@@ -20,8 +19,6 @@ class Area {
         ];
         this.color = color;
         this.background = false;
-        this.lastCanvasWidth = canvas.width;
-        this.lastCanvasHeight = canvas.height;
     }
 
     draw(ctx) {
@@ -98,6 +95,13 @@ class Area {
     toggleBackground() {
         this.background = !this.background;
         return this.background;
+    }
+
+    clone() {
+        const newArea = new Area(getRandomColor());
+        newArea.corners = this.corners.map(corner => ({...corner}));
+        newArea.background = this.background;
+        return newArea;
     }
 }
 
@@ -312,7 +316,9 @@ function applyTelegramTheme() {
     const secondaryButtons = [
         document.querySelector('.input-group-text'),
         document.getElementById('addAreaButton'),
-        document.getElementById('polygonSelector')
+        document.getElementById('polygonSelector'),
+        document.getElementById('cloneAreaButton')
+
     ];
     secondaryButtons.forEach(button => {
         if (button) {
@@ -373,7 +379,8 @@ backgroundCheckbox.addEventListener('change', (e) => {
 });
 
 addAreaButton.addEventListener('click', () => {
-    polygons.push(new Area(getRandomColor()));
+    const newArea = polygons[activeAreaIndex].clone();
+    polygons.push(newArea);
     activeAreaIndex = polygons.length - 1;
     updateAreaSelector();
     draw();
