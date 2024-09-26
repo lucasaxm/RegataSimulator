@@ -15,18 +15,18 @@
         <div class="col-12 d-flex flex-column p-2">
             <input type="file" id="imageLoader" accept="image/*" class="form-control mb-2"/>
             <div class="input-group mb-2">
-                <button id="addAreaButton" class="btn btn-primary">+</button>
+                <button id="addAreaButton" class="btn">+</button>
                 <select id="polygonSelector" class="form-select"></select>
                 <div class="input-group-text">
                     <input class="form-check-input mt-0" type="checkbox" id="backgroundCheckbox">
                     <label class="form-check-label ms-2" for="backgroundCheckbox">Segundo Plano</label>
                 </div>
             </div>
-            <div class="flex-grow-1 d-flex justify-content-center align-items-center overflow-auto mb-2">
+            <div class="flex-grow-1 d-flex justify-content-center align-items-center overflow-auto">
                 <canvas id="canvas" class="img-fluid"></canvas>
             </div>
             <div id="coordinates" class="small mb-2"></div>
-            <div id="bottomButtons" class="input-group mb-2 d-flex">
+            <div id="bottomButtons" class="input-group-lg btn-group mb-2 d-flex">
                 <button id="resetCornersButton" class="btn flex-grow-1">Limpar</button>
                 <button id="copyCoordinatesButton" data-clipboard-target="#coordinates" class="btn flex-grow-1">Copiar
                 </button>

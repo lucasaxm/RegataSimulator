@@ -265,11 +265,6 @@ function drawCheckerboard(ctx, width, height, size) {
     }
 }
 
-function copyToClipboard() {
-    copyCoordinatesButton.click();
-    tg.showConfirm("Cole as coordenadas na descrição do template e envie para o bot", (ok) => ok ? tg.close() : null);
-}
-
 function showToast(message, backgroundColor) {
     Toastify({
         text: message,
@@ -399,11 +394,6 @@ document.addEventListener('DOMContentLoaded', () => {
     resetCanvas();
     resizeCanvas();
     applyTelegramTheme();
-    tg.MainButton.setText("Copiar").show();
-    tg.SecondaryButton.setText("Reset").show();
-    if (tg.platform !== 'unknown') {
-        document.getElementById("bottomButtons").classList.add("d-none");
-    }
     tg.ready();
 });
 
@@ -415,13 +405,10 @@ tg.onEvent('viewportChanged', (e) => {
     }
 });
 
-tg.onEvent('mainButtonClicked', copyToClipboard);
-
-tg.onEvent('secondaryButtonClicked', resetCanvas);
-
 clipboard.on('success', function (e) {
     showToast("Copiado!", "#007bff");
     e.clearSelection();
+    tg.showConfirm("Cole as coordenadas na descrição do template e envie para o bot", (ok) => ok ? tg.close() : null);
 });
 
 clipboard.on('error', function (e) {
