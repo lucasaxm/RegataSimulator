@@ -1,5 +1,7 @@
 package com.boatarde.regatasimulator.util;
 
+import com.boatarde.regatasimulator.models.AreaCorner;
+import com.boatarde.regatasimulator.models.TemplateArea;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.experimental.UtilityClass;
@@ -22,13 +24,20 @@ import org.telegram.telegrambots.meta.api.objects.media.InputMediaPhoto;
 import org.telegram.telegrambots.meta.api.objects.media.InputMediaVideo;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
+import javax.imageio.ImageIO;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.IOException;
+import java.io.StringReader;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
 @UtilityClass
 @Slf4j
 public class TelegramUtils {
+    public static final String HEADER = "Area,TLx,TLy,TRx,TRy,BRx,BRy,BLx,BLy,Background";
     private static final ObjectMapper mapper = new ObjectMapper();
 
     /**
@@ -191,5 +200,55 @@ public class TelegramUtils {
             sendMediaGroup.getMedias().subList(1, sendMediaGroup.getMedias().size())
                 .forEach(inputMedia -> inputMedia.setCaption(null));
         }
+    }
+
+    public static boolean isImage(File file) {
+        if (file == null || !file.exists() || !file.isFile()) {
+            return false;
+        }
+
+        try {
+            return ImageIO.read(file) != null;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    public static List<TemplateArea> parseTemplateCsv(String csv) throws IOException {
+        List<TemplateArea> areas = new ArrayList<>();
+        try (BufferedReader reader = new BufferedReader(new StringReader(csv))) {
+            String line = reader.readLine(); // header
+            if (!HEADER.equals(line)) {
+                throw new IOException("Invalid CSV header");
+            }
+            while ((line = reader.readLine()) != null) {
+                String[] fields = line.split(",");
+                if (fields.length != 10) {
+                    throw new IOException("Invalid CSV format");
+                }
+
+                areas.add(TemplateArea.builder()
+                    .index(Integer.parseInt(fields[0]))
+                    .topLeft(AreaCorner.builder()
+                        .x(Integer.parseInt(fields[1]))
+                        .y(Integer.parseInt(fields[2]))
+                        .build())
+                    .topRight(AreaCorner.builder()
+                        .x(Integer.parseInt(fields[3]))
+                        .y(Integer.parseInt(fields[4]))
+                        .build())
+                    .bottomRight(AreaCorner.builder()
+                        .x(Integer.parseInt(fields[5]))
+                        .y(Integer.parseInt(fields[6]))
+                        .build())
+                    .bottomLeft(AreaCorner.builder()
+                        .x(Integer.parseInt(fields[7]))
+                        .y(Integer.parseInt(fields[8]))
+                        .build())
+                    .background(Integer.parseInt(fields[9]) == 1)
+                    .build());
+            }
+        }
+        return areas;
     }
 }

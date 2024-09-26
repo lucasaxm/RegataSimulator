@@ -5,6 +5,7 @@ import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.flows.WorkflowStep;
 import com.boatarde.regatasimulator.flows.WorkflowStepRegistration;
+import com.boatarde.regatasimulator.util.TelegramUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 
@@ -40,10 +41,21 @@ public class GetRandomTemplateStep implements WorkflowStep {
 
             Random random = new Random();
             Path selectedDirectory = directories.get(random.nextInt(directories.size()));
+            Path templateFile = selectedDirectory.resolve("template.jpg");
+            if (!templateFile.toFile().exists()) {
+                templateFile = selectedDirectory.resolve("template.png");
+            }
+            if (!templateFile.toFile().exists()) {
+                log.error("Template file not found.");
+                return WorkflowAction.NONE;
+            }
+            String csvContent = Files.readString(selectedDirectory.resolve("template.csv"));
+
 
             log.info("Diretório selecionado: {}", selectedDirectory.getFileName());
 
-            bag.put(WorkflowDataKey.TEMPLATE_DIRECTORY, selectedDirectory);
+            bag.put(WorkflowDataKey.TEMPLATE_FILE, templateFile);
+            bag.put(WorkflowDataKey.TEMPLATE_AREAS, TelegramUtils.parseTemplateCsv(csvContent));
             return WorkflowAction.GET_RANDOM_SOURCE;
         } catch (IOException e) {
             log.error(e.getLocalizedMessage(), e);
