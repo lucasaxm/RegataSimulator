@@ -164,6 +164,7 @@ jobs:
           REGATA_SIMULATOR_ENC_PASSWORD: ${{ secrets.REGATA_SIMULATOR_ENC_PASSWORD }}
           REGATA_SIMULATOR_SOURCES_PATH: ${{ secrets.REGATA_SIMULATOR_SOURCES_PATH }}
           REGATA_SIMULATOR_TEMPLATES_PATH: ${{ secrets.REGATA_SIMULATOR_TEMPLATES_PATH }}
+          MAGICK_PATH: ${{ secrets.MAGICK_PATH }}
           SPRING_PROFILES_ACTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'dev' }}
         with:
           host: ${{ secrets.SERVER_HOST }}
