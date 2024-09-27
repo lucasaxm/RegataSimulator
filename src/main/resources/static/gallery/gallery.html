@@ -3,54 +3,111 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Image Gallery</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>Cool Image Gallery</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        .gallery-item {
+            position: relative;
+            overflow: hidden;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+        .gallery-item:hover {
+            transform: scale(1.05);
+        }
+        .gallery-item img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+        }
+        .gallery-item .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .gallery-item:hover .overlay {
+            opacity: 1;
+        }
+        .delete-btn {
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
 <div class="container mt-5">
-    <h1 class="text-center mb-4">Image Gallery</h1>
-    <div id="gallery" class="row row-cols-1 row-cols-md-3 g-4"></div>
-    <div class="mt-4 text-center">
-        <button id="loadMore" class="btn btn-primary">Load More</button>
+    <ul class="nav nav-tabs" id="galleryTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="sources-tab" data-bs-toggle="tab" data-bs-target="#sources" type="button" role="tab" aria-controls="sources" aria-selected="true">Sources</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="templates-tab" data-bs-toggle="tab" data-bs-target="#templates" type="button" role="tab" aria-controls="templates" aria-selected="false">Templates</button>
+        </li>
+    </ul>
+    <div class="tab-content" id="galleryTabsContent">
+        <div class="tab-pane fade show active" id="sources" role="tabpanel" aria-labelledby="sources-tab">
+            <div id="sourcesGallery" class="row row-cols-1 row-cols-md-3 row-cols-lg-4 g-4 mt-3"></div>
+            <nav aria-label="Sources pagination" class="mt-4">
+                <ul id="sourcesPagination" class="pagination justify-content-center"></ul>
+            </nav>
+        </div>
+        <div class="tab-pane fade" id="templates" role="tabpanel" aria-labelledby="templates-tab">
+            <div id="templatesGallery" class="row row-cols-1 row-cols-md-3 row-cols-lg-4 g-4 mt-3"></div>
+            <nav aria-label="Templates pagination" class="mt-4">
+                <ul id="templatesPagination" class="pagination justify-content-center"></ul>
+            </nav>
+        </div>
     </div>
-    <button id="logoutButton" class="btn btn-secondary">Logout</button>
+    <button id="logoutButton" class="btn btn-secondary mt-3">Logout</button>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    let currentPage = 1;
+    let currentSourcesPage = 1;
+    let currentTemplatesPage = 1;
     const perPage = 12;
 
-    function fetchGalleryItems() {
-        fetch(`/api/gallery?type=sources&page=${currentPage}&perPage=${perPage}`)
+    function fetchGalleryItems(type, page) {
+        fetch(`/api/gallery?type=${type}&page=${page}&perPage=${perPage}`)
             .then(response => {
                 if (response.ok) {
                     return response.json();
                 } else if (response.status === 401) {
-                    // Redirect to login page if unauthorized
                     window.location.href = 'login.html';
                     throw new Error('Unauthorized');
                 }
                 throw new Error('Network response was not ok');
             })
             .then(data => {
-                const galleryContainer = document.getElementById('gallery');
+                const galleryContainer = document.getElementById(`${type}Gallery`);
+                galleryContainer.innerHTML = '';
                 data.items.forEach(item => {
                     const col = document.createElement('div');
                     col.className = 'col';
                     col.innerHTML = `
-                            <div class="card h-100">
-                                <img src="${item.imagePath}" class="card-img-top" alt="${item.name}">
-                                <div class="card-body">
-                                    <h5 class="card-title">${item.name}</h5>
-                                </div>
+                        <div class="gallery-item">
+                            <img src="${item.imagePath}" alt="${item.name}">
+                            <div class="overlay">
+                                <i class="fas fa-trash-alt delete-btn" data-filename="${item.name}" data-type="${type}"></i>
                             </div>
-                        `;
+                        </div>
+                    `;
                     galleryContainer.appendChild(col);
                 });
 
-                if (data.totalPages <= currentPage) {
-                    document.getElementById('loadMore').style.display = 'none';
-                }
+                updatePagination(type, page, Math.ceil(data.totalItems / perPage));
+                addDeleteListeners();
             })
             .catch(error => {
                 console.error('Error:', error);
@@ -60,12 +117,69 @@
             });
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-        fetchGalleryItems();
+    function updatePagination(type, currentPage, totalPages) {
+        const paginationContainer = document.getElementById(`${type}Pagination`);
+        paginationContainer.innerHTML = '';
 
-        document.getElementById('loadMore').addEventListener('click', () => {
-            currentPage++;
-            fetchGalleryItems();
+        for (let i = 1; i <= totalPages; i++) {
+            const li = document.createElement('li');
+            li.className = `page-item ${i === currentPage ? 'active' : ''}`;
+            li.innerHTML = `<a class="page-link" href="#" data-page="${i}">${i}</a>`;
+            paginationContainer.appendChild(li);
+        }
+
+        paginationContainer.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (e.target.tagName === 'A') {
+                const page = parseInt(e.target.getAttribute('data-page'));
+                if (type === 'sources') {
+                    currentSourcesPage = page;
+                } else {
+                    currentTemplatesPage = page;
+                }
+                fetchGalleryItems(type, page);
+            }
+        });
+    }
+
+    function addDeleteListeners() {
+        document.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const filename = this.getAttribute('data-filename');
+                const type = this.getAttribute('data-type');
+                deleteImage(type, filename);
+            });
+        });
+    }
+
+    function deleteImage(type, filename) {
+        if (confirm('Are you sure you want to delete this image?')) {
+            fetch(`/api/image/${type}/${filename}`, { method: 'DELETE' })
+                .then(response => {
+                    if (response.ok) {
+                        // Remove the image from the gallery
+                        const galleryItem = document.querySelector(`[data-filename="${filename}"][data-type="${type}"]`).closest('.col');
+                        galleryItem.remove();
+                    } else {
+                        throw new Error('Delete failed');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred while deleting the image');
+                });
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchGalleryItems('sources', currentSourcesPage);
+
+        document.getElementById('galleryTabs').addEventListener('shown.bs.tab', (e) => {
+            if (e.target.id === 'sources-tab') {
+                fetchGalleryItems('sources', currentSourcesPage);
+            } else if (e.target.id === 'templates-tab') {
+                fetchGalleryItems('templates', currentTemplatesPage);
+            }
         });
     });
 
