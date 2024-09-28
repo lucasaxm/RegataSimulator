@@ -11,37 +11,57 @@
             position: relative;
             overflow: hidden;
             border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             transition: transform 0.3s ease;
         }
+
         .gallery-item:hover {
             transform: scale(1.05);
         }
+
         .gallery-item img {
             width: 100%;
             height: 200px;
             object-fit: cover;
         }
+
         .gallery-item .overlay {
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0,0,0,0.7);
+            background: rgba(0, 0, 0, 0.7);
             display: flex;
             align-items: center;
             justify-content: center;
             opacity: 0;
             transition: opacity 0.3s ease;
         }
+
         .gallery-item:hover .overlay {
             opacity: 1;
         }
+
         .delete-btn {
             color: white;
             font-size: 24px;
             cursor: pointer;
+        }
+
+        .modal-body img {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .details-table {
+            width: 100%;
+            margin-top: 15px;
+        }
+
+        .details-table td {
+            padding: 5px;
+            border-bottom: 1px solid #ddd;
         }
     </style>
 </head>
@@ -49,10 +69,14 @@
 <div class="container mt-5">
     <ul class="nav nav-tabs" id="galleryTabs" role="tablist">
         <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="sources-tab" data-bs-toggle="tab" data-bs-target="#sources" type="button" role="tab" aria-controls="sources" aria-selected="true">Sources</button>
+            <button class="nav-link active" id="sources-tab" data-bs-toggle="tab" data-bs-target="#sources"
+                    type="button" role="tab" aria-controls="sources" aria-selected="true">Sources
+            </button>
         </li>
         <li class="nav-item" role="presentation">
-            <button class="nav-link" id="templates-tab" data-bs-toggle="tab" data-bs-target="#templates" type="button" role="tab" aria-controls="templates" aria-selected="false">Templates</button>
+            <button class="nav-link" id="templates-tab" data-bs-toggle="tab" data-bs-target="#templates" type="button"
+                    role="tab" aria-controls="templates" aria-selected="false">Templates
+            </button>
         </li>
     </ul>
     <div class="tab-content" id="galleryTabsContent">
@@ -71,7 +95,24 @@
     </div>
     <button id="logoutButton" class="btn btn-secondary mt-3">Logout</button>
 </div>
-
+<div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="imageModalLabel">Image View</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <img src="" alt="Full size image" id="modalImage">
+                <div id="imageDetails"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-danger" id="modalDeleteBtn">Delete</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
     let currentSourcesPage = 1;
@@ -97,9 +138,9 @@
                     col.className = 'col';
                     col.innerHTML = `
                         <div class="gallery-item">
-                            <img src="${item.imagePath}" alt="${item.name}">
+                            <img src="${item.imagePath}" alt="${item.name}" data-bs-toggle="modal" data-bs-target="#imageModal" data-filename="${item.name}" data-type="${type}" data-details="${encodeURIComponent(item.details)}">
                             <div class="overlay">
-                                <i class="fas fa-trash-alt delete-btn" data-filename="${item.name}" data-type="${type}"></i>
+                                <i class="fas fa-search-plus" data-bs-toggle="modal" data-bs-target="#imageModal" data-filename="${item.name}" data-type="${type}" data-details="${encodeURIComponent(item.details)}"></i>
                             </div>
                         </div>
                     `;
@@ -107,7 +148,7 @@
                 });
 
                 updatePagination(type, page, Math.ceil(data.totalItems / perPage));
-                addDeleteListeners();
+                addModalListeners();
             })
             .catch(error => {
                 console.error('Error:', error);
@@ -115,6 +156,63 @@
                     alert('An error occurred while fetching gallery items');
                 }
             });
+    }
+
+    function addModalListeners() {
+        document.querySelectorAll('[data-bs-toggle="modal"]').forEach(element => {
+            element.addEventListener('click', function () {
+                const modal = document.getElementById('imageModal');
+                const modalImage = document.getElementById('modalImage');
+                const imageDetails = document.getElementById('imageDetails');
+                const modalDeleteBtn = document.getElementById('modalDeleteBtn');
+
+                modalImage.src = this.closest('.gallery-item').querySelector('img').src;
+                modalDeleteBtn.setAttribute('data-filename', this.getAttribute('data-filename'));
+                modalDeleteBtn.setAttribute('data-type', this.getAttribute('data-type'));
+
+                const details = decodeURIComponent(this.getAttribute('data-details'));
+                if (details && this.getAttribute('data-type') === 'templates') {
+                    const detailsTable = formatDetails(details);
+                    imageDetails.innerHTML = detailsTable;
+                } else {
+                    imageDetails.innerHTML = '';
+                }
+            });
+        });
+
+        document.getElementById('modalDeleteBtn').addEventListener('click', function () {
+            const filename = this.getAttribute('data-filename');
+            const type = this.getAttribute('data-type');
+            deleteImage(type, filename);
+            bootstrap.Modal.getInstance(document.getElementById('imageModal')).hide();
+        });
+    }
+
+    function formatDetails(details) {
+        if (!details) return '';
+        const rows = details.split('\n');
+        const headers = rows[0].split(',');
+        let tableHtml = '<table class="details-table">';
+
+        // Add header row
+        tableHtml += '<tr>';
+        headers.forEach(header => {
+            tableHtml += `<th>${header}</th>`;
+        });
+        tableHtml += '</tr>';
+
+        // Add data rows
+        for (let i = 1; i < rows.length; i++) {
+            const cells = rows[i].split(',');
+            tableHtml += '<tr>';
+            cells.forEach(cell => {
+                tableHtml += `<td>${cell}</td>`;
+            });
+            tableHtml += '</tr>';
+        }
+
+        tableHtml += '</table>';
+        return tableHtml;
     }
 
     function updatePagination(type, currentPage, totalPages) {
@@ -144,7 +242,7 @@
 
     function addDeleteListeners() {
         document.querySelectorAll('.delete-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
+            btn.addEventListener('click', function () {
                 const filename = this.getAttribute('data-filename');
                 const type = this.getAttribute('data-type');
                 deleteImage(type, filename);
@@ -154,7 +252,7 @@
 
     function deleteImage(type, filename) {
         if (confirm('Are you sure you want to delete this image?')) {
-            fetch(`/api/image/${type}/${filename}`, { method: 'DELETE' })
+            fetch(`/api/image/${type}/${filename}`, {method: 'DELETE'})
                 .then(response => {
                     if (response.ok) {
                         // Remove the image from the gallery
