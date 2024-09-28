@@ -32,7 +32,10 @@ public class TemplateService {
                         return Files.list(subdir)
                             .filter(file -> file.getFileName().toString().endsWith(".jpg") ||
                                 file.getFileName().toString().endsWith(".png"))
-                            .map(file -> new GalleryItem(subdir.getFileName().toString() + "_" + file.getFileName().toString(), "templates"));
+                            .map(file -> {
+                                String details = getTemplateDetails(subdir.getFileName().toString());
+                                return new GalleryItem(subdir.getFileName().toString() + "_" + file.getFileName().toString(), "templates", details);
+                            });
                     } catch (IOException e) {
                         throw new RuntimeException("Failed to read template subdirectory", e);
                     }
@@ -56,7 +59,7 @@ public class TemplateService {
         try {
             return new String(Files.readAllBytes(csvPath));
         } catch (IOException e) {
-            throw new RuntimeException("Failed to read template details", e);
+            return null;
         }
     }
 

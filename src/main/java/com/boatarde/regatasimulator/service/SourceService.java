@@ -25,15 +25,18 @@ public class SourceService {
         try {
             List<GalleryItem> allItems = Files.list(dir)
                 .filter(path -> !Files.isDirectory(path))
-                .map(path -> new GalleryItem(path.getFileName().toString(), "sources"))
+                .map(path -> new GalleryItem(path.getFileName().toString(), "sources", null))
                 .collect(Collectors.toList());
 
             int totalItems = allItems.size();
             int startIndex = (page - 1) * perPage;
             int endIndex = Math.min(startIndex + perPage, totalItems);
 
-            List<GalleryItem> pageItems = allItems.subList(startIndex, endIndex);
+            if (startIndex >= totalItems) {
+                throw new RuntimeException("Invalid page number");
+            }
 
+            List<GalleryItem> pageItems = allItems.subList(startIndex, endIndex);
             return new GalleryResponse(pageItems, totalItems);
         } catch (IOException e) {
             throw new RuntimeException("Failed to read source items", e);
