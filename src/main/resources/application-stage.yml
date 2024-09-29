@@ -13,3 +13,4 @@ telegram:
       username: ENC(pNyHJWQxcfDqIk2TbQwG5rig8UpbmGtp5vQNygg3FNJ1boz3eY6NkUshYV1OJFMmrI+ApaHjW3ZVLdQ6Ag0iVA==)
 
 logging.level.org.springframework.security: DEBUG
+logging.level.org.springframework.session: DEBUG

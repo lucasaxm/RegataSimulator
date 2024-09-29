@@ -23,7 +23,7 @@ public class SessionConfig {
         DefaultCookieSerializer serializer = new DefaultCookieSerializer();
         serializer.setCookieName("JSESSIONID");
         serializer.setCookiePath("/");
-        serializer.setDomainNamePattern("^.+?\\.(\\w+\\.[a-z]+)$");
+        serializer.setDomainName("boatarde.dev.br"); // Set to your specific domain
         serializer.setUseHttpOnlyCookie(true);
         serializer.setUseSecureCookie(true);
         return serializer;
