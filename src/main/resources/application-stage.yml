@@ -1,5 +1,9 @@
 server:
-  port: 8080
+  forward-headers-strategy: NATIVE
+  tomcat:
+    remoteip:
+      remote-ip-header: x-forwarded-for
+      protocol-header: x-forwarded-proto
 telegram:
   creator:
     id: ENC(XTQfepj29h3jk+kwHcDfIt/lzvLcvaMpWxLme6VEodP8Rpz26t/g98sXvUC/gtah)
