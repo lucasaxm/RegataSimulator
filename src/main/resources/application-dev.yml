@@ -1,3 +1,5 @@
+server:
+  port: 8080
 telegram:
   creator:
     id: ENC(XTQfepj29h3jk+kwHcDfIt/lzvLcvaMpWxLme6VEodP8Rpz26t/g98sXvUC/gtah)
