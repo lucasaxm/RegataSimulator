@@ -19,6 +19,12 @@ function fetchGalleryItems(type, page) {
             throw new Error('Network response was not ok');
         })
         .then(data => {
+            // If the current page is empty, and it's not the first page, fetch the previous page
+            if (data.items.length === 0 && page > 1) {
+                fetchGalleryItems(type, page - 1);
+                return;
+            }
+
             const galleryContainer = document.getElementById(`${type}Gallery`);
             galleryContainer.innerHTML = '';
             data.items.forEach(item => {
@@ -34,6 +40,13 @@ function fetchGalleryItems(type, page) {
                 `;
                 galleryContainer.appendChild(col);
             });
+
+            // Update the current page variable
+            if (type === 'sources') {
+                currentSourcesPage = page;
+            } else {
+                currentTemplatesPage = page;
+            }
 
             updatePagination(type, page, Math.ceil(data.totalItems / perPage));
             addModalListeners();
@@ -184,11 +197,39 @@ function updatePagination(type, currentPage, totalPages) {
     const paginationContainer = document.getElementById(`${type}Pagination`);
     paginationContainer.innerHTML = '';
 
-    for (let i = 1; i <= totalPages; i++) {
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+    if (endPage - startPage + 1 < maxVisiblePages) {
+        startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+
+    // Add "First" button
+    if (currentPage > 1) {
+        paginationContainer.innerHTML += `<li class="page-item"><a class="page-link" href="#" data-page="1">First</a></li>`;
+    }
+
+    // Add "Previous" button
+    if (currentPage > 1) {
+        paginationContainer.innerHTML += `<li class="page-item"><a class="page-link" href="#" data-page="${currentPage - 1}">Previous</a></li>`;
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
         const li = document.createElement('li');
         li.className = `page-item ${i === currentPage ? 'active' : ''}`;
         li.innerHTML = `<a class="page-link" href="#" data-page="${i}">${i}</a>`;
         paginationContainer.appendChild(li);
+    }
+
+    // Add "Next" button
+    if (currentPage < totalPages) {
+        paginationContainer.innerHTML += `<li class="page-item"><a class="page-link" href="#" data-page="${currentPage + 1}">Next</a></li>`;
+    }
+
+    // Add "Last" button
+    if (currentPage < totalPages) {
+        paginationContainer.innerHTML += `<li class="page-item"><a class="page-link" href="#" data-page="${totalPages}">Last</a></li>`;
     }
 
     paginationContainer.addEventListener('click', (e) => {
@@ -210,8 +251,17 @@ function deleteImage(type, filename) {
         fetch(`/api/image/${type}/${filename}`, {method: 'DELETE'})
             .then(response => {
                 if (response.ok) {
-                    const galleryItem = document.querySelector(`[data-filename="${filename}"][data-type="${type}"]`).closest('.col');
-                    galleryItem.remove();
+                    // Determine the current page
+                    const currentPage = type === 'sources' ? currentSourcesPage : currentTemplatesPage;
+
+                    // Refresh the current page
+                    fetchGalleryItems(type, currentPage);
+
+                    // Close the modal if it's open
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('imageModal'));
+                    if (modal) {
+                        modal.hide();
+                    }
                 } else {
                     throw new Error('Delete failed');
                 }
