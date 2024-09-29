@@ -15,6 +15,7 @@ import java.nio.file.Paths;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 public class TemplateService {
@@ -34,7 +35,9 @@ public class TemplateService {
                                 file.getFileName().toString().endsWith(".png"))
                             .map(file -> {
                                 String details = getTemplateDetails(subdir.getFileName().toString());
-                                return new GalleryItem(subdir.getFileName().toString() + "_" + file.getFileName().toString(), "templates", details);
+                                return new GalleryItem(
+                                    subdir.getFileName().toString() + "_" + file.getFileName().toString(), "templates",
+                                    details);
                             });
                     } catch (IOException e) {
                         throw new RuntimeException("Failed to read template subdirectory", e);
@@ -81,10 +84,11 @@ public class TemplateService {
     public void deleteTemplate(String id) {
         try {
             Path templateDir = Paths.get(templatesPath).resolve(id);
-            Files.walk(templateDir)
-                .sorted(Comparator.reverseOrder())
-                .map(Path::toFile)
-                .forEach(File::delete);
+            try (Stream<Path> paths = Files.walk(templateDir)) {
+                paths.sorted(Comparator.reverseOrder())
+                    .map(Path::toFile)
+                    .forEach(File::delete);
+            }
         } catch (IOException e) {
             throw new RuntimeException("Failed to delete template: " + id, e);
         }
