@@ -46,9 +46,11 @@ public class SecurityConfig {
                 .logoutSuccessUrl("/gallery/login.html")
             )
             .sessionManagement(session -> session
-                .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
-            .csrf(csrf -> csrf
-                .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()));
+                .sessionCreationPolicy(SessionCreationPolicy.ALWAYS)
+                .invalidSessionUrl("/gallery/login.html")
+                .maximumSessions(1)
+                .expiredUrl("/gallery/login.html"))
+            .csrf(AbstractHttpConfigurer::disable);
 
         return http.build();
     }

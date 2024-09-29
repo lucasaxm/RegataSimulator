@@ -5,6 +5,8 @@ let currentSourcesPage = 1;
 let currentTemplatesPage = 1;
 const perPage = 12;
 
+let isDeleting = false;
+
 function fetchGalleryItems(type, page) {
     fetch(`/api/gallery?type=${type}&page=${page}&perPage=${perPage}`)
         .then(response => {
@@ -46,7 +48,9 @@ function fetchGalleryItems(type, page) {
 
 function addModalListeners() {
     document.querySelectorAll('[data-bs-toggle="modal"]').forEach(element => {
-        element.addEventListener('click', function () {
+        element.addEventListener('click', function (event) {
+            event.stopPropagation();
+
             const modal = document.getElementById('imageModal');
             const modalImage = document.getElementById('modalImage');
             const imageDetails = document.getElementById('imageDetails');
@@ -79,10 +83,13 @@ function addModalListeners() {
     });
 
     document.getElementById('modalDeleteBtn').addEventListener('click', function () {
-        const filename = this.getAttribute('data-filename');
-        const type = this.getAttribute('data-type');
-        deleteImage(type, filename);
-        bootstrap.Modal.getInstance(document.getElementById('imageModal')).hide();
+        if (!isDeleting) {
+            isDeleting = true;
+            const filename = this.getAttribute('data-filename');
+            const type = this.getAttribute('data-type');
+            deleteImage(type, filename);
+            bootstrap.Modal.getInstance(document.getElementById('imageModal')).hide();
+        }
     });
 }
 
@@ -212,7 +219,12 @@ function deleteImage(type, filename) {
             .catch(error => {
                 console.error('Error:', error);
                 alert('An error occurred while deleting the image');
+            })
+            .finally(() => {
+                isDeleting = false;
             });
+    } else {
+        isDeleting = false;
     }
 }
 
