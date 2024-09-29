@@ -18,17 +18,24 @@ public class SecurityConfig {
 
     private final String username;
     private final String password;
+    private final boolean sslEnabled;
 
     public SecurityConfig(@Value("${web-admin.username}") String username,
-                          @Value("${web-admin.password}") String password) {
+                          @Value("${web-admin.password}") String password,
+                          @Value("${server.ssl.enabled:false}") boolean sslEnabled) {
         this.username = username;
         this.password = password;
+        this.sslEnabled = sslEnabled;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http
-            .authorizeHttpRequests((requests) -> requests
+        if (sslEnabled) {
+            http.requiresChannel(channel -> channel
+                .anyRequest().requiresSecure());
+        }
+
+        http.authorizeHttpRequests((requests) -> requests
                 .requestMatchers("/api/login", "/gallery/login.html", "/create/**", "/gallery/*.js", "/gallery/*.css")
                 .permitAll()
                 .anyRequest().authenticated()

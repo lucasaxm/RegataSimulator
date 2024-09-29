@@ -1,3 +1,9 @@
+server:
+  port: 8080
+  ssl:
+    enabled: true
+cors:
+  allowed-origins: https://boatarde.dev.br,https://www.boatarde.dev.br
 spring:
   application:
     name: bilubot
