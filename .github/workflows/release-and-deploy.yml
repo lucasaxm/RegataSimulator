@@ -14,7 +14,7 @@ on:
       environment:
         description: 'Environment to deploy to'
         type: environment
-        default: dev
+        default: stage
         required: true
 
 jobs:
@@ -54,7 +54,7 @@ jobs:
     needs: build-and-test
     runs-on: ubuntu-latest
     environment:
-      name: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'dev' }}
+      name: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'stage' }}
     steps:
       - uses: actions/checkout@v4
       - uses: webfactory/ssh-agent@v0.9.0
@@ -135,7 +135,7 @@ jobs:
       - name: Create startup script
         uses: appleboy/ssh-action@v1.0.3
         env:
-          SPRING_PROFILES_ACTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'dev' }}
+          SPRING_PROFILES_ACTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'stage' }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
@@ -165,7 +165,7 @@ jobs:
           REGATA_SIMULATOR_SOURCES_PATH: ${{ secrets.REGATA_SIMULATOR_SOURCES_PATH }}
           REGATA_SIMULATOR_TEMPLATES_PATH: ${{ secrets.REGATA_SIMULATOR_TEMPLATES_PATH }}
           MAGICK_PATH: ${{ secrets.MAGICK_PATH }}
-          SPRING_PROFILES_ACTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'dev' }}
+          SPRING_PROFILES_ACTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'stage' }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
