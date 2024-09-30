@@ -35,7 +35,7 @@ public class GetRandomTemplateStep implements WorkflowStep {
                 .filter(Files::isDirectory)
                 .toList();
             if (directories.isEmpty()) {
-                System.out.println("No template directory.");
+                log.error("No template directory.");
                 return WorkflowAction.NONE;
             }
 

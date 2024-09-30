@@ -8,6 +8,7 @@ import com.boatarde.regatasimulator.flows.WorkflowStep;
 import com.boatarde.regatasimulator.flows.WorkflowStepRegistration;
 import com.boatarde.regatasimulator.util.TelegramUtils;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.Message;
@@ -21,6 +22,12 @@ import java.nio.file.Path;
 @WorkflowStepRegistration(WorkflowAction.SEND_MEME_STEP)
 public class SendMemeStep implements WorkflowStep {
 
+    private final Long channelId;
+
+    public SendMemeStep(@Value("${telegram.bots.regata-simulator.channel}") Long channelId) {
+        this.channelId = channelId;
+    }
+
     @Override
     public WorkflowAction run(WorkflowDataBag bag) {
         RegataSimulatorBot regataSimulatorBot = bag.get(WorkflowDataKey.REGATA_SIMULATOR_BOT, RegataSimulatorBot.class);
@@ -29,13 +36,7 @@ public class SendMemeStep implements WorkflowStep {
         File file = memePath.toFile();
 
         try {
-            SendPhoto sendPhoto = SendPhoto.builder()
-                .chatId(update.getMessage().getChatId())
-                .photo(new InputFile(file))
-                .allowSendingWithoutReply(true)
-                .replyToMessageId(update.getMessage().getMessageId())
-                .messageThreadId(update.getMessage().getMessageThreadId())
-                .build();
+            SendPhoto sendPhoto = getSendPhoto(update, file);
             Message response = TelegramUtils.executeSendMediaBotMethod(regataSimulatorBot, sendPhoto);
 
             log.info("Response: {}", TelegramUtils.toJson(response));
@@ -52,5 +53,21 @@ public class SendMemeStep implements WorkflowStep {
         }
 
         return WorkflowAction.NONE;
+    }
+
+    private SendPhoto getSendPhoto(Update update, File file) {
+        if (update == null) {
+            return SendPhoto.builder()
+                .chatId(channelId)
+                .photo(new InputFile(file))
+                .build();
+        }
+        return SendPhoto.builder()
+            .chatId(update.getMessage().getChatId())
+            .photo(new InputFile(file))
+            .allowSendingWithoutReply(true)
+            .replyToMessageId(update.getMessage().getMessageId())
+            .messageThreadId(update.getMessage().getMessageThreadId())
+            .build();
     }
 }

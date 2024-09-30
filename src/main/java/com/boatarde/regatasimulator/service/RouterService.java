@@ -28,7 +28,7 @@ public class RouterService {
             .ifPresent(firstStep -> startFlow(update, bot, firstStep)));
     }
 
-    private void startFlow(Update update, TelegramBot bot, WorkflowAction firstStep) {
+    public void startFlow(Update update, TelegramBot bot, WorkflowAction firstStep) {
         WorkflowAction workflowAction = firstStep;
         Optional<WorkflowStep> nextStep;
 
