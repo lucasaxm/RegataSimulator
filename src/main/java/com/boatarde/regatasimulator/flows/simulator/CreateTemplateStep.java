@@ -54,7 +54,7 @@ public class CreateTemplateStep implements WorkflowStep {
         Path templatesDir = Paths.get(templatesPathString);
 
         String fileExtension = getFileExtension(update.getMessage().getDocument().getFileName());
-        String fileName = "template" + fileExtension;
+        String fileName = "template" + fileExtension.toLowerCase();
 
         try {
             Path templateFile =
