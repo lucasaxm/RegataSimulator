@@ -46,8 +46,7 @@ public class SecurityConfig {
                 .logoutSuccessUrl("/gallery/login.html")
             )
             .sessionManagement(session -> session
-                .sessionCreationPolicy(SessionCreationPolicy.ALWAYS)
-                .invalidSessionUrl("/gallery/login.html")
+                .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
                 .maximumSessions(1)
                 .expiredUrl("/gallery/login.html"))
             .csrf(AbstractHttpConfigurer::disable);
