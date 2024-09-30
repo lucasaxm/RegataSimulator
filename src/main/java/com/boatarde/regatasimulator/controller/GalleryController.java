@@ -5,6 +5,7 @@ import com.boatarde.regatasimulator.service.SourceService;
 import com.boatarde.regatasimulator.service.TemplateService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -45,7 +46,7 @@ public class GalleryController {
         Resource file = type.equals("sources")
             ? sourceService.loadImageAsResource(filename)
             : templateService.loadImageAsResource(filename);
-        return ResponseEntity.ok().body(file);
+        return ResponseEntity.ok().contentType(MediaType.IMAGE_PNG).body(file);
     }
 
     @DeleteMapping("/image/{type}/{filename:.+}")
