@@ -31,8 +31,8 @@ public class TemplateService {
                 .flatMap(subdir -> {
                     try {
                         return Files.list(subdir)
-                            .filter(file -> file.getFileName().toString().endsWith(".jpg") ||
-                                file.getFileName().toString().endsWith(".png"))
+                            .filter(file -> file.getFileName().toString().equalsIgnoreCase("template.jpg") ||
+                                file.getFileName().toString().equalsIgnoreCase("template.png"))
                             .map(file -> {
                                 String details = getTemplateDetails(subdir.getFileName().toString());
                                 return new GalleryItem(
