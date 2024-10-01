@@ -10,8 +10,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
@@ -30,26 +32,30 @@ public class BuildMemeStep implements WorkflowStep {
         Path templateFile = bag.get(WorkflowDataKey.TEMPLATE_FILE, Path.class);
         List<TemplateArea> templateAreaList =
             bag.getGeneric(WorkflowDataKey.TEMPLATE_AREAS, List.class, TemplateArea.class);
-
+        var distortedSources = new ArrayList<Path>();
         try {
-            Path result = templateFile;
             for (int i = 0; i < sourceFiles.size(); i++) {
-                result = buildMeme(result, sourceFiles.get(i), templateAreaList.get(i));
+                distortedSources.add(i,
+                    buildDistortedSource(templateFile, sourceFiles.get(i), templateAreaList.get(i)));
             }
+            Path result =
+                compositeFinalImage(templateFile, templateFile.getParent(), distortedSources, templateAreaList);
             bag.put(WorkflowDataKey.MEME_FILE, result);
         } catch (Exception e) {
             log.error(e.getLocalizedMessage(), e);
             return WorkflowAction.NONE;
+        } finally {
+            distortedSources.forEach(p -> p.toFile().delete());
         }
 
         return WorkflowAction.SEND_MEME_STEP;
     }
 
-    private Path buildMeme(Path templateFile, Path sourceFile, TemplateArea templateArea) throws Exception {
+    private Path buildDistortedSource(Path templateFile, Path sourceFile, TemplateArea templateArea) throws Exception {
         Path templateDir = templateFile.getParent();
         Path resizedSource = templateDir.resolve("resized_source.png");
         Path distortedSourceTemp = templateDir.resolve("distorted_source_temp.png");
-        Path distortedSource = templateDir.resolve("distorted_source.png");
+        Path distortedSource = templateDir.resolve("distorted_source_%d.png".formatted(templateArea.getIndex()));
 
         try {
             log.info("running command: {} identify -format %w %h {}", magickPath, templateFile);
@@ -89,7 +95,8 @@ public class BuildMemeStep implements WorkflowStep {
                     templateArea.getTopRight().getX(), templateArea.getTopRight().getY(),
                     templateArea.getBottomRight().getX(), templateArea.getBottomRight().getY(),
                     templateArea.getBottomLeft().getX(), templateArea.getBottomLeft().getY());
-                log.info("running command: {} -size {}x{} xc:black -fill white -draw {} {}", magickPath, width, height,
+                log.info("Mask not found: running command: {} -size {}x{} xc:black -fill white -draw {} {}", magickPath,
+                    width, height,
                     drawCommand, mask);
                 pb = new ProcessBuilder(magickPath, "-size", width + "x" + height, "xc:black", "-fill", "white",
                     "-draw", drawCommand, mask.toString());
@@ -103,20 +110,52 @@ public class BuildMemeStep implements WorkflowStep {
                 "-compose", "CopyOpacity", "-composite", distortedSource.toString());
             pb.start().waitFor();
 
-            // Composite final image
-            Path finalOutput = templateDir.resolve("final_output.png");
-            log.info("running command: {} composite -compose Over {} {} {}", magickPath, distortedSource, templateFile,
-                finalOutput);
-            pb = new ProcessBuilder(magickPath, "composite", "-compose", "Over", distortedSource.toString(),
-                templateFile.toString(), finalOutput.toString());
-            pb.start().waitFor();
-
-            return finalOutput;
+            return distortedSource;
         } finally {
             resizedSource.toFile().delete();
             distortedSourceTemp.toFile().delete();
-            distortedSource.toFile().delete();
         }
+    }
+
+    private Path compositeFinalImage(Path templateFile, Path templateDir, List<Path> distortedSources,
+                                     List<TemplateArea> templateAreaList)
+        throws InterruptedException, IOException {
+        ProcessBuilder pb;
+        // Composite final image
+        Path finalOutput = templateDir.resolve("final_output.png");
+
+        List<String> command = new ArrayList<>();
+        command.add(magickPath);
+
+        templateAreaList.stream().filter(TemplateArea::isBackground).forEach(templateArea -> {
+            if (command.size() > 2) {
+                command.add("-composite");
+            }
+            command.add(distortedSources.get(templateArea.getIndex() - 1).toString());
+        });
+
+        if (command.size() > 2) {
+            command.add("-composite");
+        }
+        command.add(templateFile.toString());
+
+        templateAreaList.stream().filter(area -> !area.isBackground()).forEach(templateArea -> {
+            if (command.size() > 2) {
+                command.add("-composite");
+            }
+            command.add(distortedSources.get(templateArea.getIndex() - 1).toString());
+        });
+
+        if (command.size() > 2) {
+            command.add("-composite");
+        }
+        command.add(finalOutput.toString());
+
+        log.info("running command: {}", String.join(" ", command));
+        pb = new ProcessBuilder(command.toArray(new String[0]));
+        pb.start().waitFor();
+
+        return finalOutput;
     }
 
 }
