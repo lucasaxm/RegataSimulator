@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light" x-data="galleryApp()" :class="{ 'dark': darkMode }">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Gallery</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+    <link rel="stylesheet" href="/gallery.css">
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12 text-end p-3">
+            <button @click="toggleDarkMode()" class="btn btn-outline-secondary">
+                <i :class="darkMode ? 'fas fa-sun' : 'fas fa-moon'"></i>
+            </button>
+        </div>
+    </div>
+</div>
+<div class="container mt-3">
+    <h1 class="text-center mb-4">Image Gallery</h1>
+    <ul class="nav nav-tabs mb-4" id="galleryTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button @click="changeTab('sources')" :class="{'nav-link': true, 'active': currentTab === 'sources'}"
+                    id="sources-tab" data-bs-toggle="tab" data-bs-target="#sources" type="button" role="tab"
+                    aria-controls="sources" aria-selected="true">Sources
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button @click="changeTab('templates')" :class="{'nav-link': true, 'active': currentTab === 'templates'}"
+                    id="templates-tab" data-bs-toggle="tab" data-bs-target="#templates" type="button" role="tab"
+                    aria-controls="templates" aria-selected="false">Templates
+            </button>
+        </li>
+    </ul>
+    <div class="tab-content" id="galleryTabsContent">
+        <div :class="{'tab-pane': true, 'fade': true, 'show': currentTab === 'sources', 'active': currentTab === 'sources'}"
+             id="sources" role="tabpanel" aria-labelledby="sources-tab">
+            <div class="row" id="sourcesGallery">
+                <template x-for="item in sourceItems" :key="item.id">
+                    <div class="col-md-3 mb-4">
+                        <div class="gallery-item" :data-id="item.id">
+                            <img :src="`/api/sources/${item.id}`" alt="Source Image" class="img-fluid rounded"
+                                 @click="openSourceModal(item)">
+                        </div>
+                    </div>
+                </template>
+            </div>
+            <nav aria-label="Sources pagination">
+                <ul class="pagination justify-content-center mt-4">
+                    <li class="page-item" :class="{ 'disabled': sourceCurrentPage === 1 }">
+                        <a class="page-link" href="#" @click.prevent="loadSources(sourceCurrentPage - 1)">
+                            <i class="fas fa-chevron-left"></i> Previous
+                        </a>
+                    </li>
+                    <template x-for="page in sourceTotalPages" :key="page">
+                        <li x-show="page === 1 || page === sourceTotalPages || (page >= sourceCurrentPage - 2 && page <= sourceCurrentPage + 2)"
+                            :class="{'page-item': true, 'active': page === sourceCurrentPage}">
+                            <a class="page-link" href="#" @click.prevent="loadSources(page)" x-text="page"></a>
+                        </li>
+                    </template>
+                    <li class="page-item" :class="{ 'disabled': sourceCurrentPage === sourceTotalPages }">
+                        <a class="page-link" href="#" @click.prevent="loadSources(sourceCurrentPage + 1)">
+                            Next <i class="fas fa-chevron-right"></i>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+        <div :class="{'tab-pane': true, 'fade': true, 'show': currentTab === 'templates', 'active': currentTab === 'templates'}"
+             id="templates" role="tabpanel" aria-labelledby="templates-tab">
+            <div class="row" id="templatesGallery">
+                <template x-for="item in templateItems" :key="item.id">
+                    <div class="col-md-3 mb-4">
+                        <div class="gallery-item" :data-id="item.id">
+                            <img :src="`/api/templates/${item.id}`" alt="Template Image" class="img-fluid rounded"
+                                 @click="openTemplateModal(item)">
+                        </div>
+                    </div>
+                </template>
+            </div>
+            <nav aria-label="Templates pagination">
+                <ul class="pagination justify-content-center mt-4">
+                    <li class="page-item" :class="{ 'disabled': templateCurrentPage === 1 }">
+                        <a class="page-link" href="#" @click.prevent="loadTemplates(templateCurrentPage - 1)">
+                            <i class="fas fa-chevron-left"></i> Previous
+                        </a>
+                    </li>
+                    <template x-for="page in templateTotalPages" :key="page">
+                        <li x-show="page === 1 || page === templateTotalPages || (page >= templateCurrentPage - 2 && page <= templateCurrentPage + 2)"
+                            :class="{'page-item': true, 'active': page === templateCurrentPage}">
+                            <a class="page-link" href="#" @click.prevent="loadTemplates(page)" x-text="page"></a>
+                        </li>
+                    </template>
+                    <li class="page-item" :class="{ 'disabled': templateCurrentPage === templateTotalPages }">
+                        <a class="page-link" href="#" @click.prevent="loadTemplates(templateCurrentPage + 1)">
+                            Next <i class="fas fa-chevron-right"></i>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true"
+     x-ref="imageModal">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="imageModalLabel">Image Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <img :src="modalImage" alt="Full size image" id="modalImage">
+                <div id="templateDetails" class="mt-3">
+                    <template x-if="currentTab === 'templates' && selectedTemplate">
+                        <div>
+                            <h6>Template Areas:</h6>
+                            <template x-for="area in selectedTemplate.areas" :key="area.index">
+                                <p>
+                                    Area <span x-text="area.index"></span>:
+                                    Top Left (<span x-text="area.topLeft.x"></span>, <span
+                                        x-text="area.topLeft.y"></span>),
+                                    Bottom Right (<span x-text="area.bottomRight.x"></span>, <span
+                                        x-text="area.bottomRight.y"></span>)
+                                    <span x-show="area.background">(Background)</span>
+                                </p>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-danger" @click="deleteImage()">
+                    <i class="fas fa-trash-alt"></i> Delete Image
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/gallery.js"></script>
+</body>
+</html>

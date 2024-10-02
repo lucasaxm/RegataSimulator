@@ -1,7 +1,8 @@
 package com.boatarde.regatasimulator.service;
 
-import com.boatarde.regatasimulator.models.GalleryItem;
 import com.boatarde.regatasimulator.models.GalleryResponse;
+import com.boatarde.regatasimulator.models.TemplateResponse;
+import com.boatarde.regatasimulator.util.TelegramUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -14,6 +15,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Comparator;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -21,12 +23,12 @@ import java.util.stream.Stream;
 public class TemplateService {
 
     @Value("${regata-simulator.templates.path}")
-    private String templatesPath;
+    private String templatesPathString;
 
-    public GalleryResponse getGalleryItems(int page, int perPage) {
-        Path dir = Paths.get(templatesPath);
+    public GalleryResponse<TemplateResponse> getTemplates(int page, int perPage) {
+        Path dir = Paths.get(templatesPathString);
         try {
-            List<GalleryItem> allItems = Files.list(dir)
+            List<TemplateResponse> allItems = Files.list(dir)
                 .filter(Files::isDirectory)
                 .flatMap(subdir -> {
                     try {
@@ -35,9 +37,14 @@ public class TemplateService {
                                 file.getFileName().toString().equalsIgnoreCase("template.png"))
                             .map(file -> {
                                 String details = getTemplateDetails(subdir.getFileName().toString());
-                                return new GalleryItem(
-                                    subdir.getFileName().toString() + "_" + file.getFileName().toString(), "templates",
-                                    details);
+                                try {
+                                    return TemplateResponse.builder()
+                                        .id(UUID.fromString(subdir.getFileName().toString()))
+                                        .areas(TelegramUtils.parseTemplateCsv(details))
+                                        .build();
+                                } catch (IOException e) {
+                                    throw new RuntimeException(e);
+                                }
                             });
                     } catch (IOException e) {
                         throw new RuntimeException("Failed to read template subdirectory", e);
@@ -49,16 +56,16 @@ public class TemplateService {
             int startIndex = (page - 1) * perPage;
             int endIndex = Math.min(startIndex + perPage, totalItems);
 
-            List<GalleryItem> pageItems = allItems.subList(startIndex, endIndex);
+            List<TemplateResponse> pageItems = allItems.subList(startIndex, endIndex);
 
-            return new GalleryResponse(pageItems, totalItems);
+            return new GalleryResponse<>(pageItems, totalItems);
         } catch (IOException e) {
             throw new RuntimeException("Failed to read template items", e);
         }
     }
 
     public String getTemplateDetails(String id) {
-        Path csvPath = Paths.get(templatesPath, id, "template.csv");
+        Path csvPath = Paths.get(templatesPathString, id, "template.csv");
         try {
             return new String(Files.readAllBytes(csvPath));
         } catch (IOException e) {
@@ -66,25 +73,27 @@ public class TemplateService {
         }
     }
 
-    public Resource loadImageAsResource(String filename) {
+    public Resource loadImageAsResource(UUID id) {
+        Path dir = Paths.get(templatesPathString, id.toString());
+
         try {
-            String[] parts = filename.split("_", 2);
-            Path filePath = Paths.get(templatesPath, parts[0], parts[1]);
-            Resource resource = new UrlResource(filePath.toUri());
-            if (resource.exists()) {
-                return resource;
-            } else {
-                throw new RuntimeException("File not found: " + filename);
+            Path templateFile = dir.resolve("template.jpg");
+            if (!templateFile.toFile().exists()) {
+                templateFile = dir.resolve("template.png");
             }
+            if (!templateFile.toFile().exists()) {
+                throw new RuntimeException("Template not found: " + id);
+            }
+            return new UrlResource(templateFile.toUri());
         } catch (IOException e) {
-            throw new RuntimeException("Failed to load file: " + filename, e);
+            throw new RuntimeException("Failed to load file.", e);
         }
     }
 
-    public void deleteTemplate(String id) {
+    public void deleteTemplate(UUID id) {
         try {
-            Path templateDir = Paths.get(templatesPath).resolve(id);
-            try (Stream<Path> paths = Files.walk(templateDir)) {
+            Path filePath = Paths.get(templatesPathString).resolve(id.toString());
+            try (Stream<Path> paths = Files.walk(filePath)) {
                 paths.sorted(Comparator.reverseOrder())
                     .map(Path::toFile)
                     .forEach(File::delete);

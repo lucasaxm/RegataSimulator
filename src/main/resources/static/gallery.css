@@ -1,0 +1,23 @@
+[x-cloak] { display: none !important; }
+.gallery-item {
+    position: relative;
+    cursor: pointer;
+}
+.gallery-item img {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+}
+.delete-btn {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background-color: rgba(255, 255, 255, 0.7);
+    border: none;
+    border-radius: 50%;
+    padding: 5px 8px;
+}
+.modal-body img {
+    max-width: 100%;
+    max-height: 70vh;
+}
