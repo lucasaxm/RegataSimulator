@@ -50,11 +50,22 @@
             </div>
             <nav aria-label="Sources pagination">
                 <ul class="pagination justify-content-center mt-4">
+                    <li class="page-item" :class="{ 'disabled': sourceCurrentPage === 1 }">
+                        <a class="page-link" href="#" @click.prevent="loadSources(sourceCurrentPage - 1)">
+                            <i class="fas fa-chevron-left"></i> Previous
+                        </a>
+                    </li>
                     <template x-for="page in sourceTotalPages" :key="page">
-                        <li :class="{'page-item': true, 'active': page === sourceCurrentPage}">
+                        <li x-show="page === 1 || page === sourceTotalPages || (page >= sourceCurrentPage - 2 && page <= sourceCurrentPage + 2)"
+                            :class="{'page-item': true, 'active': page === sourceCurrentPage}">
                             <a class="page-link" href="#" @click.prevent="loadSources(page)" x-text="page"></a>
                         </li>
                     </template>
+                    <li class="page-item" :class="{ 'disabled': sourceCurrentPage === sourceTotalPages }">
+                        <a class="page-link" href="#" @click.prevent="loadSources(sourceCurrentPage + 1)">
+                            Next <i class="fas fa-chevron-right"></i>
+                        </a>
+                    </li>
                 </ul>
             </nav>
         </div>
@@ -72,11 +83,22 @@
             </div>
             <nav aria-label="Templates pagination">
                 <ul class="pagination justify-content-center mt-4">
+                    <li class="page-item" :class="{ 'disabled': templateCurrentPage === 1 }">
+                        <a class="page-link" href="#" @click.prevent="loadTemplates(templateCurrentPage - 1)">
+                            <i class="fas fa-chevron-left"></i> Previous
+                        </a>
+                    </li>
                     <template x-for="page in templateTotalPages" :key="page">
-                        <li :class="{'page-item': true, 'active': page === templateCurrentPage}">
+                        <li x-show="page === 1 || page === templateTotalPages || (page >= templateCurrentPage - 2 && page <= templateCurrentPage + 2)"
+                            :class="{'page-item': true, 'active': page === templateCurrentPage}">
                             <a class="page-link" href="#" @click.prevent="loadTemplates(page)" x-text="page"></a>
                         </li>
                     </template>
+                    <li class="page-item" :class="{ 'disabled': templateCurrentPage === templateTotalPages }">
+                        <a class="page-link" href="#" @click.prevent="loadTemplates(templateCurrentPage + 1)">
+                            Next <i class="fas fa-chevron-right"></i>
+                        </a>
+                    </li>
                 </ul>
             </nav>
         </div>
