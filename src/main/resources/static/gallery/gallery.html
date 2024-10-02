@@ -1,84 +1,114 @@
 <!DOCTYPE html>
-<html lang="en" data-bs-theme="light">
+<html lang="en" data-bs-theme="light" x-data="galleryApp()" :class="{ 'dark': darkMode }">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Regata Simulator</title>
+    <title>Image Gallery</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
     <link rel="stylesheet" href="gallery.css">
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 </head>
 <body>
-<nav class="navbar navbar-expand-lg">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="#">Regata Simulator</a>
-        <div class="d-flex">
-            <button id="darkModeToggle" class="btn btn-outline-secondary me-2">
-                <i class="fas fa-moon"></i>
-            </button>
-            <button id="logoutButton" class="btn btn-outline-danger">
-                <i class="fas fa-sign-out-alt"></i> Logout
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12 text-end p-3">
+            <button @click="toggleDarkMode()" class="btn btn-outline-secondary">
+                <i :class="darkMode ? 'fas fa-sun' : 'fas fa-moon'"></i>
             </button>
         </div>
     </div>
-</nav>
-
+</div>
 <div class="container mt-3">
-    <ul class="nav nav-tabs" id="galleryTabs" role="tablist">
+    <h1 class="text-center mb-4">Image Gallery</h1>
+    <ul class="nav nav-tabs mb-4" id="galleryTabs" role="tablist">
         <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="sources-tab" data-bs-toggle="tab" data-bs-target="#sources"
-                    type="button" role="tab" aria-controls="sources" aria-selected="true">Sources
-            </button>
+            <button @click="changeTab('sources')" :class="{'nav-link': true, 'active': currentTab === 'sources'}" id="sources-tab" data-bs-toggle="tab" data-bs-target="#sources" type="button" role="tab" aria-controls="sources" aria-selected="true">Sources</button>
         </li>
         <li class="nav-item" role="presentation">
-            <button class="nav-link" id="templates-tab" data-bs-toggle="tab" data-bs-target="#templates" type="button"
-                    role="tab" aria-controls="templates" aria-selected="false">Templates
-            </button>
+            <button @click="changeTab('templates')" :class="{'nav-link': true, 'active': currentTab === 'templates'}" id="templates-tab" data-bs-toggle="tab" data-bs-target="#templates" type="button" role="tab" aria-controls="templates" aria-selected="false">Templates</button>
         </li>
     </ul>
     <div class="tab-content" id="galleryTabsContent">
-        <div class="tab-pane fade show active" id="sources" role="tabpanel" aria-labelledby="sources-tab">
-            <div id="sourcesGallery" class="row row-cols-1 row-cols-md-3 row-cols-lg-4 g-4 mt-3"></div>
-            <nav aria-label="Sources pagination" class="mt-4">
-                <ul id="sourcesPagination" class="pagination justify-content-center"></ul>
+        <div :class="{'tab-pane': true, 'fade': true, 'show': currentTab === 'sources', 'active': currentTab === 'sources'}" id="sources" role="tabpanel" aria-labelledby="sources-tab">
+            <div class="row" id="sourcesGallery">
+                <template x-for="item in sourceItems" :key="item.id">
+                    <div class="col-md-3 mb-4">
+                        <div class="gallery-item" :data-id="item.id">
+                            <img :src="`/api/sources/${item.id}`" alt="Source Image" class="img-fluid rounded" @click="openSourceModal(item)">
+                            <button class="delete-btn" @click.stop="deleteSource(item.id)">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+            <nav aria-label="Sources pagination">
+                <ul class="pagination justify-content-center mt-4">
+                    <template x-for="page in sourceTotalPages" :key="page">
+                        <li :class="{'page-item': true, 'active': page === sourceCurrentPage}">
+                            <a class="page-link" href="#" @click.prevent="loadSources(page)" x-text="page"></a>
+                        </li>
+                    </template>
+                </ul>
             </nav>
         </div>
-        <div class="tab-pane fade" id="templates" role="tabpanel" aria-labelledby="templates-tab">
-            <div id="templatesGallery" class="row row-cols-1 row-cols-md-3 row-cols-lg-4 g-4 mt-3"></div>
-            <nav aria-label="Templates pagination" class="mt-4">
-                <ul id="templatesPagination" class="pagination justify-content-center"></ul>
+        <div :class="{'tab-pane': true, 'fade': true, 'show': currentTab === 'templates', 'active': currentTab === 'templates'}" id="templates" role="tabpanel" aria-labelledby="templates-tab">
+            <div class="row" id="templatesGallery">
+                <template x-for="item in templateItems" :key="item.id">
+                    <div class="col-md-3 mb-4">
+                        <div class="gallery-item" :data-id="item.id">
+                            <img :src="`/api/templates/${item.id}`" alt="Template Image" class="img-fluid rounded" @click="openTemplateModal(item)">
+                            <button class="delete-btn" @click.stop="deleteTemplate(item.id)">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+            <nav aria-label="Templates pagination">
+                <ul class="pagination justify-content-center mt-4">
+                    <template x-for="page in templateTotalPages" :key="page">
+                        <li :class="{'page-item': true, 'active': page === templateCurrentPage}">
+                            <a class="page-link" href="#" @click.prevent="loadTemplates(page)" x-text="page"></a>
+                        </li>
+                    </template>
+                </ul>
             </nav>
         </div>
     </div>
 </div>
 
-<div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true">
+<div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true" x-ref="imageModal">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="imageModalLabel">Image View</h5>
+                <h5 class="modal-title" id="imageModalLabel">Image Details</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <div id="imageContainer"
-                     style="position: relative; width: 100%; height: 0; padding-bottom: 75%; overflow: hidden;">
-                    <img src="" alt="Full size image" id="modalImage"
-                         style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain;">
-                    <canvas id="imageCanvas"
-                            style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></canvas>
+                <img :src="modalImage" alt="Full size image" id="modalImage">
+                <div id="templateDetails" class="mt-3">
+                    <template x-if="currentTab === 'templates' && selectedTemplate">
+                        <div>
+                            <h6>Template Areas:</h6>
+                            <template x-for="area in selectedTemplate.areas" :key="area.index">
+                                <p>
+                                    Area <span x-text="area.index"></span>:
+                                    Top Left (<span x-text="area.topLeft.x"></span>, <span x-text="area.topLeft.y"></span>),
+                                    Bottom Right (<span x-text="area.bottomRight.x"></span>, <span x-text="area.bottomRight.y"></span>)
+                                    <span x-show="area.background">(Background)</span>
+                                </p>
+                            </template>
+                        </div>
+                    </template>
                 </div>
-                <div id="imageDetails" class="mt-3"></div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-danger" id="modalDeleteBtn">Delete</button>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script src="darkmode.js"></script>
 <script src="gallery.js"></script>
 </body>
 </html>
