@@ -18,6 +18,7 @@ function galleryApp() {
         init() {
             this.loadSources(this.sourceCurrentPage);
             this.darkMode = localStorage.getItem('darkMode') === 'true';
+            this.applyDarkMode();
         },
 
         async loadSources(page) {
@@ -61,24 +62,24 @@ function galleryApp() {
             modal.show();
         },
 
-        async deleteSource(id) {
-            if (confirm('Are you sure you want to delete this source image?')) {
-                const response = await fetch(`/api/sources/${id}`, { method: 'DELETE' });
-                if (response.ok) {
-                    this.loadSources(this.sourceCurrentPage);
-                } else {
-                    alert('Failed to delete the source image. Please try again.');
-                }
-            }
-        },
+        async deleteImage() {
+            const isSource = this.currentTab === 'sources';
+            const id = isSource ? this.selectedSource.id : this.selectedTemplate.id;
+            const confirmMessage = `Are you sure you want to delete this ${isSource ? 'source image' : 'template'}?`;
 
-        async deleteTemplate(id) {
-            if (confirm('Are you sure you want to delete this template?')) {
-                const response = await fetch(`/api/templates/${id}`, { method: 'DELETE' });
+            if (confirm(confirmMessage)) {
+                const endpoint = isSource ? `/api/sources/${id}` : `/api/templates/${id}`;
+                const response = await fetch(endpoint, {method: 'DELETE'});
+
                 if (response.ok) {
-                    this.loadTemplates(this.templateCurrentPage);
+                    bootstrap.Modal.getInstance(this.$refs.imageModal).hide();
+                    if (isSource) {
+                        this.loadSources(this.sourceCurrentPage);
+                    } else {
+                        this.loadTemplates(this.templateCurrentPage);
+                    }
                 } else {
-                    alert('Failed to delete the template. Please try again.');
+                    alert(`Failed to delete the ${isSource ? 'source image' : 'template'}. Please try again.`);
                 }
             }
         },
@@ -86,6 +87,10 @@ function galleryApp() {
         toggleDarkMode() {
             this.darkMode = !this.darkMode;
             localStorage.setItem('darkMode', this.darkMode);
+            document.documentElement.setAttribute('data-bs-theme', this.darkMode ? 'dark' : 'light');
+        },
+
+        applyDarkMode() {
             document.documentElement.setAttribute('data-bs-theme', this.darkMode ? 'dark' : 'light');
         }
     };

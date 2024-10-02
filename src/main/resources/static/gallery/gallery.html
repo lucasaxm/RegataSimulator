@@ -23,22 +23,27 @@
     <h1 class="text-center mb-4">Image Gallery</h1>
     <ul class="nav nav-tabs mb-4" id="galleryTabs" role="tablist">
         <li class="nav-item" role="presentation">
-            <button @click="changeTab('sources')" :class="{'nav-link': true, 'active': currentTab === 'sources'}" id="sources-tab" data-bs-toggle="tab" data-bs-target="#sources" type="button" role="tab" aria-controls="sources" aria-selected="true">Sources</button>
+            <button @click="changeTab('sources')" :class="{'nav-link': true, 'active': currentTab === 'sources'}"
+                    id="sources-tab" data-bs-toggle="tab" data-bs-target="#sources" type="button" role="tab"
+                    aria-controls="sources" aria-selected="true">Sources
+            </button>
         </li>
         <li class="nav-item" role="presentation">
-            <button @click="changeTab('templates')" :class="{'nav-link': true, 'active': currentTab === 'templates'}" id="templates-tab" data-bs-toggle="tab" data-bs-target="#templates" type="button" role="tab" aria-controls="templates" aria-selected="false">Templates</button>
+            <button @click="changeTab('templates')" :class="{'nav-link': true, 'active': currentTab === 'templates'}"
+                    id="templates-tab" data-bs-toggle="tab" data-bs-target="#templates" type="button" role="tab"
+                    aria-controls="templates" aria-selected="false">Templates
+            </button>
         </li>
     </ul>
     <div class="tab-content" id="galleryTabsContent">
-        <div :class="{'tab-pane': true, 'fade': true, 'show': currentTab === 'sources', 'active': currentTab === 'sources'}" id="sources" role="tabpanel" aria-labelledby="sources-tab">
+        <div :class="{'tab-pane': true, 'fade': true, 'show': currentTab === 'sources', 'active': currentTab === 'sources'}"
+             id="sources" role="tabpanel" aria-labelledby="sources-tab">
             <div class="row" id="sourcesGallery">
                 <template x-for="item in sourceItems" :key="item.id">
                     <div class="col-md-3 mb-4">
                         <div class="gallery-item" :data-id="item.id">
-                            <img :src="`/api/sources/${item.id}`" alt="Source Image" class="img-fluid rounded" @click="openSourceModal(item)">
-                            <button class="delete-btn" @click.stop="deleteSource(item.id)">
-                                <i class="fas fa-trash-alt"></i>
-                            </button>
+                            <img :src="`/api/sources/${item.id}`" alt="Source Image" class="img-fluid rounded"
+                                 @click="openSourceModal(item)">
                         </div>
                     </div>
                 </template>
@@ -53,15 +58,14 @@
                 </ul>
             </nav>
         </div>
-        <div :class="{'tab-pane': true, 'fade': true, 'show': currentTab === 'templates', 'active': currentTab === 'templates'}" id="templates" role="tabpanel" aria-labelledby="templates-tab">
+        <div :class="{'tab-pane': true, 'fade': true, 'show': currentTab === 'templates', 'active': currentTab === 'templates'}"
+             id="templates" role="tabpanel" aria-labelledby="templates-tab">
             <div class="row" id="templatesGallery">
                 <template x-for="item in templateItems" :key="item.id">
                     <div class="col-md-3 mb-4">
                         <div class="gallery-item" :data-id="item.id">
-                            <img :src="`/api/templates/${item.id}`" alt="Template Image" class="img-fluid rounded" @click="openTemplateModal(item)">
-                            <button class="delete-btn" @click.stop="deleteTemplate(item.id)">
-                                <i class="fas fa-trash-alt"></i>
-                            </button>
+                            <img :src="`/api/templates/${item.id}`" alt="Template Image" class="img-fluid rounded"
+                                 @click="openTemplateModal(item)">
                         </div>
                     </div>
                 </template>
@@ -79,7 +83,8 @@
     </div>
 </div>
 
-<div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true" x-ref="imageModal">
+<div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true"
+     x-ref="imageModal">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
@@ -95,14 +100,22 @@
                             <template x-for="area in selectedTemplate.areas" :key="area.index">
                                 <p>
                                     Area <span x-text="area.index"></span>:
-                                    Top Left (<span x-text="area.topLeft.x"></span>, <span x-text="area.topLeft.y"></span>),
-                                    Bottom Right (<span x-text="area.bottomRight.x"></span>, <span x-text="area.bottomRight.y"></span>)
+                                    Top Left (<span x-text="area.topLeft.x"></span>, <span
+                                        x-text="area.topLeft.y"></span>),
+                                    Bottom Right (<span x-text="area.bottomRight.x"></span>, <span
+                                        x-text="area.bottomRight.y"></span>)
                                     <span x-show="area.background">(Background)</span>
                                 </p>
                             </template>
                         </div>
                     </template>
                 </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-danger" @click="deleteImage()">
+                    <i class="fas fa-trash-alt"></i> Delete Image
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
