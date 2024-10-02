@@ -5,9 +5,11 @@ import com.boatarde.regatasimulator.flows.WorkflowAction;
 import com.boatarde.regatasimulator.service.RouterService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@RequestMapping("/api/admin")
 public class TestController {
 
     private final RegataSimulatorBot bot;
@@ -18,8 +20,8 @@ public class TestController {
         this.routerService = routerService;
     }
 
-    @GetMapping("/test")
-    public ResponseEntity<Void> test() {
+    @GetMapping("/post_meme")
+    public ResponseEntity<Void> postMeme() {
         routerService.startFlow(null, bot, WorkflowAction.GET_RANDOM_TEMPLATE);
         return ResponseEntity.ok().build();
     }

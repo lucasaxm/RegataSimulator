@@ -9,11 +9,11 @@ import java.util.List;
 @Getter
 @Setter
 @NoArgsConstructor
-public class GalleryResponse {
-    private List<GalleryItem> items;
+public class GalleryResponse<T> {
+    private List<T> items;
     private int totalItems;
 
-    public GalleryResponse(List<GalleryItem> items, int totalItems) {
+    public GalleryResponse(List<T> items, int totalItems) {
         this.items = items;
         this.totalItems = totalItems;
     }
