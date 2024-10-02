@@ -41,7 +41,7 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .authorizeHttpRequests((requests) -> requests
-                .requestMatchers("/api/login", "/gallery/login.html", "/create/**", "/gallery/*.js", "/gallery/*.css")
+                .requestMatchers("/api/login", "/login.html", "/create/**", "/*.js", "/*.css")
                 .permitAll()
                 .anyRequest().authenticated()
             )
@@ -52,19 +52,19 @@ public class SecurityConfig {
                 )
             )
             .formLogin((form) -> form
-                .loginPage("/gallery/login.html")
+                .loginPage("/login.html")
                 .loginProcessingUrl("/api/login")
                 .successHandler(customAuthenticationSuccessHandler())
-                .failureUrl("/gallery/login.html?error=true")
+                .failureUrl("/login.html?error=true")
             )
             .logout((logout) -> logout
                 .logoutUrl("/api/logout")
-                .logoutSuccessUrl("/gallery/login.html")
+                .logoutSuccessUrl("/login.html")
             )
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
                 .maximumSessions(1)
-                .expiredUrl("/gallery/login.html"))
+                .expiredUrl("/login.html"))
             .csrf(AbstractHttpConfigurer::disable);
 
         return http.build();

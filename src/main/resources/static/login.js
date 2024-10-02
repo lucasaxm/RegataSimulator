@@ -34,7 +34,7 @@ function loginApp() {
 
                 if (response.ok) {
                     // Redirect to the gallery page or dashboard
-                    window.location.href = '/gallery/gallery.html';
+                    window.location.href = '/';
                 } else {
                     this.errorMessage = 'Invalid username or password';
                 }
