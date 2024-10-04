@@ -17,8 +17,16 @@ public class CreateTemplateRoute implements Route {
 
     @Override
     public Optional<WorkflowAction> test(Update update, TelegramBot bot) {
-        if (isValidBot(bot) && isValidUpdate(update)) {
+        if (!isValidBot(bot)) {
+            return Optional.empty();
+        }
+
+        if (isValidTemplateFile(update)) {
             return Optional.of(WorkflowAction.CREATE_TEMPLATE);
+        } else if (cancelButtonPressed(update)) {
+            return Optional.of(WorkflowAction.DELETE_REVIEW_TEMPLATE);
+        } else if (confirmButtonPressed(update)) {
+            return Optional.of(WorkflowAction.CONFIRM_REVIEW_TEMPLATE);
         }
         return Optional.empty();
     }
@@ -27,7 +35,7 @@ public class CreateTemplateRoute implements Route {
         return bot instanceof RegataSimulatorBot;
     }
 
-    private boolean isValidUpdate(Update update) {
+    private boolean isValidTemplateFile(Update update) {
         if (!update.hasMessage() || !update.getMessage().isUserMessage() || !update.getMessage().hasDocument()) {
             return false;
         }
@@ -43,5 +51,13 @@ public class CreateTemplateRoute implements Route {
         } catch (IOException e) {
             return false;
         }
+    }
+
+    private boolean cancelButtonPressed(Update update) {
+        return update.hasCallbackQuery() && update.getCallbackQuery().getData().endsWith(":template:cancel");
+    }
+
+    private boolean confirmButtonPressed(Update update) {
+        return update.hasCallbackQuery() && update.getCallbackQuery().getData().endsWith(":template:confirm");
     }
 }

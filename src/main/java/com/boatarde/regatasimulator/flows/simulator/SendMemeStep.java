@@ -10,13 +10,17 @@ import com.boatarde.regatasimulator.util.TelegramUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.util.List;
 
 @Slf4j
 @WorkflowStepRegistration(WorkflowAction.SEND_MEME_STEP)
@@ -28,6 +32,32 @@ public class SendMemeStep implements WorkflowStep {
         this.channelId = channelId;
     }
 
+    private static void addConfirmKeyboard(WorkflowDataBag bag, RegataSimulatorBot regataSimulatorBot,
+                                           SendPhoto sendPhoto)
+        throws TelegramApiException {
+        Message creatingTemplateMessage = bag.get(WorkflowDataKey.CREATING_TEMPLATE_MESSAGE, Message.class);
+        if (creatingTemplateMessage != null) {
+            regataSimulatorBot.execute(DeleteMessage.builder()
+                .chatId(creatingTemplateMessage.getChatId())
+                .messageId(creatingTemplateMessage.getMessageId())
+                .build());
+
+            Path templatePath = bag.get(WorkflowDataKey.TEMPLATE_FILE, Path.class);
+
+            String templateId = templatePath.getParent().getFileName().toString();
+            sendPhoto.setReplyMarkup(InlineKeyboardMarkup.builder()
+                .keyboard(List.of(List.of(InlineKeyboardButton.builder()
+                        .text("Confirmar")
+                        .callbackData(templateId + ":template:confirm")
+                        .build()),
+                    List.of(InlineKeyboardButton.builder()
+                        .text("Cancelar")
+                        .callbackData(templateId + ":template:cancel")
+                        .build())))
+                .build());
+        }
+    }
+
     @Override
     public WorkflowAction run(WorkflowDataBag bag) {
         RegataSimulatorBot regataSimulatorBot = bag.get(WorkflowDataKey.REGATA_SIMULATOR_BOT, RegataSimulatorBot.class);
@@ -37,6 +67,9 @@ public class SendMemeStep implements WorkflowStep {
 
         try {
             SendPhoto sendPhoto = getSendPhoto(update, file);
+
+            addConfirmKeyboard(bag, regataSimulatorBot, sendPhoto);
+
             Message response = TelegramUtils.executeSendMediaBotMethod(regataSimulatorBot, sendPhoto);
 
             log.info("Response: {}", TelegramUtils.toJson(response));

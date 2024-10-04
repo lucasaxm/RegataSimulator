@@ -1,5 +1,6 @@
 package com.boatarde.regatasimulator.flows.simulator;
 
+import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
 import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
@@ -8,6 +9,9 @@ import com.boatarde.regatasimulator.flows.WorkflowStepRegistration;
 import com.boatarde.regatasimulator.models.TemplateArea;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
+import org.telegram.telegrambots.meta.api.objects.Message;
+import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -28,6 +32,7 @@ public class BuildMemeStep implements WorkflowStep {
 
     @Override
     public WorkflowAction run(WorkflowDataBag bag) {
+        editCreatingTemplateMessage(bag, "Gerando meme de teste...");
         List<Path> sourceFiles = bag.getGeneric(WorkflowDataKey.SOURCE_FILES, List.class, Path.class);
         Path templateFile = bag.get(WorkflowDataKey.TEMPLATE_FILE, Path.class);
         List<TemplateArea> templateAreaList =
@@ -49,6 +54,22 @@ public class BuildMemeStep implements WorkflowStep {
         }
 
         return WorkflowAction.SEND_MEME_STEP;
+    }
+
+    private void editCreatingTemplateMessage(WorkflowDataBag bag, String text) {
+        Message creatingTemplateMessage = bag.get(WorkflowDataKey.CREATING_TEMPLATE_MESSAGE, Message.class);
+        if (creatingTemplateMessage != null) {
+            try {
+                bag.get(WorkflowDataKey.REGATA_SIMULATOR_BOT, RegataSimulatorBot.class)
+                    .execute(EditMessageText.builder()
+                        .chatId(creatingTemplateMessage.getChatId())
+                        .messageId(creatingTemplateMessage.getMessageId())
+                        .text(text)
+                        .build());
+            } catch (TelegramApiException e) {
+                log.error(e.getLocalizedMessage(), e);
+            }
+        }
     }
 
     private Path buildDistortedSource(Path templateFile, Path sourceFile, TemplateArea templateArea) throws Exception {
