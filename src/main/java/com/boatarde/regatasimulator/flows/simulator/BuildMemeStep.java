@@ -32,7 +32,7 @@ public class BuildMemeStep implements WorkflowStep {
 
     @Override
     public WorkflowAction run(WorkflowDataBag bag) {
-        editCreatingTemplateMessage(bag, "Gerando meme de teste...");
+        editCreatingTemplateMessage(bag, 0);
         List<Path> sourceFiles = bag.getGeneric(WorkflowDataKey.SOURCE_FILES, List.class, Path.class);
         Path templateFile = bag.get(WorkflowDataKey.TEMPLATE_FILE, Path.class);
         List<TemplateArea> templateAreaList =
@@ -42,7 +42,11 @@ public class BuildMemeStep implements WorkflowStep {
             for (int i = 0; i < sourceFiles.size(); i++) {
                 distortedSources.add(i,
                     buildDistortedSource(templateFile, sourceFiles.get(i), templateAreaList.get(i)));
+                int progress = i * 100 / (sourceFiles.size() + 1);
+                editCreatingTemplateMessage(bag, progress);
             }
+            int progress = sourceFiles.size() * 100 / (sourceFiles.size() + 1);
+            editCreatingTemplateMessage(bag, progress);
             Path result =
                 compositeFinalImage(templateFile, templateFile.getParent(), distortedSources, templateAreaList);
             bag.put(WorkflowDataKey.MEME_FILE, result);
@@ -56,7 +60,7 @@ public class BuildMemeStep implements WorkflowStep {
         return WorkflowAction.SEND_MEME_STEP;
     }
 
-    private void editCreatingTemplateMessage(WorkflowDataBag bag, String text) {
+    private void editCreatingTemplateMessage(WorkflowDataBag bag, int progress) {
         Message creatingTemplateMessage = bag.get(WorkflowDataKey.CREATING_TEMPLATE_MESSAGE, Message.class);
         if (creatingTemplateMessage != null) {
             try {
@@ -64,12 +68,20 @@ public class BuildMemeStep implements WorkflowStep {
                     .execute(EditMessageText.builder()
                         .chatId(creatingTemplateMessage.getChatId())
                         .messageId(creatingTemplateMessage.getMessageId())
-                        .text(text)
+                        .text("Gerando meme de teste...\n<code>%s</code>".formatted(generateProgressBar(progress)))
+                        .parseMode("HTML")
                         .build());
             } catch (TelegramApiException e) {
                 log.error(e.getLocalizedMessage(), e);
             }
         }
+    }
+
+    private String generateProgressBar(int progress) {
+        int totalBars = 20;
+        int filledBars = (progress * totalBars) / 100;
+        int emptyBars = totalBars - filledBars;
+        return "[" + "=".repeat(filledBars) + " ".repeat(emptyBars) + "] " + progress + "%";
     }
 
     private Path buildDistortedSource(Path templateFile, Path sourceFile, TemplateArea templateArea) throws Exception {
