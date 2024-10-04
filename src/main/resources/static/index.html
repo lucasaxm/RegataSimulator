@@ -144,59 +144,66 @@
     </div>
 </div>
 
-<div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true"
-     x-ref="imageModal">
-    <div class="modal-dialog modal-lg">
+<div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true" x-ref="imageModal">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="imageModalLabel">Image Details</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body">
-                <img :src="modalImage" alt="Full size image" id="modalImage">
-                <div id="templateDetails" class="mt-3">
-                    <template x-if="(currentTab === 'templates' || currentTab === 'templateReview') && selectedTemplate">
-                        <div>
-                            <h6>Template Areas:</h6>
-                            <template x-for="area in selectedTemplate.areas" :key="area.index">
-                                <p>
-                                    Area <span x-text="area.index"></span>:
-                                    Top Left (<span x-text="area.topLeft.x"></span>, <span x-text="area.topLeft.y"></span>),
-                                    Bottom Right (<span x-text="area.bottomRight.x"></span>, <span x-text="area.bottomRight.y"></span>)
-                                    <span x-show="area.background">(Background)</span>
-                                </p>
-                            </template>
-                            <p>Author: <span x-text="selectedTemplate.author.userName"></span></p>
-                            <p>Created At: <span x-text="new Date(selectedTemplate.createdAt).toLocaleString()"></span></p>
-                        </div>
-                    </template>
-                </div>
-                <template x-if="currentTab === 'templateReview'">
-                    <div class="mt-3">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="approveCheckbox" x-model="reviewApproved">
-                            <label class="form-check-label" for="approveCheckbox">Approve</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="refuseCheckbox" x-model="reviewRefused">
-                            <label class="form-check-label" for="refuseCheckbox">Refuse</label>
-                        </div>
-                        <div x-show="reviewRefused" class="mt-2">
-                            <label for="refuseReason" class="form-label">Reason:</label>
-                            <input type="text" class="form-control" id="refuseReason" x-model="reviewReason">
-                        </div>
+            <div class="modal-body p-0">
+                <div class="row g-0">
+                    <div class="col-md-8">
+                        <img :src="modalImage" alt="Full size image" id="modalImage" class="img-fluid rounded-start">
                     </div>
-                </template>
+                    <div class="col-md-4 p-4">
+                        <div id="templateDetails">
+                            <template x-if="(currentTab === 'templates' || currentTab === 'templateReview') && selectedTemplate">
+                                <div>
+                                    <h6 class="mb-3">Template Information</h6>
+                                    <p class="mb-2"><strong>Author:</strong> <span x-text="selectedTemplate.author.userName"></span></p>
+                                    <p class="mb-3"><strong>Created:</strong> <span x-text="new Date(selectedTemplate.createdAt).toLocaleString()"></span></p>
+                                    <h6 class="mb-2">Template Areas:</h6>
+                                    <div class="small">
+                                        <template x-for="area in selectedTemplate.areas" :key="area.index">
+                                            <p class="mb-1">
+                                                Area <span x-text="area.index"></span>:
+                                                (<span x-text="area.topLeft.x"></span>, <span x-text="area.topLeft.y"></span>) -
+                                                (<span x-text="area.bottomRight.x"></span>, <span x-text="area.bottomRight.y"></span>)
+                                                <span x-show="area.background" class="badge bg-secondary">Background</span>
+                                            </p>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                        <template x-if="currentTab === 'templateReview'">
+                            <div class="mt-4">
+                                <h6 class="mb-3">Review</h6>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" id="approveCheckbox" x-model="reviewApproved">
+                                    <label class="form-check-label" for="approveCheckbox">Approve</label>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="refuseCheckbox" x-model="reviewRefused">
+                                    <label class="form-check-label" for="refuseCheckbox">Refuse</label>
+                                </div>
+                                <div x-show="reviewRefused" class="mb-3">
+                                    <label for="refuseReason" class="form-label">Reason:</label>
+                                    <textarea class="form-control" id="refuseReason" x-model="reviewReason" rows="3"></textarea>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
             </div>
             <div class="modal-footer">
                 <template x-if="currentTab === 'templateReview'">
                     <button type="button" class="btn btn-primary" @click="sendReview()">Send Review</button>
                 </template>
-                <template x-if="currentTab === 'templates'">
-                    <button type="button" class="btn btn-danger" @click="deleteImage()">
-                        <i class="fas fa-trash-alt"></i> Delete Image
-                    </button>
-                </template>
+                <button type="button" class="btn btn-outline-danger" @click="deleteImage()">
+                    <i class="fas fa-trash-alt"></i> Delete Image
+                </button>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>

@@ -12,6 +12,3 @@ telegram:
       token: ENC(dtSase99ZO5H3VM+xGZyDSfs/SXusR6aYKoWk9dNUjc29raaB/PYk4k0wftQ89L3h6bKB74wfnoLAtFF90xNraA32DiJq11aBpkZpoQU0xg=)
       username: ENC(pNyHJWQxcfDqIk2TbQwG5rig8UpbmGtp5vQNygg3FNJ1boz3eY6NkUshYV1OJFMmrI+ApaHjW3ZVLdQ6Ag0iVA==)
       channel: ENC(7aEMSw8ciINh+zx54P9Qb0L9PeFKYjThBEihRI3vo5Ci3wSpg9bae5GESUKSszEq)
-
-logging.level.org.springframework.security: DEBUG
-logging.level.org.springframework.session: DEBUG
