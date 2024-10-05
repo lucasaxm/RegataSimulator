@@ -16,6 +16,7 @@ import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
 import org.telegram.telegrambots.meta.api.methods.send.SendVideo;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.Message;
+import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.media.InputMedia;
 import org.telegram.telegrambots.meta.api.objects.media.InputMediaAnimation;
 import org.telegram.telegrambots.meta.api.objects.media.InputMediaAudio;
@@ -191,6 +192,10 @@ public class TelegramUtils {
 
     public static String toJson(Object o) {
         return toJson(o, false);
+    }
+
+    public static Update fromJson(String str) throws JsonProcessingException {
+        return mapper.readValue(str, Update.class);
     }
 
     public static void normalizeMediaGroupCaption(SendMediaGroup sendMediaGroup) {

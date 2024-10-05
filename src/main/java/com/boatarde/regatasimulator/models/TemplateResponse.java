@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -17,4 +18,6 @@ import java.util.UUID;
 public class TemplateResponse {
     private UUID id;
     private List<TemplateArea> areas;
+    private TemplateAuthor author;
+    private LocalDateTime createdAt;
 }

@@ -37,3 +37,4 @@ out/
 .vscode/
 /src/main/resources/sources/
 /src/main/resources/templates/
+/src/main/resources/review_templates/

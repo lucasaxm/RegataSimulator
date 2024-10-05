@@ -164,13 +164,14 @@ jobs:
           REGATA_SIMULATOR_ENC_PASSWORD: ${{ secrets.REGATA_SIMULATOR_ENC_PASSWORD }}
           REGATA_SIMULATOR_SOURCES_PATH: ${{ secrets.REGATA_SIMULATOR_SOURCES_PATH }}
           REGATA_SIMULATOR_TEMPLATES_PATH: ${{ secrets.REGATA_SIMULATOR_TEMPLATES_PATH }}
+          REGATA_SIMULATOR_REVIEW_TEMPLATES_PATH: ${{ secrets.REGATA_SIMULATOR_REVIEW_TEMPLATES_PATH }}
           MAGICK_PATH: ${{ secrets.MAGICK_PATH }}
           SPRING_PROFILES_ACTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'stage' }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          envs: REGATA_SIMULATOR_ENC_PASSWORD,SPRING_PROFILES_ACTIVE,REGATA_SIMULATOR_SOURCES_PATH,REGATA_SIMULATOR_TEMPLATES_PATH,MAGICK_PATH
+          envs: REGATA_SIMULATOR_ENC_PASSWORD,SPRING_PROFILES_ACTIVE,REGATA_SIMULATOR_SOURCES_PATH,REGATA_SIMULATOR_TEMPLATES_PATH,MAGICK_PATH,REGATA_SIMULATOR_REVIEW_TEMPLATES_PATH
           script: |
             nohup /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/start_regata_simulator.sh >> start_regata_simulator.log 2>&1 &
             echo $! > /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/app.pid
@@ -191,10 +192,10 @@ jobs:
             for i in {1..120}; do
               # Get the current number of lines
               current_lines=$(wc -l < "$LOG_FILE")
-              
+            
               # Calculate new lines
               new_lines=$((current_lines - initial_lines))
-              
+            
               if [ $new_lines -gt 0 ]; then
                 # Check only the new lines
                 if tail -n $new_lines "$LOG_FILE" | grep -q "Started RegataSimulatorApplication"; then
@@ -206,7 +207,7 @@ jobs:
                   exit 1
                 fi
               fi
-              
+            
               sleep 1
             done
             

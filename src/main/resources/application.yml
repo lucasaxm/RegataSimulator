@@ -16,13 +16,13 @@ regata-simulator:
   sources:
     path: ${REGATA_SIMULATOR_SOURCES_PATH}
   templates:
+    review-path: ${REGATA_SIMULATOR_REVIEW_TEMPLATES_PATH}
     path: ${REGATA_SIMULATOR_TEMPLATES_PATH}
 magick:
   path: ${MAGICK_PATH}
 web-admin:
   username: ENC(a+52ciCbjfdlGZzl1LUqul7UdgrGEu1+glWkeZ2plrlx2b1PBPk8S3LmIbcimHR4)
   password: ENC(z0G/zDkWVyOkkyjxVv14iyc3SD2Tpcbf79ap5shPDM21zHt/02ebwNbO9BjOpCgo)
-# Swagger UI path
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
