@@ -32,32 +32,6 @@ public class SendMemeStep implements WorkflowStep {
         this.channelId = channelId;
     }
 
-    private static void addConfirmKeyboard(WorkflowDataBag bag, RegataSimulatorBot regataSimulatorBot,
-                                           SendPhoto sendPhoto)
-        throws TelegramApiException {
-        Message creatingTemplateMessage = bag.get(WorkflowDataKey.CREATING_TEMPLATE_MESSAGE, Message.class);
-        if (creatingTemplateMessage != null) {
-            regataSimulatorBot.execute(DeleteMessage.builder()
-                .chatId(creatingTemplateMessage.getChatId())
-                .messageId(creatingTemplateMessage.getMessageId())
-                .build());
-
-            Path templatePath = bag.get(WorkflowDataKey.TEMPLATE_FILE, Path.class);
-
-            String templateId = templatePath.getParent().getFileName().toString();
-            sendPhoto.setReplyMarkup(InlineKeyboardMarkup.builder()
-                .keyboard(List.of(List.of(InlineKeyboardButton.builder()
-                        .text("Confirmar")
-                        .callbackData(templateId + ":template:confirm")
-                        .build()),
-                    List.of(InlineKeyboardButton.builder()
-                        .text("Cancelar")
-                        .callbackData(templateId + ":template:cancel")
-                        .build())))
-                .build());
-        }
-    }
-
     @Override
     public WorkflowAction run(WorkflowDataBag bag) {
         RegataSimulatorBot regataSimulatorBot = bag.get(WorkflowDataKey.REGATA_SIMULATOR_BOT, RegataSimulatorBot.class);
@@ -102,5 +76,31 @@ public class SendMemeStep implements WorkflowStep {
             .replyToMessageId(update.getMessage().getMessageId())
             .messageThreadId(update.getMessage().getMessageThreadId())
             .build();
+    }
+
+    private void addConfirmKeyboard(WorkflowDataBag bag, RegataSimulatorBot regataSimulatorBot,
+                                    SendPhoto sendPhoto)
+        throws TelegramApiException {
+        Message creatingTemplateMessage = bag.get(WorkflowDataKey.CREATING_TEMPLATE_MESSAGE, Message.class);
+        if (creatingTemplateMessage != null) {
+            regataSimulatorBot.execute(DeleteMessage.builder()
+                .chatId(creatingTemplateMessage.getChatId())
+                .messageId(creatingTemplateMessage.getMessageId())
+                .build());
+
+            Path templatePath = bag.get(WorkflowDataKey.TEMPLATE_FILE, Path.class);
+
+            String templateId = templatePath.getParent().getFileName().toString();
+            sendPhoto.setReplyMarkup(InlineKeyboardMarkup.builder()
+                .keyboard(List.of(List.of(InlineKeyboardButton.builder()
+                        .text("Confirmar")
+                        .callbackData(templateId + ":template:confirm")
+                        .build()),
+                    List.of(InlineKeyboardButton.builder()
+                        .text("Cancelar")
+                        .callbackData(templateId + ":template:cancel")
+                        .build())))
+                .build());
+        }
     }
 }
