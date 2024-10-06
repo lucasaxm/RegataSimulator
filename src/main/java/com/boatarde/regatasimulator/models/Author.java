@@ -4,13 +4,13 @@ import lombok.Data;
 import org.telegram.telegrambots.meta.api.objects.User;
 
 @Data
-public class TemplateAuthor {
+public class Author {
     private Long id;
     private String firstName;
     private String lastName;
     private String userName;
 
-    public TemplateAuthor(User user) {
+    public Author(User user) {
         if (user == null) {
             return;
         }

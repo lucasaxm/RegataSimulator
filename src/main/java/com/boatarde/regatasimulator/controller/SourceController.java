@@ -1,7 +1,7 @@
 package com.boatarde.regatasimulator.controller;
 
 import com.boatarde.regatasimulator.models.GalleryResponse;
-import com.boatarde.regatasimulator.models.SourceResponse;
+import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.service.SourceService;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
@@ -26,10 +26,10 @@ public class SourceController {
     }
 
     @GetMapping
-    public ResponseEntity<GalleryResponse<SourceResponse>> getAllSources(@RequestParam(defaultValue = "1") int page,
-                                                                         @RequestParam(defaultValue = "12")
+    public ResponseEntity<GalleryResponse<Source>> getAllSources(@RequestParam(defaultValue = "1") int page,
+                                                                 @RequestParam(defaultValue = "12")
                                                                          int perPage) {
-        GalleryResponse<SourceResponse> response = sourceService.getSources(page, perPage);
+        GalleryResponse<Source> response = sourceService.getSources(page, perPage);
         return ResponseEntity.ok(response);
     }
 

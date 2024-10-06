@@ -2,7 +2,7 @@ package com.boatarde.regatasimulator.controller;
 
 import com.boatarde.regatasimulator.models.GalleryResponse;
 import com.boatarde.regatasimulator.models.ReviewTemplateBody;
-import com.boatarde.regatasimulator.models.TemplateResponse;
+import com.boatarde.regatasimulator.models.Template;
 import com.boatarde.regatasimulator.service.TemplateService;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
@@ -29,10 +29,10 @@ public class TemplateController {
     }
 
     @GetMapping
-    public ResponseEntity<GalleryResponse<TemplateResponse>> getTemplates(@RequestParam(defaultValue = "1") int page,
-                                                                          @RequestParam(defaultValue = "12")
+    public ResponseEntity<GalleryResponse<Template>> getTemplates(@RequestParam(defaultValue = "1") int page,
+                                                                  @RequestParam(defaultValue = "12")
                                                                           int perPage) {
-        GalleryResponse<TemplateResponse> response = templateService.getTemplates(page, perPage, false);
+        GalleryResponse<Template> response = templateService.getTemplates(page, perPage, false);
         return ResponseEntity.ok(response);
     }
 
@@ -49,11 +49,11 @@ public class TemplateController {
     }
 
     @GetMapping("/review")
-    public ResponseEntity<GalleryResponse<TemplateResponse>> getTemplatesToReview(
+    public ResponseEntity<GalleryResponse<Template>> getTemplatesToReview(
         @RequestParam(defaultValue = "1") int page,
         @RequestParam(defaultValue = "12")
         int perPage) {
-        GalleryResponse<TemplateResponse> response = templateService.getTemplates(page, perPage, true);
+        GalleryResponse<Template> response = templateService.getTemplates(page, perPage, true);
         return ResponseEntity.ok(response);
     }
 

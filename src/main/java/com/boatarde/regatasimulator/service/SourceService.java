@@ -1,7 +1,7 @@
 package com.boatarde.regatasimulator.service;
 
 import com.boatarde.regatasimulator.models.GalleryResponse;
-import com.boatarde.regatasimulator.models.SourceResponse;
+import com.boatarde.regatasimulator.models.Source;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -25,17 +25,17 @@ public class SourceService {
     private String sourcesPathString;
 
 
-    public GalleryResponse<SourceResponse> getSources(int page, int perPage) {
+    public GalleryResponse<Source> getSources(int page, int perPage) {
         Path dir = Paths.get(sourcesPathString);
         try (Stream<Path> dirStream = Files.list(dir)) {
-            List<SourceResponse> allItems = dirStream
+            List<Source> allItems = dirStream
                 .filter(Files::isDirectory)
                 .flatMap(subdir -> {
                     try {
                         return Files.list(subdir)
                             .filter(file -> file.getFileName().toString().equalsIgnoreCase("source.jpg") ||
                                 file.getFileName().toString().equalsIgnoreCase("source.png"))
-                            .map(file -> SourceResponse.builder()
+                            .map(file -> Source.builder()
                                 .id(UUID.fromString(subdir.getFileName().toString()))
                                 .build());
                     } catch (IOException e) {
@@ -48,7 +48,7 @@ public class SourceService {
             int startIndex = (page - 1) * perPage;
             int endIndex = Math.min(startIndex + perPage, totalItems);
 
-            List<SourceResponse> pageItems = allItems.subList(startIndex, endIndex);
+            List<Source> pageItems = allItems.subList(startIndex, endIndex);
 
             return new GalleryResponse<>(pageItems, totalItems);
         } catch (IOException e) {

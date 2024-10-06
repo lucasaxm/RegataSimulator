@@ -4,8 +4,8 @@ import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
 import com.boatarde.regatasimulator.models.GalleryResponse;
 import com.boatarde.regatasimulator.models.ReviewTemplateBody;
-import com.boatarde.regatasimulator.models.TemplateAuthor;
-import com.boatarde.regatasimulator.models.TemplateResponse;
+import com.boatarde.regatasimulator.models.Author;
+import com.boatarde.regatasimulator.models.Template;
 import com.boatarde.regatasimulator.util.TelegramUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -51,10 +51,10 @@ public class TemplateService {
         this.routerService = routerService;
     }
 
-    public GalleryResponse<TemplateResponse> getTemplates(int page, int perPage, boolean review) {
+    public GalleryResponse<Template> getTemplates(int page, int perPage, boolean review) {
         Path dir = Paths.get(review ? templatesReviewPathString : templatesPathString);
         try {
-            List<TemplateResponse> allItems = Files.list(dir)
+            List<Template> allItems = Files.list(dir)
                 .filter(Files::isDirectory)
                 .flatMap(subdir -> {
                     try {
@@ -65,12 +65,12 @@ public class TemplateService {
                                 String details = getTemplateDetails(subdir.getFileName().toString(), review);
                                 Update update = getTemplateUpdate(subdir.getFileName().toString(), review);
                                 try {
-                                    TemplateResponse response = TemplateResponse.builder()
+                                    Template response = Template.builder()
                                         .id(UUID.fromString(subdir.getFileName().toString()))
                                         .areas(TelegramUtils.parseTemplateCsv(details))
                                         .build();
                                     if (update != null) {
-                                        response.setAuthor(new TemplateAuthor(update.getMessage().getFrom()));
+                                        response.setAuthor(new Author(update.getMessage().getFrom()));
                                         response.setCreatedAt(LocalDateTime.ofInstant(
                                             Instant.ofEpochSecond(update.getMessage().getDate()),
                                             ZoneId.systemDefault()));
@@ -90,7 +90,7 @@ public class TemplateService {
             int startIndex = (page - 1) * perPage;
             int endIndex = Math.min(startIndex + perPage, totalItems);
 
-            List<TemplateResponse> pageItems = allItems.subList(startIndex, endIndex);
+            List<Template> pageItems = allItems.subList(startIndex, endIndex);
 
             return new GalleryResponse<>(pageItems, totalItems);
         } catch (IOException e) {
