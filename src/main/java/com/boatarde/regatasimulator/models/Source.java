@@ -1,5 +1,7 @@
 package com.boatarde.regatasimulator.models;
 
+import io.jsondb.annotation.Document;
+import io.jsondb.annotation.Id;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -14,8 +16,11 @@ import java.util.UUID;
 @NoArgsConstructor
 @Builder
 @AllArgsConstructor
+@Document(collection = "sources", schemaVersion= "1.0")
 public class Source {
+    @Id
     private UUID id;
     private Author author;
     private LocalDateTime createdAt;
+    private int weight;
 }

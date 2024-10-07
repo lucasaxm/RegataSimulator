@@ -194,8 +194,8 @@ public class TelegramUtils {
         return toJson(o, false);
     }
 
-    public static Update fromJson(String str) throws JsonProcessingException {
-        return mapper.readValue(str, Update.class);
+    public static <T> T fromJson(String str, Class<T> clazz) throws JsonProcessingException {
+        return mapper.readValue(str, clazz);
     }
 
     public static void normalizeMediaGroupCaption(SendMediaGroup sendMediaGroup) {

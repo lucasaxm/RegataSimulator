@@ -1,5 +1,7 @@
 package com.boatarde.regatasimulator.models;
 
+import io.jsondb.annotation.Document;
+import io.jsondb.annotation.Id;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -15,9 +17,12 @@ import java.util.UUID;
 @NoArgsConstructor
 @Builder
 @AllArgsConstructor
+@Document(collection = "templates", schemaVersion= "1.0")
 public class Template {
+    @Id
     private UUID id;
     private List<TemplateArea> areas;
     private Author author;
     private LocalDateTime createdAt;
+    private int weight;
 }
