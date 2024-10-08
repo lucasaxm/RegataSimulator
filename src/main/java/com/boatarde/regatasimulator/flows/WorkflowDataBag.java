@@ -3,6 +3,7 @@ package com.boatarde.regatasimulator.flows;
 import java.util.HashMap;
 import java.util.Map;
 
+@SuppressWarnings("unchecked")
 public class WorkflowDataBag {
     private final Map<WorkflowDataKey, Object> data = new HashMap<>();
 

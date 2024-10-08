@@ -42,7 +42,7 @@ public class SourceService {
         List<Source> allMatchingSources = jsonDBTemplate.find(jxQuery, Source.class);
         int totalItems = allMatchingSources.size();
         List<Source> result = allMatchingSources.stream()
-            .sorted(JsonDBUtils.getSourceComparator().reversed())
+            .sorted(JsonDBUtils.getComparator().reversed())
             .skip((long) (page - 1) * perPage)
             .limit(perPage)
             .toList();

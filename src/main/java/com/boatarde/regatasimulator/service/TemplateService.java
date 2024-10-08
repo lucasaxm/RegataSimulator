@@ -59,7 +59,7 @@ public class TemplateService {
         List<Template> allMatchingTemplates = jsonDBTemplate.find(jxQuery, Template.class);
         int totalItems = allMatchingTemplates.size();
         List<Template> result = allMatchingTemplates.stream()
-            .sorted(JsonDBUtils.getTemplateComparator().reversed())
+            .sorted(JsonDBUtils.getComparator().reversed())
             .skip((long) (page - 1) * perPage)
             .limit(perPage)
             .toList();
