@@ -32,6 +32,7 @@ public class RegataSimulatorApplication {
         createCollectionIfAbsent("users");
         createCollectionIfAbsent("templates");
         createCollectionIfAbsent("sources");
+        createCollectionIfAbsent("memes");
     }
 
     private void createCollectionIfAbsent(String collectionName) {

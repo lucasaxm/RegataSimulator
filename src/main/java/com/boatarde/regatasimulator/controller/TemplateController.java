@@ -2,6 +2,7 @@ package com.boatarde.regatasimulator.controller;
 
 import com.boatarde.regatasimulator.models.GalleryResponse;
 import com.boatarde.regatasimulator.models.ReviewTemplateBody;
+import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.models.Template;
 import com.boatarde.regatasimulator.service.TemplateService;
 import org.springframework.core.io.Resource;
@@ -30,43 +31,41 @@ public class TemplateController {
 
     @GetMapping
     public ResponseEntity<GalleryResponse<Template>> getTemplates(@RequestParam(defaultValue = "1") int page,
-                                                                  @RequestParam(defaultValue = "12")
-                                                                          int perPage) {
-        GalleryResponse<Template> response = templateService.getTemplates(page, perPage, false);
+                                                                  @RequestParam(defaultValue = "12") int perPage,
+                                                                  @RequestParam(required = false) Status status,
+                                                                  @RequestParam(required = false) Long userId) {
+        GalleryResponse<Template> response = templateService.getTemplates(page, perPage, status, userId);
         return ResponseEntity.ok(response);
     }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<Resource> getTemplate(@PathVariable UUID id) {
-        Resource file = templateService.loadTemplateAsResource(id, false);
+    @GetMapping("/{id}.png")
+    public ResponseEntity<Resource> getTemplateImage(@PathVariable UUID id) {
+        Template template = getTemplate(id);
+        Resource file = templateService.loadTemplateAsResource(template);
         return ResponseEntity.ok().contentType(MediaType.IMAGE_PNG).body(file);
+    }
+
+    @GetMapping("/{id}.json")
+    public ResponseEntity<Template> getTemplateJson(@PathVariable UUID id) {
+        Template template = getTemplate(id);
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(template);
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteImage(@PathVariable UUID id) {
-        templateService.deleteTemplate(id, false);
+        Template template = getTemplate(id);
+        templateService.deleteTemplate(template);
         return ResponseEntity.noContent().build();
     }
 
-    @GetMapping("/review")
-    public ResponseEntity<GalleryResponse<Template>> getTemplatesToReview(
-        @RequestParam(defaultValue = "1") int page,
-        @RequestParam(defaultValue = "12")
-        int perPage) {
-        GalleryResponse<Template> response = templateService.getTemplates(page, perPage, true);
-        return ResponseEntity.ok(response);
-    }
-
-    @GetMapping("/review/{id}")
-    public ResponseEntity<Resource> getImage(@PathVariable UUID id) {
-        Resource file = templateService.loadTemplateAsResource(id, true);
-        return ResponseEntity.ok().contentType(MediaType.IMAGE_PNG).body(file);
-    }
-
-    @PostMapping("/review/{id}")
-    public ResponseEntity<Void> reviewTemplate(@PathVariable UUID id,
-                                               @RequestBody ReviewTemplateBody reviewTemplateBody) {
-        templateService.reviewTemplate(id, reviewTemplateBody);
+    @PostMapping("/review")
+    public ResponseEntity<Void> reviewTemplate(@RequestBody ReviewTemplateBody reviewTemplateBody) {
+        templateService.reviewTemplate(reviewTemplateBody);
         return ResponseEntity.noContent().build();
+    }
+
+    private Template getTemplate(UUID id) {
+        return templateService.getTemplate(id)
+            .orElseThrow(() -> new RuntimeException("Template not found: " + id));
     }
 }

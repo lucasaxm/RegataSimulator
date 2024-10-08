@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.telegram.telegrambots.meta.api.objects.Message;
 
+import java.util.List;
 import java.util.UUID;
 
 @Getter
@@ -16,11 +17,11 @@ import java.util.UUID;
 @NoArgsConstructor
 @Builder
 @AllArgsConstructor
-@Document(collection = "sources", schemaVersion = "1.0")
-public class Source {
+@Document(collection = "memes", schemaVersion = "1.0")
+public class Meme {
     @Id
     private UUID id;
-    private int weight;
+    private UUID templateId;
+    private List<UUID> sourceIds;
     private Message message;
-    private Status status;
 }

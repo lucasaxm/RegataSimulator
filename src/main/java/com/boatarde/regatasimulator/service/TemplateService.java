@@ -2,11 +2,15 @@ package com.boatarde.regatasimulator.service;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.models.Author;
 import com.boatarde.regatasimulator.models.GalleryResponse;
 import com.boatarde.regatasimulator.models.ReviewTemplateBody;
-import com.boatarde.regatasimulator.models.Author;
+import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.models.Template;
+import com.boatarde.regatasimulator.models.TemplateArea;
+import com.boatarde.regatasimulator.util.JsonDBUtils;
 import com.boatarde.regatasimulator.util.TelegramUtils;
+import io.jsondb.JsonDBTemplate;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
@@ -20,13 +24,13 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Service
@@ -35,91 +39,36 @@ public class TemplateService {
 
     private final String templatesPathString;
 
-    private final String templatesReviewPathString;
-
     private final RegataSimulatorBot bot;
 
     private final RouterService routerService;
+    private final JsonDBTemplate jsonDBTemplate;
 
     public TemplateService(@Value("${regata-simulator.templates.path}") String templatesPathString,
-                           @Value("${regata-simulator.templates.review-path}") String templatesReviewPathString,
                            RegataSimulatorBot bot,
-                           RouterService routerService) {
+                           RouterService routerService, JsonDBTemplate jsonDBTemplate) {
         this.templatesPathString = templatesPathString;
-        this.templatesReviewPathString = templatesReviewPathString;
         this.bot = bot;
         this.routerService = routerService;
+        this.jsonDBTemplate = jsonDBTemplate;
     }
 
-    public GalleryResponse<Template> getTemplates(int page, int perPage, boolean review) {
-        Path dir = Paths.get(review ? templatesReviewPathString : templatesPathString);
-        try {
-            List<Template> allItems = Files.list(dir)
-                .filter(Files::isDirectory)
-                .flatMap(subdir -> {
-                    try {
-                        return Files.list(subdir)
-                            .filter(file -> file.getFileName().toString().equalsIgnoreCase("template.jpg") ||
-                                file.getFileName().toString().equalsIgnoreCase("template.png"))
-                            .map(file -> {
-                                String details = getTemplateDetails(subdir.getFileName().toString(), review);
-                                Update update = getTemplateUpdate(subdir.getFileName().toString(), review);
-                                try {
-                                    Template response = Template.builder()
-                                        .id(UUID.fromString(subdir.getFileName().toString()))
-                                        .areas(TelegramUtils.parseTemplateCsv(details))
-                                        .build();
-                                    if (update != null) {
-                                        response.setAuthor(new Author(update.getMessage().getFrom()));
-                                        response.setCreatedAt(LocalDateTime.ofInstant(
-                                            Instant.ofEpochSecond(update.getMessage().getDate()),
-                                            ZoneId.systemDefault()));
-                                    }
-                                    return response;
-                                } catch (IOException e) {
-                                    throw new RuntimeException(e);
-                                }
-                            });
-                    } catch (IOException e) {
-                        throw new RuntimeException("Failed to read template subdirectory", e);
-                    }
-                })
-                .collect(Collectors.toList());
+    public GalleryResponse<Template> getTemplates(int page, int perPage, Status status, Long userId) {
+        String jxQuery = JsonDBUtils.getJxQuery(status, userId);
 
-            int totalItems = allItems.size();
-            int startIndex = (page - 1) * perPage;
-            int endIndex = Math.min(startIndex + perPage, totalItems);
+        List<Template> allMatchingTemplates = jsonDBTemplate.find(jxQuery, Template.class);
+        int totalItems = allMatchingTemplates.size();
+        List<Template> result = allMatchingTemplates.stream()
+            .sorted(JsonDBUtils.getTemplateComparator().reversed())
+            .skip((long) (page - 1) * perPage)
+            .limit(perPage)
+            .toList();
 
-            List<Template> pageItems = allItems.subList(startIndex, endIndex);
-
-            return new GalleryResponse<>(pageItems, totalItems);
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to read template items", e);
-        }
+        return new GalleryResponse<>(result, totalItems);
     }
 
-    public String getTemplateDetails(String id, boolean review) {
-        Path csvPath = Paths.get(review ? templatesReviewPathString : templatesPathString, id, "template.csv");
-        try {
-            return new String(Files.readAllBytes(csvPath));
-        } catch (IOException e) {
-            return null;
-        }
-    }
-
-    private Update getTemplateUpdate(String id, boolean review) {
-        Path filePath = Paths.get(review ? templatesReviewPathString : templatesPathString, id, "update.json");
-        try {
-            String updateJson = Files.readString(filePath);
-            return TelegramUtils.fromJson(updateJson);
-        } catch (IOException e) {
-            log.error("Failed to read update.json for template {}{}", id, review ? " [review]" : "", e);
-            return null;
-        }
-    }
-
-    public Resource loadTemplateAsResource(UUID id, boolean review) {
-        Path dir = Paths.get(review ? templatesReviewPathString : templatesPathString, id.toString());
+    public Resource loadTemplateAsResource(Template template) {
+        Path dir = Paths.get(templatesPathString, template.getId().toString());
 
         try {
             Path templateFile = dir.resolve("template.jpg");
@@ -127,7 +76,7 @@ public class TemplateService {
                 templateFile = dir.resolve("template.png");
             }
             if (!templateFile.toFile().exists()) {
-                throw new RuntimeException("Template not found: " + id);
+                throw new RuntimeException("Template not found: " + template.getId());
             }
             return new UrlResource(templateFile.toUri());
         } catch (IOException e) {
@@ -135,48 +84,115 @@ public class TemplateService {
         }
     }
 
-    public void deleteTemplate(UUID id, boolean review) {
+    public void deleteTemplate(Template template) {
         try {
-            Path filePath = Paths.get(review ? templatesReviewPathString : templatesPathString, id.toString());
+            Path filePath = Paths.get(templatesPathString, template.getId().toString());
             try (Stream<Path> paths = Files.walk(filePath)) {
-                paths.sorted(Comparator.reverseOrder())
+                if (!paths.sorted(Comparator.reverseOrder())
                     .map(Path::toFile)
-                    .forEach(File::delete);
+                    .allMatch(File::delete)) {
+                    throw new RuntimeException("Failed to delete template: " + template.getId());
+                }
             }
+            jsonDBTemplate.remove(template, Template.class);
+            log.info("Template {} deleted", template.getId());
         } catch (IOException e) {
-            throw new RuntimeException("Failed to delete template: " + id, e);
+            throw new RuntimeException("Failed to delete template: " + template.getId(), e);
         }
     }
 
 
-    public void reviewTemplate(UUID id, ReviewTemplateBody reviewTemplateBody) {
-        Update update = getTemplateUpdate(id.toString(), true);
+    public void reviewTemplate(ReviewTemplateBody reviewTemplateBody) {
+        Template template = jsonDBTemplate.findById(reviewTemplateBody.getTemplateId(), Template.class);
+        if (template == null) {
+            throw new RuntimeException("Template not found: " + reviewTemplateBody.getTemplateId());
+        }
+        if (template.getStatus() == Status.APPROVED) {
+            throw new RuntimeException("Template already approved: " + reviewTemplateBody.getTemplateId());
+        }
+
+        Update update = new Update();
+        update.setMessage(update.getMessage());
+
         if (reviewTemplateBody.isApproved()) {
-            approveTemplate(id);
-            if (update != null) {
+            approveTemplate(template);
+            if (template.getMessage() != null) {
                 routerService.startFlow(update, bot, WorkflowAction.APPROVE_TEMPLATE_STEP);
             }
         } else {
-            deleteTemplate(id, true);
+            deleteTemplate(template);
 
-            if (update != null) {
-                Message message = new Message();
-                message.setText(reviewTemplateBody.getReason());
-                update.setChannelPost(message);
+            if (template.getMessage() != null) {
+                Message reasonMessage = new Message();
+                reasonMessage.setText(reviewTemplateBody.getReason());
+                update.setChannelPost(reasonMessage);
             }
 
             routerService.startFlow(update, bot, WorkflowAction.REFUSE_TEMPLATE_STEP);
         }
     }
 
-    private void approveTemplate(UUID id) {
-        Path source = Paths.get(templatesReviewPathString, id.toString());
-        Path target = Paths.get(templatesPathString, id.toString());
+    public Optional<Template> getTemplate(UUID id) {
+        return Optional.ofNullable(jsonDBTemplate.findById(id, Template.class));
+    }
 
-        try {
-            Files.move(source, target);
+    // temporary method to save templates from file system to jsondb
+    public List<Template> saveTemplates() {
+        Path templatesPath = Paths.get(templatesPathString);
+        List<Template> templates = new ArrayList<>();
+        try (Stream<Path> paths = Files.walk(templatesPath)) {
+            paths.filter(Files::isDirectory)
+                .filter(path -> {
+                    try {
+                        UUID.fromString(path.getFileName().toString());
+                        return true;
+                    } catch (IllegalArgumentException e) {
+                        log.error("Invalid template id: %s".formatted(path));
+                        return false;
+                    }
+                })
+                .forEach(path -> {
+                    Template template = new Template();
+                    template.setId(UUID.fromString(path.getFileName().toString()));
+                    template.setWeight(100);
+                    template.setStatus(Status.APPROVED);
+                    try {
+                        String jsonStr = Files.readString(path.resolve("message.json"));
+                        Message message = TelegramUtils.fromJson(jsonStr, Message.class);
+                        template.setMessage(message);
+                    } catch (IOException e) {
+                        log.error("Failed to read message json: %s".formatted(path));
+                    }
+                    try {
+                        List<TemplateArea> areas =
+                            TelegramUtils.parseTemplateCsv(Files.readString(path.resolve("template.csv")));
+                        template.setAreas(areas);
+                    } catch (IOException e) {
+                        log.error("Failed to read areas csv: %s".formatted(path));
+                    }
+                    templates.add(template);
+                });
         } catch (IOException e) {
-            throw new RuntimeException("Failed to move template from review to production: " + id, e);
+            log.error("Failed to read templates", e);
         }
+        jsonDBTemplate.upsert(templates, Template.class);
+        Map<Long, Author> authors = new HashMap<>();
+        templates.stream()
+            .filter(template -> template.getMessage() != null)
+            .map(template -> template.getMessage().getFrom())
+            .forEach(user -> {
+                Author author = new Author(user);
+                authors.put(author.getId(), author);
+            });
+
+        jsonDBTemplate.upsert(new ArrayList<>(authors.values()), Author.class);
+
+        return templates;
+    }
+
+    private void approveTemplate(Template template) {
+        template.setStatus(Status.APPROVED);
+        jsonDBTemplate.save(template, Template.class);
+        log.info("Template {} approved", template.getId());
     }
 }
