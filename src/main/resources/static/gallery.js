@@ -37,7 +37,7 @@ function galleryApp() {
 
         async loadSources(page) {
             this.sourceCurrentPage = page;
-            const response = await fetch(`/api/sources?page=${page}&perPage=${this.ITEMS_PER_PAGE}`);
+            const response = await fetch(`/api/sources?page=${page}&perPage=${this.ITEMS_PER_PAGE}&status=APPROVED`);
             const data = await response.json();
             this.sourceItems = data.items;
             this.sourceTotalItems = data.totalItems;
@@ -46,7 +46,7 @@ function galleryApp() {
 
         async loadTemplates(page) {
             this.templateCurrentPage = page;
-            const response = await fetch(`/api/templates?page=${page}&perPage=${this.ITEMS_PER_PAGE}`);
+            const response = await fetch(`/api/templates?page=${page}&perPage=${this.ITEMS_PER_PAGE}&status=APPROVED`);
             const data = await response.json();
             this.templateItems = data.items;
             this.templateTotalItems = data.totalItems;
@@ -66,29 +66,14 @@ function galleryApp() {
 
         async openSourceModal(item) {
             this.selectedSource = item;
-            this.modalImage = `/api/sources/${item.id}`;
+            this.modalImage = `/api/sources/${item.id}.png`;
             const modal = new bootstrap.Modal(this.$refs.imageModal);
             modal.show();
         },
 
         async openTemplateModal(item) {
             this.selectedTemplate = item;
-            this.modalImage = `/api/templates/${item.id}`;
-            const modal = new bootstrap.Modal(this.$refs.imageModal);
-            modal.show();
-            this.$nextTick(() => {
-                this.setupCanvas();
-                this.$refs.imageModal.addEventListener('shown.bs.modal', this.onModalShown);
-            });
-        },
-
-
-        async openTemplateReviewModal(item) {
-            this.selectedTemplate = item;
-            this.modalImage = `/api/templates/review/${item.id}`;
-            this.reviewApproved = false;
-            this.reviewRefused = false;
-            this.reviewReason = '';
+            this.modalImage = `/api/templates/${item.id}.png`;
             const modal = new bootstrap.Modal(this.$refs.imageModal);
             modal.show();
             this.$nextTick(() => {
@@ -131,7 +116,7 @@ function galleryApp() {
 
         async loadTemplateReview(page) {
             this.templateReviewCurrentPage = page;
-            const response = await fetch(`/api/templates/review?page=${page}&perPage=${this.ITEMS_PER_PAGE}`);
+            const response = await fetch(`/api/templates?page=${page}&perPage=${this.ITEMS_PER_PAGE}&status=REVIEW`);
             const data = await response.json();
             this.templateReviewItems = data.items;
             this.templateReviewTotalItems = data.totalItems;
@@ -150,11 +135,12 @@ function galleryApp() {
             }
 
             const reviewData = {
+                templateId: this.selectedTemplate.id,
                 approved: this.reviewApproved,
                 reason: this.reviewRefused ? this.reviewReason : null
             };
 
-            const response = await fetch(`/api/templates/review/${this.selectedTemplate.id}`, {
+            const response = await fetch(`/api/templates/review`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'

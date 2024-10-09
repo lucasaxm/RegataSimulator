@@ -50,7 +50,7 @@
                 <template x-for="item in sourceItems" :key="item.id">
                     <div class="col-md-3 mb-4">
                         <div class="gallery-item" :data-id="item.id">
-                            <img :src="`/api/sources/${item.id}`" alt="Source Image" class="img-fluid rounded"
+                            <img :src="`/api/sources/${item.id}.png`" alt="Source Image" class="img-fluid rounded"
                                  @click="openSourceModal(item)">
                         </div>
                     </div>
@@ -83,7 +83,7 @@
                 <template x-for="item in templateItems" :key="item.id">
                     <div class="col-md-3 mb-4">
                         <div class="gallery-item" :data-id="item.id">
-                            <img :src="`/api/templates/${item.id}`" alt="Template Image" class="img-fluid rounded"
+                            <img :src="`/api/templates/${item.id}.png`" alt="Template Image" class="img-fluid rounded"
                                  @click="openTemplateModal(item)">
                         </div>
                     </div>
@@ -116,9 +116,9 @@
                 <template x-for="item in templateReviewItems" :key="item.id">
                     <div class="col-md-3 mb-4">
                         <div class="gallery-item" :data-id="item.id">
-                            <img :src="`/api/templates/review/${item.id}`" alt="Template Review Image"
+                            <img :src="`/api/templates/${item.id}.png`" alt="Template Review Image"
                                  class="img-fluid rounded"
-                                 @click="openTemplateReviewModal(item)">
+                                 @click="openTemplateModal(item)">
                         </div>
                     </div>
                 </template>
@@ -174,10 +174,8 @@
                                     x-if="(currentTab === 'templates' || currentTab === 'templateReview') && selectedTemplate">
                                 <div>
                                     <h6 class="mb-3">Template Information</h6>
-                                    <p class="mb-2"><strong>Author:</strong> <span
-                                            x-text="selectedTemplate.author.userName"></span></p>
-                                    <p class="mb-3"><strong>Created:</strong> <span
-                                            x-text="new Date(selectedTemplate.createdAt).toLocaleString()"></span></p>
+                                    <p class="mb-2"><strong>Weight:</strong> <span x-text="selectedTemplate.weight"></span></p>
+                                    <p class="mb-3"><strong>Status:</strong> <span x-text="selectedTemplate.status"></span></p>
                                     <h6 class="mb-2">Template Areas:</h6>
                                     <div class="small">
                                         <template x-for="area in selectedTemplate.areas" :key="area.index">
@@ -222,7 +220,7 @@
                 <template x-if="currentTab === 'templateReview'">
                     <button type="button" class="btn btn-primary" @click="sendReview()">Send Review</button>
                 </template>
-                <template x-if="currentTab === 'templates'">
+                <template x-if="currentTab === 'templates' || currentTab === 'sources'">
                     <button type="button" class="btn btn-outline-danger" @click="deleteImage()">
                         <i class="fas fa-trash-alt"></i> Delete Image
                     </button>
