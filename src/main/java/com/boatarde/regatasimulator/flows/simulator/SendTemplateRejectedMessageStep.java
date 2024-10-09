@@ -12,21 +12,22 @@ import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
-@WorkflowStepRegistration(WorkflowAction.APPROVE_TEMPLATE_STEP)
+@WorkflowStepRegistration(WorkflowAction.SEND_TEMPLATE_REJECTED_MESSAGE)
 @Slf4j
-public class ApproveTemplateStep implements WorkflowStep {
+public class SendTemplateRejectedMessageStep implements WorkflowStep {
     @Override
     public WorkflowAction run(WorkflowDataBag bag) {
-        log.info("Sending template approved message to user");
+        log.info("Sending template rejected message to user");
         Update update = bag.get(WorkflowDataKey.TELEGRAM_UPDATE, Update.class);
         RegataSimulatorBot bot = bag.get(WorkflowDataKey.REGATA_SIMULATOR_BOT, RegataSimulatorBot.class);
 
+        String reason = update.getChannelPost().getText();
         Message originalMessage = update.getMessage();
 
         try {
             bot.execute(SendMessage.builder()
                 .chatId(originalMessage.getChatId())
-                .text("✅ Template aprovado!")
+                .text("❌ Template recusado.\nMotivo: " + reason)
                 .replyToMessageId(originalMessage.getMessageId())
                 .allowSendingWithoutReply(true)
                 .build());

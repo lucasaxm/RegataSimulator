@@ -45,10 +45,10 @@ public class BuildMemeStep implements WorkflowStep {
             for (int i = 0; i < sourceFiles.size(); i++) {
                 distortedSources.add(i,
                     buildDistortedSource(templateFile, sourceFiles.get(i), template.getAreas().get(i)));
-                int progress = i * 100 / (sourceFiles.size() + 1);
+                int progress = (i + 1) * 100 / (sourceFiles.size() + 2);
                 editCreatingTemplateMessage(bag, progress);
             }
-            int progress = sourceFiles.size() * 100 / (sourceFiles.size() + 1);
+            int progress = (sourceFiles.size() + 1) * 100 / (sourceFiles.size() + 2);
             editCreatingTemplateMessage(bag, progress);
             Path result =
                 compositeFinalImage(templateFile, templateFile.getParent(), distortedSources, template.getAreas());

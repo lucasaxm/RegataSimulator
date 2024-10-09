@@ -1,14 +1,19 @@
 package com.boatarde.regatasimulator.util;
 
+import com.boatarde.regatasimulator.models.AreaCorner;
 import com.boatarde.regatasimulator.models.CommonEntity;
 import com.boatarde.regatasimulator.models.Meme;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.models.Template;
+import com.boatarde.regatasimulator.models.TemplateArea;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.telegram.telegrambots.meta.api.objects.Message;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -20,6 +25,8 @@ import java.util.stream.IntStream;
 @Slf4j
 @UtilityClass
 public class JsonDBUtils {
+    private static final String HEADER = "Area,TLx,TLy,TRx,TRy,BRx,BRy,BLx,BLy,Background";
+
     public static String getJxQuery(Status status, Long userId) {
         StringBuilder jxQueryBuilder = new StringBuilder("/.");
         if (status == null && userId == null) {
@@ -94,5 +101,43 @@ public class JsonDBUtils {
         }
 
         return selectedEntities; // Return the list of selected entities
+    }
+
+    public static List<TemplateArea> parseTemplateCsv(String csv) throws IOException {
+        List<TemplateArea> areas = new ArrayList<>();
+        try (BufferedReader reader = new BufferedReader(new StringReader(csv))) {
+            String line = reader.readLine(); // header
+            if (!HEADER.equals(line)) {
+                throw new IOException("Invalid CSV header");
+            }
+            while ((line = reader.readLine()) != null) {
+                String[] fields = line.split(",");
+                if (fields.length != 10) {
+                    throw new IOException("Invalid CSV format");
+                }
+
+                areas.add(TemplateArea.builder()
+                    .index(Integer.parseInt(fields[0]))
+                    .topLeft(AreaCorner.builder()
+                        .x(Integer.parseInt(fields[1]))
+                        .y(Integer.parseInt(fields[2]))
+                        .build())
+                    .topRight(AreaCorner.builder()
+                        .x(Integer.parseInt(fields[3]))
+                        .y(Integer.parseInt(fields[4]))
+                        .build())
+                    .bottomRight(AreaCorner.builder()
+                        .x(Integer.parseInt(fields[5]))
+                        .y(Integer.parseInt(fields[6]))
+                        .build())
+                    .bottomLeft(AreaCorner.builder()
+                        .x(Integer.parseInt(fields[7]))
+                        .y(Integer.parseInt(fields[8]))
+                        .build())
+                    .background(Integer.parseInt(fields[9]) == 1)
+                    .build());
+            }
+        }
+        return areas;
     }
 }

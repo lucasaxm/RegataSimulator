@@ -1,10 +1,7 @@
 package com.boatarde.regatasimulator.service;
 
-import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
-import com.boatarde.regatasimulator.flows.WorkflowAction;
 import com.boatarde.regatasimulator.models.Author;
 import com.boatarde.regatasimulator.models.GalleryResponse;
-import com.boatarde.regatasimulator.models.ReviewTemplateBody;
 import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.models.Template;
 import com.boatarde.regatasimulator.models.TemplateArea;
@@ -17,7 +14,6 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.objects.Message;
-import org.telegram.telegrambots.meta.api.objects.Update;
 
 import java.io.File;
 import java.io.IOException;
@@ -38,18 +34,11 @@ import java.util.stream.Stream;
 public class TemplateService {
 
     private final String templatesPathString;
-
-    private final RegataSimulatorBot bot;
-
-    private final RouterService routerService;
     private final JsonDBTemplate jsonDBTemplate;
 
     public TemplateService(@Value("${regata-simulator.templates.path}") String templatesPathString,
-                           RegataSimulatorBot bot,
-                           RouterService routerService, JsonDBTemplate jsonDBTemplate) {
+                           JsonDBTemplate jsonDBTemplate) {
         this.templatesPathString = templatesPathString;
-        this.bot = bot;
-        this.routerService = routerService;
         this.jsonDBTemplate = jsonDBTemplate;
     }
 
@@ -101,39 +90,20 @@ public class TemplateService {
         }
     }
 
-
-    public void reviewTemplate(ReviewTemplateBody reviewTemplateBody) {
-        Template template = jsonDBTemplate.findById(reviewTemplateBody.getTemplateId(), Template.class);
-        if (template == null) {
-            throw new RuntimeException("Template not found: " + reviewTemplateBody.getTemplateId());
-        }
-        if (template.getStatus() == Status.APPROVED) {
-            throw new RuntimeException("Template already approved: " + reviewTemplateBody.getTemplateId());
-        }
-
-        Update update = new Update();
-        update.setMessage(update.getMessage());
-
-        if (reviewTemplateBody.isApproved()) {
-            approveTemplate(template);
-            if (template.getMessage() != null) {
-                routerService.startFlow(update, bot, WorkflowAction.APPROVE_TEMPLATE_STEP);
-            }
-        } else {
-            deleteTemplate(template);
-
-            if (template.getMessage() != null) {
-                Message reasonMessage = new Message();
-                reasonMessage.setText(reviewTemplateBody.getReason());
-                update.setChannelPost(reasonMessage);
-            }
-
-            routerService.startFlow(update, bot, WorkflowAction.REFUSE_TEMPLATE_STEP);
-        }
-    }
-
     public Optional<Template> getTemplate(UUID id) {
         return Optional.ofNullable(jsonDBTemplate.findById(id, Template.class));
+    }
+
+    public void approveTemplate(Template template) {
+        template.setStatus(Status.APPROVED);
+        jsonDBTemplate.save(template, Template.class);
+        log.info("Template {} approved", template.getId());
+    }
+
+    public void rejectTemplate(Template template) {
+        template.setStatus(Status.REJECTED);
+        jsonDBTemplate.save(template, Template.class);
+        log.info("Template {} rejected", template.getId());
     }
 
     // temporary method to save templates from file system to jsondb
@@ -154,7 +124,7 @@ public class TemplateService {
                 .forEach(path -> {
                     Template template = new Template();
                     template.setId(UUID.fromString(path.getFileName().toString()));
-                    template.setWeight(100);
+                    template.setWeight(30);
                     template.setStatus(Status.APPROVED);
                     try {
                         String jsonStr = Files.readString(path.resolve("message.json"));
@@ -165,7 +135,7 @@ public class TemplateService {
                     }
                     try {
                         List<TemplateArea> areas =
-                            TelegramUtils.parseTemplateCsv(Files.readString(path.resolve("template.csv")));
+                            JsonDBUtils.parseTemplateCsv(Files.readString(path.resolve("template.csv")));
                         template.setAreas(areas);
                     } catch (IOException e) {
                         log.error("Failed to read areas csv: %s".formatted(path));
@@ -188,11 +158,5 @@ public class TemplateService {
         jsonDBTemplate.upsert(new ArrayList<>(authors.values()), Author.class);
 
         return templates;
-    }
-
-    private void approveTemplate(Template template) {
-        template.setStatus(Status.APPROVED);
-        jsonDBTemplate.save(template, Template.class);
-        log.info("Template {} approved", template.getId());
     }
 }

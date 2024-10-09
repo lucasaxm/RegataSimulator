@@ -18,7 +18,6 @@ regata-simulator:
   sources:
     path: ${REGATA_SIMULATOR_SOURCES_PATH}
   templates:
-    review-path: ${REGATA_SIMULATOR_REVIEW_TEMPLATES_PATH}
     path: ${REGATA_SIMULATOR_TEMPLATES_PATH}
 magick:
   path: ${MAGICK_PATH}
