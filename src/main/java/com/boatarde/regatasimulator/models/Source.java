@@ -1,19 +1,15 @@
 package com.boatarde.regatasimulator.models;
 
-import lombok.AllArgsConstructor;
+import io.jsondb.annotation.Document;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.util.List;
-import java.util.UUID;
-
 @Getter
 @Setter
 @NoArgsConstructor
 @Builder
-@AllArgsConstructor
-public class SourceResponse {
-    private UUID id;
+@Document(collection = "sources", schemaVersion = "1.0")
+public class Source extends CommonEntity {
 }

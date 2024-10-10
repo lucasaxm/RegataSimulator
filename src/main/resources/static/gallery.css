@@ -1,43 +1,110 @@
-/* Existing styles */
-[x-cloak] {
-    display: none !important;
-}
-
 .gallery-item {
     position: relative;
-    cursor: pointer;
+    overflow: hidden;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease;
+}
+
+.gallery-item:hover {
+    transform: scale(1.05);
 }
 
 .gallery-item img {
     width: 100%;
-    height: 200px;
+    height: auto;
     object-fit: cover;
 }
 
-.delete-btn {
-    position: absolute;
-    top: 5px;
-    right: 5px;
-    background-color: rgba(255, 255, 255, 0.7);
-    border: none;
-    border-radius: 50%;
-    padding: 5px 8px;
+.image-container {
+    position: relative;
+    width: 100%;
+    height: 0;
+    padding-bottom: 100%; /* Creates a square aspect ratio */
 }
 
-/* Modal styles */
-.modal-body img {
+.image-container img,
+.image-container canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+@media (max-width: 768px) {
+    .modal-dialog {
+        margin: 0;
+        width: 100vw;
+        max-width: none;
+        height: 100vh;
+    }
+
+    .modal-content {
+        height: 100%;
+        border: 0;
+        border-radius: 0;
+    }
+}
+
+.dark-mode {
+    background-color: #333;
+    color: #fff;
+}
+
+.dark-mode .modal-content {
+    background-color: #444;
+    color: #fff;
+}
+
+.custom-modal .modal-backdrop {
+    opacity: 0.5;
+}
+
+.custom-modal .modal-content {
+    background-color: #fff;
+}
+
+[data-bs-theme="dark"] .custom-modal .modal-content {
+    background-color: #333;
+    color: #fff;
+}
+
+.custom-modal .image-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+.custom-modal .image-container img {
+    max-width: 100%;
     max-height: 70vh;
     object-fit: contain;
 }
 
-.image-container {
-    display: inline-block;
-    position: relative;
+.custom-modal .details-container {
+    background-color: inherit;
 }
 
-#imageCanvas {
-    position: absolute;
-    top: 0;
-    left: 0;
-    pointer-events: none;
+@media (max-width: 767px) {
+    .custom-modal .modal-dialog {
+        margin: 0;
+        max-width: 100%;
+        height: 100%;
+    }
+
+    .custom-modal .modal-content {
+        height: 100%;
+        border-radius: 0;
+    }
+
+    .custom-modal .image-container {
+        height: 50vh;
+    }
+
+    .custom-modal .image-container img {
+        max-height: 100%;
+    }
 }

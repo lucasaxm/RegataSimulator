@@ -1,12 +1,12 @@
 package com.boatarde.regatasimulator.util;
 
-import com.boatarde.regatasimulator.models.AreaCorner;
-import com.boatarde.regatasimulator.models.TemplateArea;
+import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
+import org.telegram.telegrambots.meta.api.methods.GetFile;
 import org.telegram.telegrambots.meta.api.methods.send.SendAnimation;
 import org.telegram.telegrambots.meta.api.methods.send.SendAudio;
 import org.telegram.telegrambots.meta.api.methods.send.SendDocument;
@@ -16,7 +16,7 @@ import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
 import org.telegram.telegrambots.meta.api.methods.send.SendVideo;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.Message;
-import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.media.InputMedia;
 import org.telegram.telegrambots.meta.api.objects.media.InputMediaAnimation;
 import org.telegram.telegrambots.meta.api.objects.media.InputMediaAudio;
@@ -25,20 +25,18 @@ import org.telegram.telegrambots.meta.api.objects.media.InputMediaPhoto;
 import org.telegram.telegrambots.meta.api.objects.media.InputMediaVideo;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
-import javax.imageio.ImageIO;
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
-import java.io.StringReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 
 @UtilityClass
 @Slf4j
 public class TelegramUtils {
-    public static final String HEADER = "Area,TLx,TLy,TRx,TRy,BRx,BRy,BLx,BLy,Background";
     private static final ObjectMapper mapper = new ObjectMapper();
 
     /**
@@ -174,6 +172,41 @@ public class TelegramUtils {
         };
     }
 
+    /**
+     * Downloads a file from Telegram and saves it to the specified directory.
+     *
+     * @param bot       The Telegram bot instance.
+     * @param fileId    The ID of the file to download.
+     * @param directory The directory to save the downloaded file.
+     * @param fileName  The name to give the downloaded file.
+     * @return The path to the downloaded file.
+     * @throws TelegramApiException If there is an error with the Telegram API.
+     * @throws IOException          If there is an error reading or writing the file.
+     */
+    public static Path downloadTelegramFile(RegataSimulatorBot bot, String fileId, Path directory,
+                                            String fileName) throws TelegramApiException, IOException {
+        Path tmpFilePath = null;
+        try {
+            GetFile getFile = GetFile.builder().fileId(fileId).build();
+            String filePath = bot.execute(getFile).getFilePath();
+            File file = bot.downloadFile(filePath);
+            if (!FileUtils.isImage(file)) {
+                throw new RuntimeException("File is not an image");
+            }
+
+            Path newFile = directory.resolve(fileName);
+            tmpFilePath = file.toPath();
+            return Files.copy(tmpFilePath, newFile);
+        } catch (TelegramApiException | IOException e) {
+            log.error("Failed to download file {} from Telegram", fileId, e);
+            throw e;
+        } finally {
+            if (tmpFilePath != null) {
+                Files.deleteIfExists(tmpFilePath);
+            }
+        }
+    }
+
     public static String toJson(Object o, boolean prettyPrint) {
         if (o == null) {
             return null;
@@ -194,8 +227,8 @@ public class TelegramUtils {
         return toJson(o, false);
     }
 
-    public static Update fromJson(String str) throws JsonProcessingException {
-        return mapper.readValue(str, Update.class);
+    public static <T> T fromJson(String str, Class<T> clazz) throws JsonProcessingException {
+        return mapper.readValue(str, clazz);
     }
 
     public static void normalizeMediaGroupCaption(SendMediaGroup sendMediaGroup) {
@@ -207,53 +240,22 @@ public class TelegramUtils {
         }
     }
 
-    public static boolean isImage(File file) {
-        if (file == null || !file.exists() || !file.isFile()) {
-            return false;
+    public static String usernameOrFullName(User from) {
+        if (from.getUserName() != null && !from.getUserName().isEmpty()) {
+            return "@" + from.getUserName();
         }
-
-        try {
-            return ImageIO.read(file) != null;
-        } catch (IOException e) {
-            return false;
+        String fullName = from.getFirstName();
+        if (from.getLastName() != null && !from.getLastName().isEmpty()) {
+            fullName += " " + from.getLastName();
         }
+        return "<a href=\"tg://user?id=%d\">%s</a>".formatted(from.getId(), fullName);
     }
 
-    public static List<TemplateArea> parseTemplateCsv(String csv) throws IOException {
-        List<TemplateArea> areas = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(new StringReader(csv))) {
-            String line = reader.readLine(); // header
-            if (!HEADER.equals(line)) {
-                throw new IOException("Invalid CSV header");
-            }
-            while ((line = reader.readLine()) != null) {
-                String[] fields = line.split(",");
-                if (fields.length != 10) {
-                    throw new IOException("Invalid CSV format");
-                }
-
-                areas.add(TemplateArea.builder()
-                    .index(Integer.parseInt(fields[0]))
-                    .topLeft(AreaCorner.builder()
-                        .x(Integer.parseInt(fields[1]))
-                        .y(Integer.parseInt(fields[2]))
-                        .build())
-                    .topRight(AreaCorner.builder()
-                        .x(Integer.parseInt(fields[3]))
-                        .y(Integer.parseInt(fields[4]))
-                        .build())
-                    .bottomRight(AreaCorner.builder()
-                        .x(Integer.parseInt(fields[5]))
-                        .y(Integer.parseInt(fields[6]))
-                        .build())
-                    .bottomLeft(AreaCorner.builder()
-                        .x(Integer.parseInt(fields[7]))
-                        .y(Integer.parseInt(fields[8]))
-                        .build())
-                    .background(Integer.parseInt(fields[9]) == 1)
-                    .build());
-            }
+    public static UUID extractTemplateId(String data) {
+        String[] parts = data.split(":");
+        if (parts.length > 0) {
+            return UUID.fromString(parts[0]);
         }
-        return areas;
+        return null;
     }
 }

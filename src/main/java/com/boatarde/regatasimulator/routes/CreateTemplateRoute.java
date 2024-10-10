@@ -3,7 +3,7 @@ package com.boatarde.regatasimulator.routes;
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
 import com.boatarde.regatasimulator.models.TemplateArea;
-import com.boatarde.regatasimulator.util.TelegramUtils;
+import com.boatarde.regatasimulator.util.JsonDBUtils;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.generics.TelegramBot;
@@ -46,7 +46,7 @@ public class CreateTemplateRoute implements Route {
         }
 
         try {
-            List<TemplateArea> areas = TelegramUtils.parseTemplateCsv(caption);
+            List<TemplateArea> areas = JsonDBUtils.parseTemplateCsv(caption);
             return !areas.isEmpty();
         } catch (IOException e) {
             return false;

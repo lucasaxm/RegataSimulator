@@ -5,71 +5,80 @@ import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.flows.WorkflowStep;
 import com.boatarde.regatasimulator.flows.WorkflowStepRegistration;
-import com.boatarde.regatasimulator.models.TemplateArea;
+import com.boatarde.regatasimulator.models.Meme;
+import com.boatarde.regatasimulator.models.Source;
+import com.boatarde.regatasimulator.models.Status;
+import com.boatarde.regatasimulator.models.Template;
+import com.boatarde.regatasimulator.util.FileUtils;
+import com.boatarde.regatasimulator.util.JsonDBUtils;
+import io.jsondb.JsonDBTemplate;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
-import java.util.stream.Stream;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Slf4j
 @WorkflowStepRegistration(WorkflowAction.GET_RANDOM_SOURCE)
 public class GetRandomSourceStep implements WorkflowStep {
 
     private final String sourcesPathString;
+    private final JsonDBTemplate jsonDBTemplate;
 
-    public GetRandomSourceStep(@Value("${regata-simulator.sources.path}") String sourcesPathString) {
+    public GetRandomSourceStep(@Value("${regata-simulator.sources.path}") String sourcesPathString,
+                               JsonDBTemplate jsonDBTemplate) {
         this.sourcesPathString = sourcesPathString;
+        this.jsonDBTemplate = jsonDBTemplate;
     }
 
     @Override
     public WorkflowAction run(WorkflowDataBag bag) {
-        List<TemplateArea> templateAreaList =
-            bag.getGeneric(WorkflowDataKey.TEMPLATE_AREAS, List.class, TemplateArea.class);
-        try {
-            Path sourcesDir = Paths.get(sourcesPathString);
-            // Listar todos os arquivos .jpg e .png dentro de "resources/templates" e seus subdiretórios
-            try (Stream<Path> filesStream = Files.walk(sourcesDir)) {
-                List<Path> imageFiles = new ArrayList<>(filesStream
-                    .filter(Files::isRegularFile)  // Filtra apenas arquivos (não diretórios)
-                    .filter(path -> {
-                        String fileName = path.getFileName().toString().toLowerCase();
-                        return fileName.endsWith(".jpg") || fileName.endsWith(".png");
-                    })
-                    .toList());
+        Template template = bag.getGeneric(WorkflowDataKey.TEMPLATE, Template.class);
+        Path sourcesDirectory = Paths.get(sourcesPathString);
 
-                if (imageFiles.isEmpty()) {
-                    log.error("Nenhum arquivo de imagem encontrado.");
-                    return WorkflowAction.NONE;
-                }
-
-                List<Path> sourceFiles = new ArrayList<>();
-
-                Random random = new Random();
-                for (TemplateArea templateArea : templateAreaList) {
-                    if (imageFiles.isEmpty()) {
-                        log.error("Nem todos os arquivos de imagem necessários foram encontrados.");
-                        return WorkflowAction.NONE;
-                    }
-                    Path selectedFile = imageFiles.remove(random.nextInt(imageFiles.size()));
-
-                    log.info("Area  {} - Arquivo selecionado: {}", templateArea.getIndex(), selectedFile.getFileName());
-
-                    sourceFiles.add(selectedFile);
-                }
-
-                bag.put(WorkflowDataKey.SOURCE_FILES, sourceFiles);
-                return WorkflowAction.BUILD_MEME_STEP;
-            }
-        } catch (IOException e) {
-            log.error(e.getLocalizedMessage(), e);
+        List<Source> approvedSources =
+            jsonDBTemplate.find(JsonDBUtils.getJxQuery(Status.APPROVED, null), Source.class);
+        if (approvedSources.isEmpty()) {
+            log.error("No sources found.");
+            return WorkflowAction.NONE;
         }
-        return WorkflowAction.NONE;
+
+        // remove sources that have already been used from pool
+        List<Meme> memesHistory = bag.getGeneric(WorkflowDataKey.MEMES_HISTORY, List.class, Meme.class);
+        if (memesHistory == null) {
+            memesHistory = jsonDBTemplate.findAll(Meme.class).stream()
+                .sorted(JsonDBUtils.getMemeComparator().reversed())
+                .toList();
+            bag.put(WorkflowDataKey.MEMES_HISTORY, memesHistory);
+        }
+        memesHistory.stream()
+            .flatMap(meme -> meme.getSourceIds().stream())
+            .collect(Collectors.toSet())
+            .stream()
+            .limit(approvedSources.size() / 2)
+            .forEach(sourceId -> approvedSources.removeIf(source -> source.getId().equals(sourceId)));
+
+        List<Source> sources = JsonDBUtils.selectSourcesWithWeight(approvedSources, template.getAreas().size());
+        List<Path> sourceFiles = new ArrayList<>();
+        for (int i = 0; i < sources.size(); i++) {
+            Source source = sources.get(i);
+            Path selectedDirectory = sourcesDirectory.resolve(source.getId().toString());
+            Optional<Path> fileOpt = FileUtils.getFirstExistingFile(selectedDirectory, "source.jpg", "source.png");
+            if (fileOpt.isEmpty()) {
+                log.error("Source file not found: {}", source.getId());
+                return WorkflowAction.NONE;
+            }
+            Path sourceFile = fileOpt.get();
+            sourceFiles.add(i, sourceFile);
+            log.info("Area  {} - Source selecionada: {}", template.getAreas().get(i).getIndex(), source.getId());
+        }
+
+        bag.put(WorkflowDataKey.SOURCES, sources);
+        bag.put(WorkflowDataKey.SOURCE_FILES, sourceFiles);
+        return WorkflowAction.BUILD_MEME_STEP;
     }
 }

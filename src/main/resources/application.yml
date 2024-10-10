@@ -13,10 +13,11 @@ jasypt:
   encryptor:
     password: ${REGATA_SIMULATOR_ENC_PASSWORD}
 regata-simulator:
+  database:
+    path: ${REGATA_SIMULATOR_DB_PATH}
   sources:
     path: ${REGATA_SIMULATOR_SOURCES_PATH}
   templates:
-    review-path: ${REGATA_SIMULATOR_REVIEW_TEMPLATES_PATH}
     path: ${REGATA_SIMULATOR_TEMPLATES_PATH}
 magick:
   path: ${MAGICK_PATH}

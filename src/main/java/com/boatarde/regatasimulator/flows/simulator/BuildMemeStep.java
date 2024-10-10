@@ -6,6 +6,7 @@ import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.flows.WorkflowStep;
 import com.boatarde.regatasimulator.flows.WorkflowStepRegistration;
+import com.boatarde.regatasimulator.models.Template;
 import com.boatarde.regatasimulator.models.TemplateArea;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,22 +34,24 @@ public class BuildMemeStep implements WorkflowStep {
     @Override
     public WorkflowAction run(WorkflowDataBag bag) {
         editCreatingTemplateMessage(bag, 0);
+
         List<Path> sourceFiles = bag.getGeneric(WorkflowDataKey.SOURCE_FILES, List.class, Path.class);
+
         Path templateFile = bag.get(WorkflowDataKey.TEMPLATE_FILE, Path.class);
-        List<TemplateArea> templateAreaList =
-            bag.getGeneric(WorkflowDataKey.TEMPLATE_AREAS, List.class, TemplateArea.class);
+        Template template = bag.get(WorkflowDataKey.TEMPLATE, Template.class);
+
         var distortedSources = new ArrayList<Path>();
         try {
             for (int i = 0; i < sourceFiles.size(); i++) {
                 distortedSources.add(i,
-                    buildDistortedSource(templateFile, sourceFiles.get(i), templateAreaList.get(i)));
-                int progress = i * 100 / (sourceFiles.size() + 1);
+                    buildDistortedSource(templateFile, sourceFiles.get(i), template.getAreas().get(i)));
+                int progress = (i + 1) * 100 / (sourceFiles.size() + 2);
                 editCreatingTemplateMessage(bag, progress);
             }
-            int progress = sourceFiles.size() * 100 / (sourceFiles.size() + 1);
+            int progress = (sourceFiles.size() + 1) * 100 / (sourceFiles.size() + 2);
             editCreatingTemplateMessage(bag, progress);
             Path result =
-                compositeFinalImage(templateFile, templateFile.getParent(), distortedSources, templateAreaList);
+                compositeFinalImage(templateFile, templateFile.getParent(), distortedSources, template.getAreas());
             bag.put(WorkflowDataKey.MEME_FILE, result);
         } catch (Exception e) {
             log.error(e.getLocalizedMessage(), e);

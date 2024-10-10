@@ -38,3 +38,8 @@ out/
 /src/main/resources/sources/
 /src/main/resources/templates/
 /src/main/resources/review_templates/
+/src/main/resources/database/
+/src/main/resources/templates_prod/
+/src/main/resources/templates_test/
+/src/main/resources/RegataSimulator.log
+/src/main/java/com/boatarde/regatasimulator/LogProcessor.java
