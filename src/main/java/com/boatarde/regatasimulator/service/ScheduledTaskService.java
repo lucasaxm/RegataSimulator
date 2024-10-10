@@ -16,7 +16,7 @@ public class ScheduledTaskService {
         this.routerService = routerService;
     }
 
-    @Scheduled(cron = "0 0,15,30,45 * * * *")
+    @Scheduled(cron = "0 0,30 * * * *")
     public void runScheduledTask() {
         routerService.startFlow(null, bot, WorkflowAction.GET_RANDOM_TEMPLATE);
     }
