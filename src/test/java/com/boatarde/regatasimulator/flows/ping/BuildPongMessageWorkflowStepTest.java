@@ -44,6 +44,6 @@ class BuildPongMessageWorkflowStepTest {
         assertEquals(update.getMessage().getMessageId(), sendMessage.getReplyToMessageId());
         verifyNoInteractions(regataSimulatorBot);
 
-        assertEquals(WorkflowAction.SEND_MESSAGE, result);
+        assertEquals(WorkflowAction.SEND_MESSAGE_STEP, result);
     }
 }

@@ -1,6 +1,7 @@
 package com.boatarde.regatasimulator.util;
 
 import com.boatarde.regatasimulator.models.AreaCorner;
+import com.boatarde.regatasimulator.models.Author;
 import com.boatarde.regatasimulator.models.CommonEntity;
 import com.boatarde.regatasimulator.models.Meme;
 import com.boatarde.regatasimulator.models.Source;
@@ -139,5 +140,16 @@ public class JsonDBUtils {
             }
         }
         return areas;
+    }
+
+    public static String usernameOrFullName(Author author) {
+        if (author.getUserName() != null && !author.getUserName().isEmpty()) {
+            return "@" + author.getUserName();
+        }
+        String fullName = author.getFirstName();
+        if (author.getLastName() != null && !author.getLastName().isEmpty()) {
+            fullName += " " + author.getLastName();
+        }
+        return "<a href=\"tg://user?id=%d\">%s</a>".formatted(author.getId(), fullName);
     }
 }

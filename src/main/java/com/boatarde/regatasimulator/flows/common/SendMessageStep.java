@@ -13,7 +13,7 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 @Slf4j
-@WorkflowStepRegistration(WorkflowAction.SEND_MESSAGE)
+@WorkflowStepRegistration(WorkflowAction.SEND_MESSAGE_STEP)
 public class SendMessageStep implements WorkflowStep {
 
     @Override
@@ -22,7 +22,7 @@ public class SendMessageStep implements WorkflowStep {
         SendMessage message = bag.get(WorkflowDataKey.SEND_MESSAGE, SendMessage.class);
         try {
             BotApiObject response = regataSimulatorBot.execute(message);
-            log.info("Response: {}", TelegramUtils.toJson(response, true));
+            log.info("Response: {}", TelegramUtils.toJson(response, false));
         } catch (TelegramApiException e) {
             log.error(e.getLocalizedMessage(), e);
         }

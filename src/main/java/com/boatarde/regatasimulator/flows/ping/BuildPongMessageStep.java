@@ -26,6 +26,6 @@ public class BuildPongMessageStep implements WorkflowStep {
             .text(String.format("pong! (%ds)", Instant.now().getEpochSecond() - update.getMessage().getDate()))
             .build());
 
-        return WorkflowAction.SEND_MESSAGE;
+        return WorkflowAction.SEND_MESSAGE_STEP;
     }
 }

@@ -17,7 +17,12 @@ public class ScheduledTaskService {
     }
 
     @Scheduled(cron = "0 0,30 * * * *")
-    public void runScheduledTask() {
+    public void generateMeme() {
         routerService.startFlow(null, bot, WorkflowAction.GET_RANDOM_TEMPLATE);
+    }
+
+    @Scheduled(cron = "0 15 12 * * SUN")
+    public void backupJsonDB() {
+        routerService.startFlow(null, bot, WorkflowAction.BACKUP_JSON_DB_STEP);
     }
 }
