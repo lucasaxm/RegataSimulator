@@ -81,7 +81,7 @@ public class SendMemeStep implements WorkflowStep {
     }
 
     private void updateMemesDB(List<Meme> memes, Template template, List<Source> sources, Message response) {
-        if (memes.size() >= 100) {
+        if (memes.size() >= 1000) {
             Meme removed = jsonDBTemplate.remove(memes.getLast(), Meme.class);
             if (removed == null) {
                 log.error("Failed to delete meme: {}", memes.getLast());

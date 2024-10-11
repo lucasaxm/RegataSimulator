@@ -83,13 +83,13 @@ class RouterServiceTest {
         WorkflowStep firstStep = mock(WorkflowStep.class);
         WorkflowStep nextStep = mock(WorkflowStep.class);
         when(workflowManager.getStepByEnum(WorkflowAction.BUILD_PONG_MESSAGE)).thenReturn(Optional.of(firstStep));
-        when(firstStep.run(any())).thenReturn(WorkflowAction.SEND_MESSAGE);
-        when(workflowManager.getStepByEnum(WorkflowAction.SEND_MESSAGE)).thenReturn(Optional.of(nextStep));
+        when(firstStep.run(any())).thenReturn(WorkflowAction.SEND_MESSAGE_STEP);
+        when(workflowManager.getStepByEnum(WorkflowAction.SEND_MESSAGE_STEP)).thenReturn(Optional.of(nextStep));
         RouterService routerService = new RouterService(workflowManager, List.of(route1, route2));
         routerService.route(update, bot);
 
         verify(workflowManager).getStepByEnum(WorkflowAction.BUILD_PONG_MESSAGE);
-        verify(workflowManager).getStepByEnum(WorkflowAction.SEND_MESSAGE);
+        verify(workflowManager).getStepByEnum(WorkflowAction.SEND_MESSAGE_STEP);
         verify(firstStep).run(any());
         verify(nextStep).run(any());
     }

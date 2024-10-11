@@ -6,6 +6,7 @@ import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.flows.WorkflowStep;
 import com.boatarde.regatasimulator.flows.WorkflowStepRegistration;
+import com.boatarde.regatasimulator.models.Author;
 import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.models.Template;
 import com.boatarde.regatasimulator.util.FileUtils;
@@ -73,6 +74,15 @@ public class CreateTemplateStep implements WorkflowStep {
 
             saveTemplate(template);
 
+            Author author = Author.builder()
+                .id(update.getMessage().getFrom().getId())
+                .userName(update.getMessage().getFrom().getUserName())
+                .firstName(update.getMessage().getFrom().getFirstName())
+                .lastName(update.getMessage().getFrom().getLastName())
+                .build();
+
+            saveAuthor(author);
+
             bag.put(WorkflowDataKey.TEMPLATE_FILE, templateFile);
             bag.put(WorkflowDataKey.TEMPLATE, template);
             bag.put(WorkflowDataKey.CREATING_TEMPLATE_MESSAGE, response);
@@ -86,6 +96,11 @@ public class CreateTemplateStep implements WorkflowStep {
             return WorkflowAction.NONE;
         }
         return WorkflowAction.GET_RANDOM_SOURCE;
+    }
+
+    private void saveAuthor(Author author) {
+        log.info("Inserting or updating author {} into collection.", author.getId());
+        jsonDBTemplate.upsert(author);
     }
 
     private void saveTemplate(Template template) {
