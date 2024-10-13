@@ -57,8 +57,7 @@ public class GetRandomSourceStep implements WorkflowStep {
         }
         memesHistory.stream()
             .flatMap(meme -> meme.getSourceIds().stream())
-            .collect(Collectors.toSet())
-            .stream()
+            .distinct()
             .limit(approvedSources.size() / 2)
             .forEach(sourceId -> approvedSources.removeIf(source -> source.getId().equals(sourceId)));
 
