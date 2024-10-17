@@ -6,16 +6,16 @@ import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.flows.WorkflowStep;
 import com.boatarde.regatasimulator.flows.WorkflowStepRegistration;
-import com.boatarde.regatasimulator.models.Template;
 import com.boatarde.regatasimulator.service.TemplateService;
 import com.boatarde.regatasimulator.util.TelegramUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
-import org.telegram.telegrambots.meta.api.methods.send.SendDocument;
+import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageReplyMarkup;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.MaybeInaccessibleMessage;
+import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
@@ -43,7 +43,7 @@ public class ConfirmReviewTemplateStep implements WorkflowStep {
         UUID templateId = TelegramUtils.extractTemplateId(update.getCallbackQuery().getData());
 
         try {
-            Template template = templateService.getTemplate(templateId)
+            templateService.getTemplate(templateId)
                 .orElseThrow(() -> new IllegalArgumentException("Template not found on jsondb."));
 
             bot.execute(AnswerCallbackQuery.builder()
@@ -56,9 +56,9 @@ public class ConfirmReviewTemplateStep implements WorkflowStep {
                 .replyMarkup(null)
                 .build());
 
-            bot.execute(SendDocument.builder()
+            bot.execute(SendPhoto.builder()
                 .chatId(botAuthorId)
-                .document(new InputFile(template.getMessage().getDocument().getFileId()))
+                .photo(new InputFile(((Message) message).getPhoto().getLast().getFileId()))
                 .caption("Template id <code>%s</code> aguardando aprovação.\nEnviado por %s".formatted(templateId,
                     TelegramUtils.usernameOrFullName(update.getCallbackQuery().getFrom())))
                 .parseMode("HTML")
