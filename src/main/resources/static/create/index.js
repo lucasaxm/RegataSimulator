@@ -337,9 +337,18 @@ function applyTelegramTheme() {
 }
 
 function handleDoubleClick(e) {
+    e.preventDefault(); // Prevent zooming on double-tap on mobile devices
     const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) * canvas.width / rect.width;
-    const y = (e.clientY - rect.top) * canvas.height / rect.height;
+    let x, y;
+
+    if (e.type === 'dblclick') {
+        x = (e.clientX - rect.left) * canvas.width / rect.width;
+        y = (e.clientY - rect.top) * canvas.height / rect.height;
+    } else if (e.type === 'touchend') {
+        const touch = e.changedTouches[0];
+        x = (touch.clientX - rect.left) * canvas.width / rect.width;
+        y = (touch.clientY - rect.top) * canvas.height / rect.height;
+    }
 
     const activeArea = polygons[activeAreaIndex];
     const nearestCornerIndex = activeArea.getNearestCorner(x, y);
@@ -469,6 +478,18 @@ clipboard.on('error', function (e) {
     showToast("Erro ao copiar.", "#dc3545");
 });
 
+// Mouse double-click event
 canvas.addEventListener('dblclick', handleDoubleClick);
+
+// Touch double-tap event
+let lastTap = 0;
+canvas.addEventListener('touchend', function(e) {
+    const currentTime = new Date().getTime();
+    const tapLength = currentTime - lastTap;
+    if (tapLength < 500 && tapLength > 0) {
+        handleDoubleClick(e);
+    }
+    lastTap = currentTime;
+});
 
 updateAreaSelector();
