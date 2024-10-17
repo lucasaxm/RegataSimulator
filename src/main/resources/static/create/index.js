@@ -318,7 +318,6 @@ function applyTelegramTheme() {
         document.getElementById('addAreaButton'),
         document.getElementById('polygonSelector'),
         document.getElementById('cloneAreaButton')
-
     ];
     secondaryButtons.forEach(button => {
         if (button) {
@@ -335,6 +334,63 @@ function applyTelegramTheme() {
         resetCornersButton.style.color = colorScheme.destructive_text_color;
         resetCornersButton.style.borderColor = colorScheme.destructive_text_color;
     }
+}
+
+function handleDoubleClick(e) {
+    e.preventDefault(); // Prevent zooming on double-tap on mobile devices
+    const rect = canvas.getBoundingClientRect();
+    let x, y;
+
+    if (e.type === 'dblclick') {
+        x = (e.clientX - rect.left) * canvas.width / rect.width;
+        y = (e.clientY - rect.top) * canvas.height / rect.height;
+    } else if (e.type === 'touchend') {
+        const touch = e.changedTouches[0];
+        x = (touch.clientX - rect.left) * canvas.width / rect.width;
+        y = (touch.clientY - rect.top) * canvas.height / rect.height;
+    }
+
+    const activeArea = polygons[activeAreaIndex];
+    const nearestCornerIndex = activeArea.getNearestCorner(x, y);
+    straightenAreaFromCorner(activeArea, nearestCornerIndex);
+}
+
+function straightenAreaFromCorner(area, cornerIndex) {
+    const corners = area.corners;
+    const baseCorner = corners[cornerIndex];
+    const nextCorner = corners[(cornerIndex + 1) % 4];
+    const oppositeCorner = corners[(cornerIndex + 2) % 4];
+    const previousCorner = corners[(cornerIndex + 3) % 4];
+
+    switch (baseCorner.position) {
+        case "TL":
+            nextCorner.y = baseCorner.y;
+            previousCorner.x = baseCorner.x;
+            oppositeCorner.x = nextCorner.x;
+            oppositeCorner.y = previousCorner.y;
+            break;
+        case "TR":
+            nextCorner.x = baseCorner.x;
+            previousCorner.y = baseCorner.y;
+            oppositeCorner.y = nextCorner.y;
+            oppositeCorner.x = previousCorner.x;
+            break;
+        case "BR":
+            nextCorner.y = baseCorner.y;
+            previousCorner.x = baseCorner.x;
+            oppositeCorner.x = nextCorner.x;
+            oppositeCorner.y = previousCorner.y;
+            break;
+        case "BL":
+            nextCorner.x = baseCorner.x;
+            previousCorner.y = baseCorner.y;
+            oppositeCorner.y = nextCorner.y;
+            oppositeCorner.x = previousCorner.x;
+            break;
+    }
+
+    draw();
+    updateCoordinates();
 }
 
 imageLoader.addEventListener('change', e => {
@@ -420,6 +476,20 @@ clipboard.on('success', function (e) {
 
 clipboard.on('error', function (e) {
     showToast("Erro ao copiar.", "#dc3545");
+});
+
+// Mouse double-click event
+canvas.addEventListener('dblclick', handleDoubleClick);
+
+// Touch double-tap event
+let lastTap = 0;
+canvas.addEventListener('touchend', function(e) {
+    const currentTime = new Date().getTime();
+    const tapLength = currentTime - lastTap;
+    if (tapLength < 500 && tapLength > 0) {
+        handleDoubleClick(e);
+    }
+    lastTap = currentTime;
 });
 
 updateAreaSelector();
