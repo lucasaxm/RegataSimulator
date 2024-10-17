@@ -317,9 +317,7 @@ function applyTelegramTheme() {
         document.querySelector('.input-group-text'),
         document.getElementById('addAreaButton'),
         document.getElementById('polygonSelector'),
-        document.getElementById('cloneAreaButton'),
-        document.getElementById('straightenButton')
-
+        document.getElementById('cloneAreaButton')
     ];
     secondaryButtons.forEach(button => {
         if (button) {
@@ -338,18 +336,49 @@ function applyTelegramTheme() {
     }
 }
 
-function straightenArea() {
-    const activeArea = polygons[activeAreaIndex];
-    const topLeft = activeArea.corners.find(corner => corner.position === "TL");
-    const topRight = activeArea.corners.find(corner => corner.position === "TR");
-    const bottomLeft = activeArea.corners.find(corner => corner.position === "BL");
+function handleDoubleClick(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * canvas.width / rect.width;
+    const y = (e.clientY - rect.top) * canvas.height / rect.height;
 
-    activeArea.corners = [
-        { position: "TL", x: topLeft.x, y: topLeft.y },
-        { position: "TR", x: topRight.x, y: topLeft.y },
-        { position: "BR", x: topRight.x, y: bottomLeft.y },
-        { position: "BL", x: topLeft.x, y: bottomLeft.y }
-    ];
+    const activeArea = polygons[activeAreaIndex];
+    const nearestCornerIndex = activeArea.getNearestCorner(x, y);
+    straightenAreaFromCorner(activeArea, nearestCornerIndex);
+}
+
+function straightenAreaFromCorner(area, cornerIndex) {
+    const corners = area.corners;
+    const baseCorner = corners[cornerIndex];
+    const nextCorner = corners[(cornerIndex + 1) % 4];
+    const oppositeCorner = corners[(cornerIndex + 2) % 4];
+    const previousCorner = corners[(cornerIndex + 3) % 4];
+
+    switch (baseCorner.position) {
+        case "TL":
+            nextCorner.y = baseCorner.y;
+            previousCorner.x = baseCorner.x;
+            oppositeCorner.x = nextCorner.x;
+            oppositeCorner.y = previousCorner.y;
+            break;
+        case "TR":
+            nextCorner.x = baseCorner.x;
+            previousCorner.y = baseCorner.y;
+            oppositeCorner.y = nextCorner.y;
+            oppositeCorner.x = previousCorner.x;
+            break;
+        case "BR":
+            nextCorner.y = baseCorner.y;
+            previousCorner.x = baseCorner.x;
+            oppositeCorner.x = nextCorner.x;
+            oppositeCorner.y = previousCorner.y;
+            break;
+        case "BL":
+            nextCorner.x = baseCorner.x;
+            previousCorner.y = baseCorner.y;
+            oppositeCorner.y = nextCorner.y;
+            oppositeCorner.x = previousCorner.x;
+            break;
+    }
 
     draw();
     updateCoordinates();
@@ -440,7 +469,6 @@ clipboard.on('error', function (e) {
     showToast("Erro ao copiar.", "#dc3545");
 });
 
-document.getElementById('straightenButton').addEventListener('click', straightenArea);
-
+canvas.addEventListener('dblclick', handleDoubleClick);
 
 updateAreaSelector();
