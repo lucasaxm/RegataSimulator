@@ -317,7 +317,8 @@ function applyTelegramTheme() {
         document.querySelector('.input-group-text'),
         document.getElementById('addAreaButton'),
         document.getElementById('polygonSelector'),
-        document.getElementById('cloneAreaButton')
+        document.getElementById('cloneAreaButton'),
+        document.getElementById('straightenButton')
 
     ];
     secondaryButtons.forEach(button => {
@@ -335,6 +336,23 @@ function applyTelegramTheme() {
         resetCornersButton.style.color = colorScheme.destructive_text_color;
         resetCornersButton.style.borderColor = colorScheme.destructive_text_color;
     }
+}
+
+function straightenArea() {
+    const activeArea = polygons[activeAreaIndex];
+    const topLeft = activeArea.corners.find(corner => corner.position === "TL");
+    const topRight = activeArea.corners.find(corner => corner.position === "TR");
+    const bottomLeft = activeArea.corners.find(corner => corner.position === "BL");
+
+    activeArea.corners = [
+        { position: "TL", x: topLeft.x, y: topLeft.y },
+        { position: "TR", x: topRight.x, y: topLeft.y },
+        { position: "BR", x: topRight.x, y: bottomLeft.y },
+        { position: "BL", x: topLeft.x, y: bottomLeft.y }
+    ];
+
+    draw();
+    updateCoordinates();
 }
 
 imageLoader.addEventListener('change', e => {
@@ -421,5 +439,8 @@ clipboard.on('success', function (e) {
 clipboard.on('error', function (e) {
     showToast("Erro ao copiar.", "#dc3545");
 });
+
+document.getElementById('straightenButton').addEventListener('click', straightenArea);
+
 
 updateAreaSelector();
