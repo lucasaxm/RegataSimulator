@@ -15,6 +15,9 @@ import java.util.Optional;
 @Component
 public class CreateTemplateRoute implements Route {
 
+    public static final String JPEG_MIME = "image/jpeg";
+    public static final String PNG_MIME = "image/png";
+
     @Override
     public Optional<WorkflowAction> test(Update update, TelegramBot bot) {
         if (!isValidBot(bot)) {
@@ -37,6 +40,11 @@ public class CreateTemplateRoute implements Route {
 
     private boolean isValidTemplateFile(Update update) {
         if (!update.hasMessage() || !update.getMessage().isUserMessage() || !update.getMessage().hasDocument()) {
+            return false;
+        }
+
+        String mimeType = update.getMessage().getDocument().getMimeType();
+        if (!JPEG_MIME.equals(mimeType) && !PNG_MIME.equals(mimeType)) {
             return false;
         }
 

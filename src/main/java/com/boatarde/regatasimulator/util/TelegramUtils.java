@@ -190,9 +190,6 @@ public class TelegramUtils {
             GetFile getFile = GetFile.builder().fileId(fileId).build();
             String filePath = bot.execute(getFile).getFilePath();
             File file = bot.downloadFile(filePath);
-            if (!FileUtils.isImage(file)) {
-                throw new RuntimeException("File is not an image");
-            }
 
             Path newFile = directory.resolve(fileName);
             tmpFilePath = file.toPath();

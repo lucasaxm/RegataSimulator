@@ -23,18 +23,6 @@ public class FileUtils {
         return Optional.empty();
     }
 
-    public static boolean isImage(File file) {
-        if (file == null || !file.exists() || !file.isFile()) {
-            return false;
-        }
-
-        try {
-            return ImageIO.read(file) != null;
-        } catch (IOException e) {
-            return false;
-        }
-    }
-
     public static String getFileExtension(String fileName) {
         int dotIndex = fileName.lastIndexOf('.');
         return (dotIndex == -1) ? "" : fileName.substring(dotIndex);
