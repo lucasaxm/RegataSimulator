@@ -152,7 +152,7 @@ jobs:
 
             while true; do
                 echo "Starting RegataSimulator..." >> \$LOG_FILE
-                \$JAVA_PATH -Dspring.profiles.active=$SPRING_PROFILES_ACTIVE -jar \$JAR_FILE >> \$LOG_FILE 2>&1
+                subprocess 629145600 \$JAVA_PATH -Dspring.profiles.active=$SPRING_PROFILES_ACTIVE -jar \$JAR_FILE >> \$LOG_FILE 2>&1
                 echo "RegataSimulator exited with code \$?. Restarting in 5 seconds..." >> \$LOG_FILE
                 sleep 5
             done
