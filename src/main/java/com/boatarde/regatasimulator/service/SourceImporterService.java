@@ -41,24 +41,39 @@ public class SourceImporterService {
     }
 
     public List<Source> importFromCsv(String csvContent) throws Exception {
-        List<SourceCsvRecord> records = parseCsv(csvContent);
+        log.info("Starting import of sources from CSV content");
 
-        // Filter only 'photo' entries and those which do not exist yet
+        List<SourceCsvRecord> records = parseCsv(csvContent);
+        log.info("Parsed {} records from CSV", records.size());
+
         List<SourceCsvRecord> filtered = records.stream()
             .filter(r -> "photo".equalsIgnoreCase(r.getTipo()))
             .filter(r -> !sourceExists(r.getNome()))
             .toList();
+        log.info("Filtered {} records of type 'photo' and not already existing", filtered.size());
 
         List<Source> createdSources = new ArrayList<>();
-        for (SourceCsvRecord record : filtered) {
+        for (int i = 0; i < filtered.size(); i++) {
+            SourceCsvRecord record = filtered.get(i);
             try {
+                log.info("Processing record: {}/{}", i + 1, filtered.size());
                 Source source = createSourceFromRecord(record);
                 createdSources.add(source);
+                log.info("Successfully created source: {}", source);
             } catch (Exception e) {
                 log.error("Failed to create source for record {}. Error: {}", record.getNome(), e.getMessage(), e);
             }
         }
 
+        if (!createdSources.isEmpty()) {
+            log.info("Saving {} created sources to the database", createdSources.size());
+            jsonDBTemplate.insert(createdSources, Source.class);
+            log.info("Successfully saved all created sources");
+        } else {
+            log.info("No new sources were created");
+        }
+
+        log.info("Import process completed with {} new sources created", createdSources.size());
         return createdSources;
     }
 
@@ -66,11 +81,11 @@ public class SourceImporterService {
         UUID uuid = UUID.randomUUID();
         Path newDir = Path.of(sourcesPathString, uuid.toString());
         Files.createDirectories(newDir);
+        log.info("Created directory for source {}: {}", record.getNome(), newDir);
 
-        // Download the telegram photo
         fileDownloader.downloadTelegramPhoto(record.getConteudo(), newDir);
+        log.info("Downloaded Telegram photo for source {} to directory: {}", record.getNome(), newDir);
 
-        // Create Source
         Source source = new Source();
         source.setId(uuid);
         source.setDescription(record.getNome());
@@ -78,32 +93,37 @@ public class SourceImporterService {
         source.setMessage(null);
         source.setStatus(Status.APPROVED);
 
-        jsonDBTemplate.insert(source);
+        log.info("Created Source object for {}: {}", record.getNome(), source);
         return source;
     }
 
     private boolean sourceExists(String description) {
+        log.debug("Checking if source with description '{}' already exists", description);
         String jxQuery = "/.[description='" + description.replace("'", "\\'") + "']";
-        return !jsonDBTemplate.find(jxQuery, Source.class).isEmpty();
+        boolean exists = !jsonDBTemplate.find(jxQuery, Source.class).isEmpty();
+        log.debug("Source with description '{}' exists: {}", description, exists);
+        return exists;
     }
 
     private List<SourceCsvRecord> parseCsv(String csvContent) throws Exception {
+        log.info("Parsing CSV content");
         try (CSVReader csvReader = new CSVReader(new StringReader(csvContent))) {
             List<String[]> lines = csvReader.readAll();
 
             if (lines.isEmpty()) {
+                log.warn("CSV content is empty");
                 return Collections.emptyList();
             }
 
-            // Assuming the first line is header: nome,texto,tipo,conteudo
-            // Validate or skip this step if we trust format
-            String[] header = lines.removeFirst();
+            log.info("Read {} lines from CSV", lines.size());
+            String[] header = lines.remove(0);
+            log.debug("CSV Header: {}", String.join(",", header));
             Map<String, Integer> headerMap = mapHeaders(header);
 
             List<SourceCsvRecord> records = new ArrayList<>();
             for (String[] row : lines) {
                 if (row.length < 4) {
-                    // skip malformed line
+                    log.warn("Skipping malformed CSV row: {}", (Object) row);
                     continue;
                 }
                 String nome = getField(row, headerMap, "nome");
@@ -112,6 +132,7 @@ public class SourceImporterService {
                 String conteudo = getField(row, headerMap, "conteudo");
                 records.add(new SourceCsvRecord(nome, texto, tipo, conteudo));
             }
+            log.info("Parsed {} valid records from CSV", records.size());
             return records;
         } catch (CsvException e) {
             log.error("Error parsing CSV: {}", e.getMessage(), e);
@@ -124,11 +145,14 @@ public class SourceImporterService {
         for (int i = 0; i < header.length; i++) {
             map.put(header[i].trim().toLowerCase(), i);
         }
+        log.debug("Mapped CSV headers: {}", map);
         return map;
     }
 
     private String getField(String[] row, Map<String, Integer> headerMap, String fieldName) {
         Integer idx = headerMap.get(fieldName);
-        return (idx != null && idx < row.length) ? row[idx].trim() : "";
+        String value = (idx != null && idx < row.length) ? row[idx].trim() : "";
+        log.debug("Extracted field '{}' from row: {}", fieldName, value);
+        return value;
     }
 }
