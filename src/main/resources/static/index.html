@@ -37,7 +37,7 @@
         </li>
     </ul>
     <div class="mb-3">
-        <select class="form-select" x-model="templateStatus" @change="filterTemplates()">
+        <select class="form-select" x-model="itemStatus" @change="filterItems()">
             <option value="">All Statuses</option>
             <option value="REVIEW">Review</option>
             <option value="APPROVED">Approved</option>
@@ -59,6 +59,7 @@
                         <div class="gallery-item" :data-id="item.id">
                             <img :src="`/api/sources/${item.id}.png`" alt="Source Image" class="img-fluid rounded"
                                  @click="openModal(item)" loading="lazy">
+                            <span class="badge" :class="getStatusBadgeClass(item.status)" x-text="item.status"></span>
                         </div>
                     </div>
                 </template>
@@ -112,11 +113,12 @@
                                 <template x-if="selectedItem">
                                     <div>
                                         <h6 class="mb-3">Item Information</h6>
-                                        <p class="mb-2"><strong>Weight:</strong> <span
-                                                x-text="selectedItem.weight"></span></p>
-                                        <p class="mb-3"><strong>Status:</strong> <span
-                                                x-text="selectedItem.status"></span></p>
-                                        <template x-if="selectedItem.message" class="mb-3">
+                                        <p class="mb-2"><strong>Weight:</strong> <span x-text="selectedItem.weight"></span></p>
+                                        <p class="mb-3"><strong>Status:</strong> <span x-text="selectedItem.status"></span></p>
+                                        <template x-if="currentTab === 'sources' && selectedItem.description">
+                                            <p class="mb-3"><strong>Description:</strong> <span x-text="selectedItem.description"></span></p>
+                                        </template>
+                                        <template x-if="selectedItem.message">
                                             <p><strong>Author:</strong>
                                                 <span x-show="selectedItem.message.from.first_name"
                                                       x-text="selectedItem.message.from.first_name"></span>
@@ -129,7 +131,7 @@
                                     </div>
                                 </template>
                             </div>
-                            <template x-if="currentTab === 'templates' && selectedItem.status !== 'APPROVED'">
+                            <template x-if="selectedItem.status !== 'APPROVED'">
                                 <div class="mt-4">
                                     <h6 class="mb-3">Review</h6>
                                     <div class="form-check mb-2">
@@ -154,7 +156,7 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <template x-if="currentTab === 'templates' && selectedItem.status !== 'APPROVED'">
+                <template x-if="selectedItem.status !== 'APPROVED'">
                     <button type="button" class="btn btn-primary" @click="sendReview()">Send Review</button>
                 </template>
                 <template x-if="selectedItem?.status !== 'REVIEW'">
