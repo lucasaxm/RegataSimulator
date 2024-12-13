@@ -117,6 +117,12 @@ public class SourceController {
         }
     }
 
+    @PostMapping("/reset_weights")
+    public ResponseEntity<Void> resetWeights() {
+        sourceService.resetAllWeights();
+        return ResponseEntity.noContent().build();
+    }
+
     private Source getSource(UUID id) {
         return sourceService.getSource(id)
             .orElseThrow(() -> new RuntimeException("Source not found: " + id));
