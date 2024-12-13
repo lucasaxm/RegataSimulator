@@ -28,13 +28,14 @@ public class CreateSourceStep implements WorkflowStep {
 
     private final JsonDBTemplate jsonDBTemplate;
     private final String sourcesPathString;
+    private final int initialWeight;
 
-    public CreateSourceStep(
-        JsonDBTemplate jsonDBTemplate,
-        @Value("${regata-simulator.sources.path}") String sourcesPathString
-    ) {
+    public CreateSourceStep(JsonDBTemplate jsonDBTemplate,
+                            @Value("${regata-simulator.sources.path}") String sourcesPathString,
+                            @Value("${regata-simulator.sources.initial-weight}") int initialWeight) {
         this.jsonDBTemplate = jsonDBTemplate;
         this.sourcesPathString = sourcesPathString;
+        this.initialWeight = initialWeight;
     }
 
     @Override
@@ -69,7 +70,7 @@ public class CreateSourceStep implements WorkflowStep {
 
         Source source = new Source();
         source.setId(sourceId);
-        source.setWeight(10);
+        source.setWeight(initialWeight);
         source.setStatus(Status.REVIEW);
         source.setMessage(update.getMessage());
         source.setDescription(extractDescription(update.getMessage().getCaption()));

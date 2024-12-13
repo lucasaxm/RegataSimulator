@@ -7,7 +7,9 @@ import com.boatarde.regatasimulator.models.ReviewSourceBody;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.service.RouterService;
+import com.boatarde.regatasimulator.service.SourceImporterService;
 import com.boatarde.regatasimulator.service.SourceService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -22,18 +24,23 @@ import org.springframework.web.bind.annotation.RestController;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 
+import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/sources")
 public class SourceController {
 
     private final SourceService sourceService;
+    private final SourceImporterService sourceImporterService;
     private final RegataSimulatorBot bot;
     private final RouterService routerService;
 
-    public SourceController(SourceService sourceService, RegataSimulatorBot bot, RouterService routerService) {
+    public SourceController(SourceService sourceService, SourceImporterService sourceImporterService,
+                            RegataSimulatorBot bot, RouterService routerService) {
         this.sourceService = sourceService;
+        this.sourceImporterService = sourceImporterService;
         this.bot = bot;
         this.routerService = routerService;
     }
@@ -97,6 +104,17 @@ public class SourceController {
             routerService.startFlow(update, bot, WorkflowAction.SEND_SOURCE_REJECTED_MESSAGE);
         }
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/import")
+    public ResponseEntity<List<Source>> importSourcesFromCsv(@RequestBody String csv) {
+        try {
+            List<Source> createdSources = sourceImporterService.importFromCsv(csv);
+            return ResponseEntity.ok(createdSources);
+        } catch (Exception e) {
+            log.error("Import failed: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().build();
+        }
     }
 
     private Source getSource(UUID id) {

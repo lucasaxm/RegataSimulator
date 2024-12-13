@@ -118,7 +118,7 @@ public class SourceService {
                 .forEach(path -> {
                     Source source = new Source();
                     source.setId(UUID.fromString(path.getFileName().toString()));
-                    source.setWeight(30);
+                    source.setWeight(10);
                     source.setStatus(Status.APPROVED);
                     sources.add(source);
                 });
