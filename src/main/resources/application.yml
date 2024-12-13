@@ -17,8 +17,10 @@ regata-simulator:
     path: ${REGATA_SIMULATOR_DB_PATH}
   sources:
     path: ${REGATA_SIMULATOR_SOURCES_PATH}
+    initial-weight: 10
   templates:
     path: ${REGATA_SIMULATOR_TEMPLATES_PATH}
+    initial-weight: 10
 magick:
   path: ${MAGICK_PATH}
 web-admin:

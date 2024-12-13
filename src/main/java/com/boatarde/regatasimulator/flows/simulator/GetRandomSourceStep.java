@@ -20,7 +20,6 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 @Slf4j
 @WorkflowStepRegistration(WorkflowAction.GET_RANDOM_SOURCE)
@@ -58,7 +57,7 @@ public class GetRandomSourceStep implements WorkflowStep {
         memesHistory.stream()
             .flatMap(meme -> meme.getSourceIds().stream())
             .distinct()
-            .limit(approvedSources.size() / 2)
+            .limit((long) Math.ceil(approvedSources.size() * 0.75))
             .forEach(sourceId -> approvedSources.removeIf(source -> source.getId().equals(sourceId)));
 
         List<Source> sources = JsonDBUtils.selectSourcesWithWeight(approvedSources, template.getAreas().size());

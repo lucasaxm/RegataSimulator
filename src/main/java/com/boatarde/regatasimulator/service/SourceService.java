@@ -16,7 +16,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -30,6 +29,8 @@ public class SourceService {
     private final JsonDBTemplate jsonDBTemplate;
     @Value("${regata-simulator.sources.path}")
     private String sourcesPathString;
+    @Value("${regata-simulator.sources.initial-weight}")
+    private int initialWeight;
 
     public SourceService(JsonDBTemplate jsonDBTemplate) {
         this.jsonDBTemplate = jsonDBTemplate;
@@ -78,7 +79,7 @@ public class SourceService {
                 }
             }
             jsonDBTemplate.remove(source, Source.class);
-            log.info("Template {} deleted", source.getId());
+            log.info("Source {} deleted", source.getId());
         } catch (IOException e) {
             throw new RuntimeException("Failed to delete source: " + source.getId(), e);
         }
@@ -88,33 +89,24 @@ public class SourceService {
         return Optional.ofNullable(jsonDBTemplate.findById(id, Source.class));
     }
 
-    // temporary method to save templates from file system to jsondb
-    public List<Source> saveSources() {
-        Path sourcesPath = Paths.get(sourcesPathString);
-        List<Source> sources = new ArrayList<>();
-        try (Stream<Path> paths = Files.walk(sourcesPath)) {
-            paths.filter(Files::isDirectory)
-                .filter(path -> {
-                    try {
-                        UUID.fromString(path.getFileName().toString());
-                        return true;
-                    } catch (IllegalArgumentException e) {
-                        log.error("Invalid source id: %s".formatted(path));
-                        return false;
-                    }
-                })
-                .forEach(path -> {
-                    Source source = new Source();
-                    source.setId(UUID.fromString(path.getFileName().toString()));
-                    source.setWeight(30);
-                    source.setStatus(Status.APPROVED);
-                    sources.add(source);
-                });
-        } catch (IOException e) {
-            log.error("Failed to read sources", e);
-        }
-        jsonDBTemplate.upsert(sources, Source.class);
+    public void approveSource(Source source) {
+        source.setStatus(Status.APPROVED);
+        jsonDBTemplate.save(source, Source.class);
+        log.info("Source {} approved", source.getId());
+    }
 
-        return sources;
+    public void rejectSource(Source source) {
+        source.setStatus(Status.REJECTED);
+        jsonDBTemplate.save(source, Source.class);
+        log.info("Source {} rejected", source.getId());
+    }
+
+    public void resetAllWeights() {
+        List<Source> allSources = jsonDBTemplate.findAll(Source.class);
+        for (Source source : allSources) {
+            source.setWeight(initialWeight);
+        }
+        jsonDBTemplate.upsert(allSources, Source.class);
+        log.info("All sources weights have been reset to {}", initialWeight);
     }
 }

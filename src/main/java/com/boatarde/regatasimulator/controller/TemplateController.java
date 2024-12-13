@@ -97,6 +97,12 @@ public class TemplateController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/reset_weights")
+    public ResponseEntity<Void> resetWeights() {
+        templateService.resetAllWeights();
+        return ResponseEntity.noContent().build();
+    }
+
     private Template getTemplate(UUID id) {
         return templateService.getTemplate(id)
             .orElseThrow(() -> new RuntimeException("Template not found: " + id));

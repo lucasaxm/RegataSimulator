@@ -31,11 +31,14 @@ public class CreateTemplateStep implements WorkflowStep {
 
     private final String templatesPathString;
     private final JsonDBTemplate jsonDBTemplate;
+    private final int initialWeight;
 
     public CreateTemplateStep(@Value("${regata-simulator.templates.path}") String templatesPathString,
-                              JsonDBTemplate jsonDBTemplate) {
+                              JsonDBTemplate jsonDBTemplate,
+                              @Value("${regata-simulator.templates.initial-weight}") int initialWeight) {
         this.templatesPathString = templatesPathString;
         this.jsonDBTemplate = jsonDBTemplate;
+        this.initialWeight = initialWeight;
     }
 
     @Override
@@ -61,7 +64,7 @@ public class CreateTemplateStep implements WorkflowStep {
             Template template = new Template();
             template.setId(uuid);
             template.setStatus(Status.REVIEW);
-            template.setWeight(30);
+            template.setWeight(initialWeight);
             template.setMessage(update.getMessage());
             template.setAreas(JsonDBUtils.parseTemplateCsv(csvContent));
 

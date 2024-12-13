@@ -14,7 +14,7 @@ function galleryApp() {
         reviewApproved: false,
         reviewRefused: false,
         reviewReason: '',
-        templateStatus: '',
+        itemStatus: '',
 
         init() {
             this.loadItems('sources');
@@ -26,7 +26,7 @@ function galleryApp() {
             this.loading = true;
             this.error = null;
             try {
-                const data = await api.getItems(type, page, this.ITEMS_PER_PAGE, this.templateStatus);
+                const data = await api.getItems(type, page, this.ITEMS_PER_PAGE, this.itemStatus);
                 if (page === 1) {
                     this[`${type}Items`] = data.items;
                 } else {
@@ -90,14 +90,20 @@ function galleryApp() {
             }
 
             if (this.reviewRefused && !this.reviewReason) {
-                alert('Please provide a reason for refusing the template.');
+                alert('Please provide a reason for refusing.');
                 return;
             }
 
             try {
-                await api.sendReview(this.selectedItem.id, this.reviewApproved, this.reviewReason);
-                bootstrap.Modal.getInstance(this.$refs.imageModal).hide();
-                this.loadItems('templates');
+                if (this.currentTab === 'templates') {
+                    await api.sendReviewTemplate(this.selectedItem.id, this.reviewApproved, this.reviewReason);
+                    bootstrap.Modal.getInstance(this.$refs.imageModal).hide();
+                    this.loadItems('templates');
+                } else if (this.currentTab === 'sources') {
+                    await api.sendReviewSource(this.selectedItem.id, this.reviewApproved, this.reviewReason);
+                    bootstrap.Modal.getInstance(this.$refs.imageModal).hide();
+                    this.loadItems('sources');
+                }
             } catch (err) {
                 alert('Failed to submit the review. Please try again.');
                 console.error(err);
@@ -218,9 +224,13 @@ function galleryApp() {
             }
         },
 
-        filterTemplates() {
+        filterItems() {
             this.currentPage = 1;
-            this.loadItems('templates');
+            if (this.currentTab === 'templates') {
+                this.loadItems('templates');
+            } else if (this.currentTab === 'sources') {
+                this.loadItems('sources');
+            }
         },
 
         getStatusBadgeClass(status) {

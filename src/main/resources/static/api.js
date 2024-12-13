@@ -20,7 +20,7 @@ const api = {
         }
     },
 
-    async sendReview(id, approved, reason) {
+    async sendReviewTemplate(id, approved, reason) {
         const response = await fetch(`/api/templates/review`, {
             method: 'POST',
             headers: {
@@ -31,5 +31,19 @@ const api = {
         if (!response.ok) {
             throw new Error('Failed to send review');
         }
+    },
+
+    async sendReviewSource(id, approved, reason) {
+        const response = await fetch(`/api/sources/review`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ sourceId: id, approved, reason })
+        });
+        if (!response.ok) {
+            throw new Error('Failed to send source review');
+        }
     }
+
 };

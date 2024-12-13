@@ -51,7 +51,7 @@ public class GetRandomTemplateStep implements WorkflowStep {
         memesHistory.stream()
             .map(Meme::getTemplateId)
             .distinct()
-            .limit(approvedTemplates.size() / 2)
+            .limit((long) Math.ceil(approvedTemplates.size() * 0.75))
             .forEach(templateId -> approvedTemplates.removeIf(template -> template.getId().equals(templateId)));
 
         Template template = JsonDBUtils.selectTemplatesWithWeight(approvedTemplates, 1).getFirst();

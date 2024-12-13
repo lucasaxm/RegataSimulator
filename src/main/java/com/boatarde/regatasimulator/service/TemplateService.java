@@ -1,30 +1,23 @@
 package com.boatarde.regatasimulator.service;
 
-import com.boatarde.regatasimulator.models.Author;
 import com.boatarde.regatasimulator.models.GalleryResponse;
 import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.models.Template;
-import com.boatarde.regatasimulator.models.TemplateArea;
 import com.boatarde.regatasimulator.util.JsonDBUtils;
-import com.boatarde.regatasimulator.util.TelegramUtils;
 import io.jsondb.JsonDBTemplate;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
-import org.telegram.telegrambots.meta.api.objects.Message;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -35,6 +28,9 @@ public class TemplateService {
 
     private final String templatesPathString;
     private final JsonDBTemplate jsonDBTemplate;
+
+    @Value("${regata-simulator.templates.initial-weight}")
+    private int initialWeight;
 
     public TemplateService(@Value("${regata-simulator.templates.path}") String templatesPathString,
                            JsonDBTemplate jsonDBTemplate) {
@@ -106,57 +102,12 @@ public class TemplateService {
         log.info("Template {} rejected", template.getId());
     }
 
-    // temporary method to save templates from file system to jsondb
-    public List<Template> saveTemplates() {
-        Path templatesPath = Paths.get(templatesPathString);
-        List<Template> templates = new ArrayList<>();
-        try (Stream<Path> paths = Files.walk(templatesPath)) {
-            paths.filter(Files::isDirectory)
-                .filter(path -> {
-                    try {
-                        UUID.fromString(path.getFileName().toString());
-                        return true;
-                    } catch (IllegalArgumentException e) {
-                        log.error("Invalid template id: %s".formatted(path));
-                        return false;
-                    }
-                })
-                .forEach(path -> {
-                    Template template = new Template();
-                    template.setId(UUID.fromString(path.getFileName().toString()));
-                    template.setWeight(30);
-                    template.setStatus(Status.APPROVED);
-                    try {
-                        String jsonStr = Files.readString(path.resolve("message.json"));
-                        Message message = TelegramUtils.fromJson(jsonStr, Message.class);
-                        template.setMessage(message);
-                    } catch (IOException e) {
-                        log.error("Failed to read message json: %s".formatted(path));
-                    }
-                    try {
-                        List<TemplateArea> areas =
-                            JsonDBUtils.parseTemplateCsv(Files.readString(path.resolve("template.csv")));
-                        template.setAreas(areas);
-                    } catch (IOException e) {
-                        log.error("Failed to read areas csv: %s".formatted(path));
-                    }
-                    templates.add(template);
-                });
-        } catch (IOException e) {
-            log.error("Failed to read templates", e);
+    public void resetAllWeights() {
+        List<Template> allTemplates = jsonDBTemplate.findAll(Template.class);
+        for (Template template : allTemplates) {
+            template.setWeight(initialWeight);
         }
-        jsonDBTemplate.upsert(templates, Template.class);
-        Map<Long, Author> authors = new HashMap<>();
-        templates.stream()
-            .filter(template -> template.getMessage() != null)
-            .map(template -> template.getMessage().getFrom())
-            .forEach(user -> {
-                Author author = new Author(user);
-                authors.put(author.getId(), author);
-            });
-
-        jsonDBTemplate.upsert(new ArrayList<>(authors.values()), Author.class);
-
-        return templates;
+        jsonDBTemplate.upsert(allTemplates, Template.class);
+        log.info("All templates weights have been reset to {}", initialWeight);
     }
 }
