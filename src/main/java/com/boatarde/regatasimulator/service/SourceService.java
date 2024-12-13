@@ -79,7 +79,7 @@ public class SourceService {
                 }
             }
             jsonDBTemplate.remove(source, Source.class);
-            log.info("Template {} deleted", source.getId());
+            log.info("Source {} deleted", source.getId());
         } catch (IOException e) {
             throw new RuntimeException("Failed to delete source: " + source.getId(), e);
         }
