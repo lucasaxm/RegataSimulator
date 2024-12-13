@@ -8,7 +8,7 @@ import lombok.Setter;
 @Getter
 @Setter
 @NoArgsConstructor
-@Document(collection = "sources", schemaVersion = "1.1")
+@Document(collection = "sources", schemaVersion = "1.0")
 public class Source extends CommonEntity {
     String description;
 }

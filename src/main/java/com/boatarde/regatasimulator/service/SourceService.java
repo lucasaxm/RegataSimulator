@@ -88,6 +88,18 @@ public class SourceService {
         return Optional.ofNullable(jsonDBTemplate.findById(id, Source.class));
     }
 
+    public void approveSource(Source source) {
+        source.setStatus(Status.APPROVED);
+        jsonDBTemplate.save(source, Source.class);
+        log.info("Source {} approved", source.getId());
+    }
+
+    public void rejectSource(Source source) {
+        source.setStatus(Status.REJECTED);
+        jsonDBTemplate.save(source, Source.class);
+        log.info("Source {} rejected", source.getId());
+    }
+
     // temporary method to save templates from file system to jsondb
     public List<Source> saveSources() {
         Path sourcesPath = Paths.get(sourcesPathString);
