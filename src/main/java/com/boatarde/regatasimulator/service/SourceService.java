@@ -1,5 +1,6 @@
 package com.boatarde.regatasimulator.service;
 
+import com.boatarde.regatasimulator.dto.SearchCriteria;
 import com.boatarde.regatasimulator.models.GalleryResponse;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;
@@ -109,4 +110,35 @@ public class SourceService {
         jsonDBTemplate.upsert(allSources, Source.class);
         log.info("All sources weights have been reset to {}", initialWeight);
     }
+
+    public GalleryResponse<Source> search(SearchCriteria criteria) {
+        List<Source> allSources = jsonDBTemplate.findAll(Source.class);
+
+        Stream<Source> stream = allSources.stream();
+
+        // Filter by query if present
+        if (criteria.getQuery() != null && !criteria.getQuery().isBlank()) {
+            String lowerQuery = criteria.getQuery().toLowerCase();
+            stream =
+                stream.filter(s -> s.getDescription() != null && s.getDescription().toLowerCase().contains(lowerQuery));
+        }
+
+        // Filter by status if present
+        if (criteria.getStatus() != null) {
+            stream = stream.filter(s -> s.getStatus() == criteria.getStatus());
+        }
+
+        List<Source> filtered = stream
+            .sorted(Comparator.comparing(s -> Optional.ofNullable(s.getDescription()).orElse("").toLowerCase()))
+            .toList();
+
+        int totalItems = filtered.size();
+        List<Source> result = filtered.stream()
+            .skip((long) (criteria.getPage() - 1) * criteria.getPerPage())
+            .limit(criteria.getPerPage())
+            .toList();
+
+        return new GalleryResponse<>(result, totalItems);
+    }
+
 }

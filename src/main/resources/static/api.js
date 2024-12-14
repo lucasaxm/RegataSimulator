@@ -1,4 +1,16 @@
 const api = {
+    async searchSourcesPOST(criteria) {
+        const response = await fetch('/api/sources/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(criteria)
+        });
+        if (!response.ok) {
+            throw new Error('Failed to perform search');
+        }
+        return response.json();
+    },
+
     async getItems(type, page, perPage, status = '') {
         const url = new URL(`/api/${type}`, window.location.origin);
         url.searchParams.append('page', page);
