@@ -109,15 +109,24 @@ function galleryApp() {
         },
 
         async deleteImage() {
-            if (confirm(`Are you sure you want to delete this ${this.currentTab === 'sources' ? 'source image' : 'template'}?`)) {
-                try {
-                    await api.deleteItem(this.currentTab, this.selectedItem.id);
-                    bootstrap.Modal.getInstance(this.$refs.imageModal).hide();
-                    this.loadItems(this.currentTab);
-                } catch (err) {
-                    alert(`Failed to delete the item. Please try again.`);
-                    console.error(err);
+            if (!this.selectedItem) return;
+            if (!confirm(`Are you sure you want to delete this ${this.currentTab === 'sources' ? 'source image' : 'template'}?`)) {
+                return;
+            }
+
+            try {
+                await api.deleteItem(this.currentTab, this.selectedItem.id);
+                bootstrap.Modal.getInstance(this.$refs.imageModal).hide();
+
+                // Remove the item locally without reloading
+                if (this.currentTab === 'sources') {
+                    this.sourcesItems = this.sourcesItems.filter(item => item.id !== this.selectedItem.id);
+                } else {
+                    this.templatesItems = this.templatesItems.filter(item => item.id !== this.selectedItem.id);
                 }
+            } catch (err) {
+                alert('Failed to delete the item. Please try again.');
+                console.error(err);
             }
         },
 
