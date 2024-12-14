@@ -1,6 +1,7 @@
 package com.boatarde.regatasimulator.controller;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
+import com.boatarde.regatasimulator.dto.SearchCriteria;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
 import com.boatarde.regatasimulator.models.GalleryResponse;
 import com.boatarde.regatasimulator.models.ReviewSourceBody;
@@ -121,6 +122,12 @@ public class SourceController {
     public ResponseEntity<Void> resetWeights() {
         sourceService.resetAllWeights();
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/search")
+    public ResponseEntity<GalleryResponse<Source>> searchSources(@RequestBody SearchCriteria criteria) {
+        GalleryResponse<Source> response = sourceService.search(criteria);
+        return ResponseEntity.ok(response);
     }
 
     private Source getSource(UUID id) {

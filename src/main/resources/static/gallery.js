@@ -15,6 +15,11 @@ function galleryApp() {
         reviewRefused: false,
         reviewReason: '',
         itemStatus: '',
+        searchCriteria: {
+            query: '',
+            status: '',
+        },
+        searchVisible: false,
 
         init() {
             this.loadItems('sources');
@@ -22,18 +27,51 @@ function galleryApp() {
             this.applyDarkMode();
         },
 
+        toggleSearch() {
+            this.searchVisible = !this.searchVisible;
+        },
+
+        applySearch() {
+            // Reset pagination and clear items before a new search
+            this.currentPage = 1;
+            if (this.currentTab === 'sources') {
+                this.sourcesItems = [];
+                this.loadItems('sources', 1);
+            } else {
+                this.templatesItems = [];
+                this.loadItems('templates', 1);
+            }
+        },
+
         async loadItems(type, page = 1) {
             this.loading = true;
             this.error = null;
             try {
-                const data = await api.getItems(type, page, this.ITEMS_PER_PAGE, this.itemStatus);
+                let data;
+                if (type === 'sources') {
+                    // Prepare criteria payload
+                    const payload = {
+                        query: this.searchCriteria.query || null,
+                        status: this.searchCriteria.status || null,
+                        page: page,
+                        perPage: this.ITEMS_PER_PAGE
+                    };
+                    // Perform POST search
+                    data = await api.searchSourcesPOST(payload);
+                } else {
+                    // For templates, we might still use the old endpoint as an example
+                    data = await api.getItems(type, page, this.ITEMS_PER_PAGE, this.searchCriteria.status);
+                }
+
                 if (page === 1) {
                     this[`${type}Items`] = data.items;
                 } else {
                     this[`${type}Items`] = [...this[`${type}Items`], ...data.items];
                 }
-                this.hasMore = data.items.length === this.ITEMS_PER_PAGE;
+
+                this.hasMore = (data.items.length === this.ITEMS_PER_PAGE && this[`${type}Items`].length < data.totalItems);
                 this.currentPage = page;
+
             } catch (err) {
                 this.error = 'Failed to load items. Please try again.';
                 console.error(err);
@@ -45,7 +83,18 @@ function galleryApp() {
         changeTab(tab) {
             this.currentTab = tab;
             this.currentPage = 1;
-            this.loadItems(tab);
+            if (tab === 'sources') {
+                // If switching back to sources, consider if we have a query or not
+                this.loadItems('sources', 1);
+            } else {
+                this.loadItems('templates', 1);
+            }
+        },
+
+        loadMore(type) {
+            if (this.hasMore && !this.loading) {
+                this.loadItems(type, this.currentPage + 1);
+            }
         },
 
         async openModal(item) {
@@ -58,7 +107,6 @@ function galleryApp() {
                 this.$refs.imageModal.addEventListener('shown.bs.modal', () => this.onModalShown());
             });
         },
-
 
         async deleteImage() {
             if (confirm(`Are you sure you want to delete this ${this.currentTab === 'sources' ? 'source image' : 'template'}?`)) {
@@ -216,21 +264,6 @@ function galleryApp() {
         onModalShown() {
             this.resizeCanvases();
             this.drawAreas();
-        },
-
-        loadMore(type) {
-            if (this.hasMore && !this.loading) {
-                this.loadItems(type, this.currentPage + 1);
-            }
-        },
-
-        filterItems() {
-            this.currentPage = 1;
-            if (this.currentTab === 'templates') {
-                this.loadItems('templates');
-            } else if (this.currentTab === 'sources') {
-                this.loadItems('sources');
-            }
         },
 
         getStatusBadgeClass(status) {
