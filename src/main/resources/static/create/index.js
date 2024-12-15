@@ -492,4 +492,69 @@ canvas.addEventListener('touchend', function(e) {
     lastTap = currentTime;
 });
 
+document.addEventListener('paste', (e) => {
+    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.indexOf('image') !== -1) {
+            const file = item.getAsFile();
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                img.onload = () => {
+                    resizeCanvas();
+                    resetCanvas();
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+});
+
+const container = document.querySelector('.flex-grow-1.d-flex.justify-content-center.align-items-center.overflow-auto');
+const dropOverlay = document.getElementById('dropOverlay');
+
+container.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dropOverlay.style.display = 'flex';
+});
+
+container.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // This keeps the drop action possible and overlay visible
+});
+
+container.addEventListener('dragleave', (e) => {
+    // Check if actually leaving the container, not just moving over a child element
+    if (e.target === container) {
+        dropOverlay.style.display = 'none';
+    }
+});
+
+container.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dropOverlay.style.display = 'none';
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+        const file = files[0];
+        if (file.type.startsWith('image/')) {
+            const reader = new FileReader();
+            reader.onload = event => {
+                img.onload = () => {
+                    resizeCanvas();
+                    resetCanvas();
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        } else {
+            showToast("Por favor, solte um arquivo de imagem.", "#dc3545");
+        }
+    }
+});
+
 updateAreaSelector();
