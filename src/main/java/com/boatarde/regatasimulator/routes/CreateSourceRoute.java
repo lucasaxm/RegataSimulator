@@ -20,7 +20,17 @@ public class CreateSourceRoute implements Route {
             return Optional.empty();
         }
 
-        // Check if update has a message and is from a user (not a channel/group)
+        // Check for confirm/cancel callback queries first
+        if (update.hasCallbackQuery()) {
+            String data = update.getCallbackQuery().getData();
+            if (data.endsWith(":source:confirm")) {
+                return Optional.of(WorkflowAction.CONFIRM_REVIEW_SOURCE);
+            } else if (data.endsWith(":source:cancel")) {
+                return Optional.of(WorkflowAction.DELETE_REVIEW_SOURCE);
+            }
+        }
+
+        // Check if it's a new source creation message
         if (!update.hasMessage() || !update.getMessage().isUserMessage()) {
             return Optional.empty();
         }

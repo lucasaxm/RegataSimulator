@@ -13,12 +13,12 @@ import com.boatarde.regatasimulator.util.JsonDBUtils;
 import io.jsondb.JsonDBTemplate;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.telegram.telegrambots.meta.api.objects.Message;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 @Slf4j
 @WorkflowStepRegistration(WorkflowAction.GET_RANDOM_TEMPLATE)
@@ -41,6 +41,19 @@ public class GetRandomTemplateStep implements WorkflowStep {
             log.error("No templates found.");
             return WorkflowAction.NONE;
         }
+
+        Message creatingSourceMessage = bag.get(WorkflowDataKey.CREATING_SOURCE_MESSAGE, Message.class);
+        if (creatingSourceMessage != null) {
+            Template template = JsonDBUtils.selectRandomSingleAreaTemplate(approvedTemplates);
+            Path templateFile = getTemplateFile(template);
+            if (templateFile == null) {
+                return WorkflowAction.NONE;
+            }
+            bag.put(WorkflowDataKey.TEMPLATE_FILE, templateFile);
+            bag.put(WorkflowDataKey.TEMPLATE, template);
+            return WorkflowAction.BUILD_MEME_STEP;
+        }
+
         List<Meme> memesHistory = bag.getGeneric(WorkflowDataKey.MEMES_HISTORY, List.class, Meme.class);
         if (memesHistory == null) {
             memesHistory = jsonDBTemplate.findAll(Meme.class).stream()
@@ -55,19 +68,27 @@ public class GetRandomTemplateStep implements WorkflowStep {
             .forEach(templateId -> approvedTemplates.removeIf(template -> template.getId().equals(templateId)));
 
         Template template = JsonDBUtils.selectTemplatesWithWeight(approvedTemplates, 1).getFirst();
+        Path templateFile = getTemplateFile(template);
+        if (templateFile == null) {
+            return WorkflowAction.NONE;
+        }
+
+        bag.put(WorkflowDataKey.TEMPLATE_FILE, templateFile);
+        bag.put(WorkflowDataKey.TEMPLATE, template);
+        return WorkflowAction.GET_RANDOM_SOURCE;
+    }
+
+    private Path getTemplateFile(Template template) {
         Path selectedDirectory = Paths.get(templatesPathString).resolve(template.getId().toString());
 
         Optional<Path> fileOpt = FileUtils.getFirstExistingFile(selectedDirectory, "template.jpg", "template.png");
         if (fileOpt.isEmpty()) {
             log.error("Template file not found: {}", template.getId());
-            return WorkflowAction.NONE;
+            return null;
         }
         Path templateFile = fileOpt.get();
 
         log.info("Template selecionado: {}", template.getId());
-
-        bag.put(WorkflowDataKey.TEMPLATE_FILE, templateFile);
-        bag.put(WorkflowDataKey.TEMPLATE, template);
-        return WorkflowAction.GET_RANDOM_SOURCE;
+        return templateFile;
     }
 }

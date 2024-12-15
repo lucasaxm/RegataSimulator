@@ -6,7 +6,7 @@ import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.flows.WorkflowStep;
 import com.boatarde.regatasimulator.flows.WorkflowStepRegistration;
-import com.boatarde.regatasimulator.service.TemplateService;
+import com.boatarde.regatasimulator.service.SourceService;
 import com.boatarde.regatasimulator.util.TelegramUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,16 +22,16 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import java.util.UUID;
 
 @Slf4j
-@WorkflowStepRegistration(WorkflowAction.CONFIRM_REVIEW_TEMPLATE)
-public class ConfirmReviewTemplateStep implements WorkflowStep {
+@WorkflowStepRegistration(WorkflowAction.CONFIRM_REVIEW_SOURCE)
+public class ConfirmReviewSourceStep implements WorkflowStep {
 
     private final String botAuthorId;
-    private final TemplateService templateService;
+    private final SourceService sourceService;
 
-    public ConfirmReviewTemplateStep(@Value("${telegram.creator.id}") String botAuthorId,
-                                     TemplateService templateService) {
+    public ConfirmReviewSourceStep(@Value("${telegram.creator.id}") String botAuthorId,
+                                   SourceService sourceService) {
         this.botAuthorId = botAuthorId;
-        this.templateService = templateService;
+        this.sourceService = sourceService;
     }
 
     @Override
@@ -40,14 +40,14 @@ public class ConfirmReviewTemplateStep implements WorkflowStep {
         RegataSimulatorBot bot = bag.get(WorkflowDataKey.REGATA_SIMULATOR_BOT, RegataSimulatorBot.class);
 
         MaybeInaccessibleMessage message = update.getCallbackQuery().getMessage();
-        UUID templateId = TelegramUtils.extractItemId(update.getCallbackQuery().getData());
+        UUID sourceId = TelegramUtils.extractItemId(update.getCallbackQuery().getData());
 
         try {
-            templateService.getTemplate(templateId)
-                .orElseThrow(() -> new IllegalArgumentException("Template not found on jsondb."));
+            sourceService.getSource(sourceId)
+                .orElseThrow(() -> new IllegalArgumentException("Source not found on jsondb."));
 
             bot.execute(AnswerCallbackQuery.builder()
-                .text("Template enviado para aprovação.")
+                .text("Source enviado para aprovação.")
                 .callbackQueryId(update.getCallbackQuery().getId())
                 .build());
             bot.execute(EditMessageReplyMarkup.builder()
@@ -59,12 +59,12 @@ public class ConfirmReviewTemplateStep implements WorkflowStep {
             bot.execute(SendPhoto.builder()
                 .chatId(botAuthorId)
                 .photo(new InputFile(((Message) message).getPhoto().getLast().getFileId()))
-                .caption("Template id <code>%s</code> aguardando aprovação.\nEnviado por %s".formatted(templateId,
+                .caption("Source id <code>%s</code> aguardando aprovação.\nEnviado por %s".formatted(sourceId,
                     TelegramUtils.usernameOrFullName(update.getCallbackQuery().getFrom())))
                 .parseMode("HTML")
                 .build());
         } catch (TelegramApiException e) {
-            log.error("Error confirming template {}.", templateId, e);
+            log.error("Error confirming source {}.", sourceId, e);
         }
 
         return WorkflowAction.NONE;

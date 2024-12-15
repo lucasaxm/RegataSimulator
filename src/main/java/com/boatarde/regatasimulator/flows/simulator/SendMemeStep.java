@@ -31,6 +31,7 @@ import java.util.UUID;
 @WorkflowStepRegistration(WorkflowAction.SEND_MEME_STEP)
 public class SendMemeStep implements WorkflowStep {
 
+    public static final String CALLBACK_DATA_FORMAT = "%s:%s:%s";
     private final Long channelId;
     private final JsonDBTemplate jsonDBTemplate;
 
@@ -46,6 +47,7 @@ public class SendMemeStep implements WorkflowStep {
         Update update = bag.get(WorkflowDataKey.TELEGRAM_UPDATE, Update.class);
         Path memePath = bag.get(WorkflowDataKey.MEME_FILE, Path.class);
         Message creatingTemplateMessage = bag.get(WorkflowDataKey.CREATING_TEMPLATE_MESSAGE, Message.class);
+        Message creatingSourceMessage = bag.get(WorkflowDataKey.CREATING_SOURCE_MESSAGE, Message.class);
         List<Meme> pastMemes = bag.getGeneric(WorkflowDataKey.MEMES_HISTORY, List.class, Meme.class);
 
         File file = memePath.toFile();
@@ -53,13 +55,15 @@ public class SendMemeStep implements WorkflowStep {
         try {
             SendPhoto sendPhoto = getSendPhoto(update, file);
             if (creatingTemplateMessage != null) {
-                addConfirmKeyboard(bag, regataSimulatorBot, sendPhoto, creatingTemplateMessage);
+                addConfirmKeyboard(bag, regataSimulatorBot, "template", sendPhoto, creatingTemplateMessage);
+            } else if (creatingSourceMessage != null) {
+                addConfirmKeyboard(bag, regataSimulatorBot, "source", sendPhoto, creatingSourceMessage);
             }
             Message response = TelegramUtils.executeSendMediaBotMethod(regataSimulatorBot, sendPhoto);
 
             log.info("Response: {}", TelegramUtils.toJson(response));
 
-            if (creatingTemplateMessage == null) {
+            if (creatingTemplateMessage == null && creatingSourceMessage == null) {
                 Template template = bag.get(WorkflowDataKey.TEMPLATE, Template.class);
                 List<Source> sources = bag.getGeneric(WorkflowDataKey.SOURCES, List.class, Source.class);
                 updateWeights(template, sources);
@@ -137,24 +141,29 @@ public class SendMemeStep implements WorkflowStep {
     }
 
     private void addConfirmKeyboard(WorkflowDataBag bag, RegataSimulatorBot regataSimulatorBot,
-                                    SendPhoto sendPhoto, Message creatingTemplateMessage)
+                                    String type, SendPhoto sendPhoto, Message creatingTemplateMessage)
         throws TelegramApiException {
         regataSimulatorBot.execute(DeleteMessage.builder()
             .chatId(creatingTemplateMessage.getChatId())
             .messageId(creatingTemplateMessage.getMessageId())
             .build());
+        Path path;
+        if (type.equals("template")) {
+            path = bag.get(WorkflowDataKey.TEMPLATE_FILE, Path.class);
+        } else {
+            List<Path> sourceFiles = bag.getGeneric(WorkflowDataKey.SOURCE_FILES, List.class, Path.class);
+            path = sourceFiles.getFirst();
+        }
 
-        Path templatePath = bag.get(WorkflowDataKey.TEMPLATE_FILE, Path.class);
-
-        String templateId = templatePath.getParent().getFileName().toString();
+        String itemId = path.getParent().getFileName().toString();
         sendPhoto.setReplyMarkup(InlineKeyboardMarkup.builder()
             .keyboard(List.of(List.of(InlineKeyboardButton.builder()
                     .text("✅ Confirmar")
-                    .callbackData(templateId + ":template:confirm")
+                    .callbackData(CALLBACK_DATA_FORMAT.formatted(itemId, type, "confirm"))
                     .build()),
                 List.of(InlineKeyboardButton.builder()
                     .text("❌ Cancelar")
-                    .callbackData(templateId + ":template:cancel")
+                    .callbackData(CALLBACK_DATA_FORMAT.formatted(itemId, type, "cancel"))
                     .build())))
             .build());
     }
