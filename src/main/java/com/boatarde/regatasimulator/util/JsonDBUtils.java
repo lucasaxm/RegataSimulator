@@ -70,6 +70,19 @@ public class JsonDBUtils {
             .collect(Collectors.toList());
     }
 
+    public static Template selectRandomSingleAreaTemplate(List<Template> templates) {
+        List<Template> filteredTemplates = templates.stream()
+            .filter(template -> template.getAreas().size() == 1)
+            .toList();
+
+        if (filteredTemplates.isEmpty()) {
+            throw new RuntimeException("No single area templates found");
+        }
+
+        Random random = new Random();
+        return filteredTemplates.get(random.nextInt(filteredTemplates.size()));
+    }
+
     private static List<? extends CommonEntity> selectWithWeight(List<? extends CommonEntity> entities, int amount) {
         if (entities.size() < amount) {
             throw new RuntimeException(

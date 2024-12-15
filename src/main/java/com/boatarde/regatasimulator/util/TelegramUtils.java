@@ -248,7 +248,7 @@ public class TelegramUtils {
         return "<a href=\"tg://user?id=%d\">%s</a>".formatted(from.getId(), fullName);
     }
 
-    public static UUID extractTemplateId(String data) {
+    public static UUID extractItemId(String data) {
         String[] parts = data.split(":");
         if (parts.length > 0) {
             return UUID.fromString(parts[0]);
