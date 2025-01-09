@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -54,15 +55,16 @@ public class TemplateService {
 
     public Resource loadTemplateAsResource(Template template) {
         Path dir = Paths.get(templatesPathString, template.getId().toString());
+        List<String> possibleExtensions = Arrays.asList("jpg", "jpeg", "png");
 
         try {
-            Path templateFile = dir.resolve("template.jpg");
-            if (!templateFile.toFile().exists()) {
-                templateFile = dir.resolve("template.png");
-            }
-            if (!templateFile.toFile().exists()) {
-                throw new RuntimeException("Template not found: " + template.getId());
-            }
+            // Find the first template file that exists
+            Path templateFile = possibleExtensions.stream()
+                .map(ext -> dir.resolve("template." + ext))
+                .filter(Files::exists)
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("Template not found: " + template.getId()));
+
             return new UrlResource(templateFile.toUri());
         } catch (IOException e) {
             throw new RuntimeException("Failed to load file.", e);

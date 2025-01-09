@@ -4,6 +4,7 @@ import com.boatarde.regatasimulator.dto.SearchCriteria;
 import com.boatarde.regatasimulator.models.GalleryResponse;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;
+import com.boatarde.regatasimulator.models.Template;
 import com.boatarde.regatasimulator.util.JsonDBUtils;
 import io.jsondb.JsonDBTemplate;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +18,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -54,15 +56,16 @@ public class SourceService {
 
     public Resource loadSourceAsResource(Source source) {
         Path dir = Paths.get(sourcesPathString, source.getId().toString());
+        List<String> possibleExtensions = Arrays.asList("jpg", "jpeg", "png");
 
         try {
-            Path sourceFile = dir.resolve("source.jpg");
-            if (!sourceFile.toFile().exists()) {
-                sourceFile = dir.resolve("source.png");
-            }
-            if (!sourceFile.toFile().exists()) {
-                throw new RuntimeException("Source not found: " + source.getId());
-            }
+            // Find the first source file that exists
+            Path sourceFile = possibleExtensions.stream()
+                .map(ext -> dir.resolve("source." + ext))
+                .filter(Files::exists)
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("Source not found: " + source.getId()));
+
             return new UrlResource(sourceFile.toUri());
         } catch (IOException e) {
             throw new RuntimeException("Failed to load file.", e);
