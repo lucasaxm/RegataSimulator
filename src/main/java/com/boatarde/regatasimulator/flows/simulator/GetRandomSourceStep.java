@@ -9,6 +9,7 @@ import com.boatarde.regatasimulator.models.Meme;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.models.Template;
+import com.boatarde.regatasimulator.models.TemplateArea;
 import com.boatarde.regatasimulator.util.FileUtils;
 import com.boatarde.regatasimulator.util.JsonDBUtils;
 import io.jsondb.JsonDBTemplate;
@@ -60,7 +61,10 @@ public class GetRandomSourceStep implements WorkflowStep {
             .limit((long) Math.ceil(approvedSources.size() * 0.75))
             .forEach(sourceId -> approvedSources.removeIf(source -> source.getId().equals(sourceId)));
 
-        List<Source> sources = JsonDBUtils.selectSourcesWithWeight(approvedSources, template.getAreas().size());
+        List<Source> sources = JsonDBUtils.selectSourcesWithWeight(approvedSources, (int) template.getAreas().stream()
+            .map(TemplateArea::getSource)
+            .distinct()
+            .count());
         List<Path> sourceFiles = new ArrayList<>();
         for (int i = 0; i < sources.size(); i++) {
             Source source = sources.get(i);
@@ -72,7 +76,7 @@ public class GetRandomSourceStep implements WorkflowStep {
             }
             Path sourceFile = fileOpt.get();
             sourceFiles.add(i, sourceFile);
-            log.info("Area  {} - Source selecionada: {}", template.getAreas().get(i).getIndex(), source.getId());
+            log.info("Source {} - {}", i + 1, source.getId());
         }
 
         bag.put(WorkflowDataKey.SOURCES, sources);

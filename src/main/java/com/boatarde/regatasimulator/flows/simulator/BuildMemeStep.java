@@ -42,13 +42,15 @@ public class BuildMemeStep implements WorkflowStep {
 
         var distortedSources = new ArrayList<Path>();
         try {
-            for (int i = 0; i < sourceFiles.size(); i++) {
+            int templateAreasCount = template.getAreas().size();
+            for (int i = 0; i < templateAreasCount; i++) {
+                TemplateArea templateArea = template.getAreas().get(i);
                 distortedSources.add(i,
-                    buildDistortedSource(templateFile, sourceFiles.get(i), template.getAreas().get(i)));
-                int progress = (i + 1) * 100 / (sourceFiles.size() + 2);
+                    buildDistortedSource(templateFile, sourceFiles.get(templateArea.getSource() - 1), templateArea));
+                int progress = (i + 1) * 100 / (templateAreasCount + 2);
                 editCreatingTemplateMessage(bag, progress);
             }
-            int progress = (sourceFiles.size() + 1) * 100 / (sourceFiles.size() + 2);
+            int progress = (templateAreasCount + 1) * 100 / (templateAreasCount + 2);
             editCreatingTemplateMessage(bag, progress);
             Path result =
                 compositeFinalImage(templateFile, templateFile.getParent(), distortedSources, template.getAreas());

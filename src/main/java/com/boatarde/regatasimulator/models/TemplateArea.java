@@ -11,6 +11,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class TemplateArea {
     private int index;
+    private int source;
     private AreaCorner topLeft;
     private AreaCorner topRight;
     private AreaCorner bottomRight;

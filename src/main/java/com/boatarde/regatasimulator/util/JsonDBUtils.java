@@ -26,7 +26,7 @@ import java.util.stream.IntStream;
 @Slf4j
 @UtilityClass
 public class JsonDBUtils {
-    private static final String HEADER = "Area,TLx,TLy,TRx,TRy,BRx,BRy,BLx,BLy,Background";
+    private static final String HEADER = "Area,Source,TLx,TLy,TRx,TRy,BRx,BRy,BLx,BLy,Background";
 
     public static String getJxQuery(Status status, Long userId) {
         StringBuilder jxQueryBuilder = new StringBuilder("/.");
@@ -126,29 +126,30 @@ public class JsonDBUtils {
             }
             while ((line = reader.readLine()) != null) {
                 String[] fields = line.split(",");
-                if (fields.length != 10) {
+                if (fields.length != 11) {
                     throw new IOException("Invalid CSV format");
                 }
 
                 areas.add(TemplateArea.builder()
                     .index(Integer.parseInt(fields[0]))
+                    .source(Integer.parseInt(fields[1]))
                     .topLeft(AreaCorner.builder()
-                        .x(Integer.parseInt(fields[1]))
-                        .y(Integer.parseInt(fields[2]))
+                        .x(Integer.parseInt(fields[2]))
+                        .y(Integer.parseInt(fields[3]))
                         .build())
                     .topRight(AreaCorner.builder()
-                        .x(Integer.parseInt(fields[3]))
-                        .y(Integer.parseInt(fields[4]))
+                        .x(Integer.parseInt(fields[4]))
+                        .y(Integer.parseInt(fields[5]))
                         .build())
                     .bottomRight(AreaCorner.builder()
-                        .x(Integer.parseInt(fields[5]))
-                        .y(Integer.parseInt(fields[6]))
+                        .x(Integer.parseInt(fields[6]))
+                        .y(Integer.parseInt(fields[7]))
                         .build())
                     .bottomLeft(AreaCorner.builder()
-                        .x(Integer.parseInt(fields[7]))
-                        .y(Integer.parseInt(fields[8]))
+                        .x(Integer.parseInt(fields[8]))
+                        .y(Integer.parseInt(fields[9]))
                         .build())
-                    .background(Integer.parseInt(fields[9]) == 1)
+                    .background(Integer.parseInt(fields[10]) == 1)
                     .build());
             }
         }
