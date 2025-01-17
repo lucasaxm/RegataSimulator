@@ -103,7 +103,7 @@ class Area {
     const newArea = new Area(getRandomColor());
     newArea.corners = this.corners.map(corner => ({...corner}));
     newArea.background = this.background;
-    newArea.sourceID = getNextSourceID();
+    newArea.sourceID = getNextSource();
     return newArea;
   }
 }
@@ -128,36 +128,44 @@ function updateAreaSelector() {
     polygonSelector.appendChild(option);
   });
   polygonSelector.value = activeAreaIndex;
-  backgroundCheckbox.checked = polygons[activeAreaIndex].background;
 }
 
 function updateSourceSelector() {
   const activeArea = polygons[activeAreaIndex];
-  const activeSourceID = activeArea.sourceID;
+  const activeSource = activeArea.sourceID;
 
-  // Clear existing options
   sourceSelector.innerHTML = '';
 
-  // Collect all used IDs
-  const used = getUsedSourceIDs(); // e.g. [1,2]
+  const beforeMe = polygons.map(p => p.sourceID).slice(0, activeAreaIndex);
 
-  // Populate the dropdown with all used IDs
-  used.forEach(id => {
+  let ids;
+  if (beforeMe.length > 0) {
+    const lastId = beforeMe[beforeMe.length - 1]
+    ids = [lastId, lastId + 1];
+    if (activeAreaIndex < polygons.length - 1) {
+      let difference = (polygons[activeAreaIndex + 1].sourceID - lastId)
+      if (difference === 0) {
+        ids = [lastId]
+      } else if (difference === 1) {
+        ids = [lastId, lastId + 1]
+      } else {
+        ids = [lastId + 1]
+      }
+    } else {
+      ids = [lastId, lastId + 1];
+    }
+  } else {
+    ids = [1];
+  }
+
+  ids.forEach(id => {
     const option = document.createElement('option');
     option.value = id;
     option.textContent = `Source ${id}`;
     sourceSelector.appendChild(option);
   });
 
-  if (used.length < polygons.length) {
-    const option = document.createElement('option');
-    option.value = getNextSourceID();
-    option.textContent = `Source ${option.value}`;
-    sourceSelector.appendChild(option);
-  }
-
-  // Finally, select the current area’s SourceID
-  sourceSelector.value = activeSourceID;
+  sourceSelector.value = activeSource;
 }
 
 function updateBackgroundCheckbox() {
@@ -178,7 +186,7 @@ function draw() {
 }
 
 function updateCoordinates() {
-  const header = 'Area,SourceID,TLx,TLy,TRx,TRy,BRx,BRy,BLx,BLy,Background';
+  const header = 'Area,Source,TLx,TLy,TRx,TRy,BRx,BRy,BLx,BLy,Background';
   const lines = polygons.map((polygon, polygonIndex) => {
     const scaledCorners = polygon.corners.map(corner => ({
       position: corner.position,
@@ -202,6 +210,7 @@ function resetCanvas() {
   activeAreaIndex = 0;
   updateAreaSelector();
   updateSourceSelector();
+  updateBackgroundCheckbox()
   draw();
   updateCoordinates();
 }
@@ -432,16 +441,16 @@ function straightenAreaFromCorner(area, cornerIndex) {
   updateCoordinates();
 }
 
-function getUsedSourceIDs() {
+function getUsedSources() {
   // Returns all unique source IDs that polygons currently use
   const used = new Set();
   polygons.forEach(p => used.add(p.sourceID));
   return [...used].sort((a, b) => a - b);
 }
 
-function getNextSourceID() {
+function getNextSource() {
   // Returns the smallest integer >= 1 that’s NOT in use
-  const used = getUsedSourceIDs();  // e.g. [1,2]
+  const used = getUsedSources();  // e.g. [1,2]
   let candidate = 1;
   while (used.includes(candidate)) {
     candidate++;
@@ -496,13 +505,13 @@ addAreaButton.addEventListener('click', () => {
   activeAreaIndex = polygons.length - 1;
   updateAreaSelector();
   updateSourceSelector();
+  updateBackgroundCheckbox()
   draw();
   updateCoordinates();
 });
 
 polygonSelector.addEventListener('change', (e) => {
   activeAreaIndex = parseInt(e.target.value);
-  backgroundCheckbox.checked = polygons[activeAreaIndex].background;
   updateSourceSelector();
   draw();
   updateCoordinates();
@@ -623,3 +632,5 @@ container.addEventListener('drop', (e) => {
 });
 
 updateAreaSelector();
+updateSourceSelector();
+updateBackgroundCheckbox();
