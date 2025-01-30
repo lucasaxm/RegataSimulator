@@ -103,6 +103,12 @@ public class TemplateController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/initialize_source_ids")
+    public ResponseEntity<Void> initializeSourceIds() {
+        templateService.initializeSourceIds();
+        return ResponseEntity.noContent().build();
+    }
+
     private Template getTemplate(UUID id) {
         return templateService.getTemplate(id)
             .orElseThrow(() -> new RuntimeException("Template not found: " + id));

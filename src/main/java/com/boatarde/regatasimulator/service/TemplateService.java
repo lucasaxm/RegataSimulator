@@ -112,4 +112,13 @@ public class TemplateService {
         jsonDBTemplate.upsert(allTemplates, Template.class);
         log.info("All templates weights have been reset to {}", initialWeight);
     }
+
+    public void initializeSourceIds() {
+        List<Template> allTemplates = jsonDBTemplate.findAll(Template.class);
+        for (Template template : allTemplates) {
+            template.getAreas().forEach(area -> area.setSource(area.getIndex()));
+        }
+        jsonDBTemplate.upsert(allTemplates, Template.class);
+        log.info("All templates source ids have been reset");
+    }
 }
