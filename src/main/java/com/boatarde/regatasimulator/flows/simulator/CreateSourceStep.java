@@ -9,16 +9,21 @@ import com.boatarde.regatasimulator.flows.WorkflowStepRegistration;
 import com.boatarde.regatasimulator.models.Author;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;
+import com.boatarde.regatasimulator.service.SourceService;
 import com.boatarde.regatasimulator.util.FileUtils;
 import com.boatarde.regatasimulator.util.TelegramUtils;
 import io.jsondb.JsonDBTemplate;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
+import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -32,19 +37,64 @@ public class CreateSourceStep implements WorkflowStep {
     private final String sourcesPathString;
     private final JsonDBTemplate jsonDBTemplate;
     private final int initialWeight;
+    private final SourceService sourceService;
 
     public CreateSourceStep(@Value("${regata-simulator.sources.path}") String sourcesPathString,
                             JsonDBTemplate jsonDBTemplate,
-                            @Value("${regata-simulator.sources.initial-weight}") int initialWeight) {
+                            @Value("${regata-simulator.sources.initial-weight}") int initialWeight,
+                            SourceService sourceService) {
         this.sourcesPathString = sourcesPathString;
         this.jsonDBTemplate = jsonDBTemplate;
         this.initialWeight = initialWeight;
+        this.sourceService = sourceService;
     }
 
     @Override
     public WorkflowAction run(WorkflowDataBag bag) {
         Update update = bag.get(WorkflowDataKey.TELEGRAM_UPDATE, Update.class);
         RegataSimulatorBot bot = bag.get(WorkflowDataKey.REGATA_SIMULATOR_BOT, RegataSimulatorBot.class);
+
+        String csvContent = update.getMessage().getCaption();
+        String description = extractDescription(csvContent);
+
+        if (description.isEmpty()) {
+            SendMessage sendMessage = SendMessage.builder()
+                .chatId(update.getMessage().getChatId().toString())
+                .replyToMessageId(update.getMessage().getMessageId())
+                .allowSendingWithoutReply(true)
+                .text("Erro: A descrição não pode estar vazia.")
+                .build();
+            bag.put(WorkflowDataKey.SEND_MESSAGE, sendMessage);
+            return WorkflowAction.SEND_MESSAGE_STEP;
+        }
+
+        Source duplicateSource = findDuplicateSource(description);
+        if (duplicateSource != null) {
+            String message = String.format(
+                "Erro: Já existe uma source com esta descrição.%nSource existente ID: %s%nDescrição: %s",
+                duplicateSource.getId(),
+                duplicateSource.getDescription()
+            );
+            try {
+                Resource sourceResource = sourceService.loadSourceAsResource(duplicateSource);
+                InputStream inputStream = sourceResource.getInputStream();
+
+                SendPhoto sendPhoto = SendPhoto.builder()
+                    .chatId(update.getMessage().getChatId().toString())
+                    .replyToMessageId(update.getMessage().getMessageId())
+                    .allowSendingWithoutReply(true)
+                    .photo(new InputFile(inputStream, "source.jpg"))
+                    .caption(message)
+                    .build();
+                bag.put(WorkflowDataKey.SEND_PHOTO, sendPhoto);
+                return WorkflowAction.SEND_PHOTO_STEP;
+            } catch (Exception e) {
+                log.error(String.format("Exception when sending duplicated source: %s", e.getMessage()), e);
+                return WorkflowAction.NONE;
+            }
+
+        }
+
         Path sourcesDir = Paths.get(sourcesPathString);
 
         String fileExtension = FileUtils.getFileExtension(update.getMessage().getDocument().getFileName());
@@ -59,14 +109,13 @@ public class CreateSourceStep implements WorkflowStep {
             String fileId = update.getMessage().getDocument().getFileId();
             Path sourceFile = TelegramUtils.downloadTelegramFile(bot, fileId, newDir, fileName);
 
-            String csvContent = update.getMessage().getCaption();
-
             Source source = new Source();
             source.setId(uuid);
             source.setStatus(Status.REVIEW);
             source.setWeight(initialWeight);
             source.setMessage(update.getMessage());
-            source.setDescription(extractDescription(update.getMessage().getCaption()));
+
+            source.setDescription(description);
 
 
             Message response = bot.execute(SendMessage.builder()
@@ -121,5 +170,20 @@ public class CreateSourceStep implements WorkflowStep {
             return "";
         }
         return caption.substring(idx + 1).trim();
+    }
+
+    private Source findDuplicateSource(String description) {
+        if (description == null || description.trim().isEmpty()) {
+            return null;
+        }
+
+        String lowerCaseDescription = description.toLowerCase();
+        List<Source> existingSources = jsonDBTemplate.findAll(Source.class);
+
+        return existingSources.stream()
+            .filter(s -> s.getDescription() != null &&
+                s.getDescription().toLowerCase().equals(lowerCaseDescription))
+            .findFirst()
+            .orElse(null);
     }
 }
