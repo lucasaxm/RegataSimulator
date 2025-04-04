@@ -91,7 +91,7 @@ public class SourceImporterService {
         source.setDescription(record.getNome());
         source.setWeight(initialWeight);
         source.setMessage(null);
-        source.setStatus(Status.APPROVED);
+        source.setStatus(Status.REVIEW);
 
         log.info("Created Source object for {}: {}", record.getNome(), source);
         return source;
