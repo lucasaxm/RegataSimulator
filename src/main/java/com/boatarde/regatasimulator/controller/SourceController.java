@@ -100,9 +100,9 @@ public class SourceController {
                 Message reasonMessage = new Message();
                 reasonMessage.setText(reviewSourceBody.getReason());
                 update.setChannelPost(reasonMessage);
+                routerService.startFlow(update, bot, WorkflowAction.SEND_SOURCE_REJECTED_MESSAGE);
             }
 
-            routerService.startFlow(update, bot, WorkflowAction.SEND_SOURCE_REJECTED_MESSAGE);
         }
         return ResponseEntity.noContent().build();
     }
