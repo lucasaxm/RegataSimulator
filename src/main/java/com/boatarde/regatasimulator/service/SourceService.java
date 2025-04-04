@@ -4,7 +4,6 @@ import com.boatarde.regatasimulator.dto.SearchCriteria;
 import com.boatarde.regatasimulator.models.GalleryResponse;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;
-import com.boatarde.regatasimulator.models.Template;
 import com.boatarde.regatasimulator.util.JsonDBUtils;
 import io.jsondb.JsonDBTemplate;
 import lombok.extern.slf4j.Slf4j;
@@ -137,6 +136,7 @@ public class SourceService {
 
         int totalItems = filtered.size();
         List<Source> result = filtered.stream()
+            .sorted(JsonDBUtils.getComparator().reversed())
             .skip((long) (criteria.getPage() - 1) * criteria.getPerPage())
             .limit(criteria.getPerPage())
             .toList();
