@@ -18,6 +18,8 @@ import org.springframework.beans.factory.annotation.Value;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Month;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -39,9 +41,14 @@ public class GetRandomSourceStep implements WorkflowStep {
     public WorkflowAction run(WorkflowDataBag bag) {
         Template template = bag.getGeneric(WorkflowDataKey.TEMPLATE, Template.class);
         Path sourcesDirectory = Paths.get(sourcesPathString);
+        ZonedDateTime today = ZonedDateTime.now();
 
         List<Source> approvedSources =
-            jsonDBTemplate.find(JsonDBUtils.getJxQuery(Status.APPROVED, null), Source.class);
+            jsonDBTemplate.find(JsonDBUtils.getJxQuery(Status.APPROVED, null), Source.class)
+                .stream()
+                .filter(source -> !(today.getMonth().equals(Month.APRIL) && today.getDayOfMonth() == 14)
+                    || source.getDescription().contains("gab"))
+                .toList();
         if (approvedSources.isEmpty()) {
             log.error("No sources found.");
             return WorkflowAction.NONE;
