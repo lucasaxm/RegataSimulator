@@ -30,7 +30,7 @@ public class BackupSourcesStep implements WorkflowStep {
 
     // Maximum allowed chunk size (e.g., 50 MB) – adjust as needed.
     // For testing here, you might use a lower number.
-    private static final long MAX_CHUNK_SIZE = 50L * 1024 * 1024;
+    private static final long MAX_CHUNK_SIZE = 40L * 1024 * 1024;
 
     private final Long backupChatId;
     private final String sourcesPathString;
