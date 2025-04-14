@@ -39,7 +39,10 @@ public class SourceService {
     }
 
     public GalleryResponse<Source> getSources(int page, int perPage, Status status, Long userId) {
-        String jxQuery = JsonDBUtils.getJxQuery(status, userId);
+        String jxQuery = JsonDBUtils.jxQuery()
+            .withStatus(status)
+            .withUserId(userId)
+            .build();
 
         // Query to get the total number of items and the paginated result
         List<Source> allMatchingSources = jsonDBTemplate.find(jxQuery, Source.class);

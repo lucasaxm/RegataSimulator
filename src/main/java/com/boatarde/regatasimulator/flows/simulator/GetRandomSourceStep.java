@@ -12,6 +12,7 @@ import com.boatarde.regatasimulator.models.Template;
 import com.boatarde.regatasimulator.models.TemplateArea;
 import com.boatarde.regatasimulator.util.FileUtils;
 import com.boatarde.regatasimulator.util.JsonDBUtils;
+import com.boatarde.regatasimulator.util.JxQueryBuilder;
 import io.jsondb.JsonDBTemplate;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -42,14 +43,13 @@ public class GetRandomSourceStep implements WorkflowStep {
     public WorkflowAction run(WorkflowDataBag bag) {
         Template template = bag.getGeneric(WorkflowDataKey.TEMPLATE, Template.class);
         Path sourcesDirectory = Paths.get(sourcesPathString);
-        ZonedDateTime today = ZonedDateTime.now(ZoneId.of("America/Sao_Paulo"));
 
-        List<Source> approvedSources = new ArrayList<>(
-            jsonDBTemplate.find(JsonDBUtils.getJxQuery(Status.APPROVED, null), Source.class)
-                .stream()
-                .filter(source -> !(today.getMonth().equals(Month.APRIL) && today.getDayOfMonth() == 14)
-                    || source.getDescription().toLowerCase().contains("gab"))
-                .toList());
+        JxQueryBuilder jxQueryBuilder = JsonDBUtils.jxQuery()
+            .withStatus(Status.APPROVED);
+
+        addBirthdayFilter(jxQueryBuilder);
+
+        List<Source> approvedSources = jsonDBTemplate.find(jxQueryBuilder.build(), Source.class);
         if (approvedSources.isEmpty()) {
             log.error("No sources found.");
             return WorkflowAction.NONE;
@@ -91,5 +91,28 @@ public class GetRandomSourceStep implements WorkflowStep {
         bag.put(WorkflowDataKey.SOURCES, sources);
         bag.put(WorkflowDataKey.SOURCE_FILES, sourceFiles);
         return WorkflowAction.BUILD_MEME_STEP;
+    }
+
+    private void addBirthdayFilter(JxQueryBuilder jxQueryBuilder) {
+        ZonedDateTime today = ZonedDateTime.now(ZoneId.of("America/Sao_Paulo"));
+        if (today.getMonth().equals(Month.JANUARY) && today.getDayOfMonth() == 22) {
+            jxQueryBuilder.withDescription("brenda");
+        } else if (today.getMonth().equals(Month.APRIL)) {
+            if (today.getDayOfMonth() == 3) {
+                jxQueryBuilder.withDescription("ander");
+            } else if (today.getDayOfMonth() == 14) {
+                jxQueryBuilder.withDescription("gab");
+            } else if (today.getDayOfMonth() == 30) {
+                jxQueryBuilder.withDescription("gui");
+            }
+        } else if (today.getMonth().equals(Month.MAY) && today.getDayOfMonth() == 27) {
+            jxQueryBuilder.withDescription("xxk", "gayzito");
+        } else if (today.getMonth().equals(Month.JUNE) && today.getDayOfMonth() == 10) {
+            jxQueryBuilder.withDescription("lucas", "c4", "celta");
+        } else if (today.getMonth().equals(Month.AUGUST) && today.getDayOfMonth() == 12) {
+            jxQueryBuilder.withDescription("valb", "punhet");
+        } else if (today.getMonth().equals(Month.OCTOBER) && today.getDayOfMonth() == 25) {
+            jxQueryBuilder.withDescription("dedey");
+        }
     }
 }

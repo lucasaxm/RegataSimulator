@@ -1,6 +1,11 @@
-package com.boatarde.regatasimulator.flows;
+package com.boatarde.regatasimulator.flows.backup;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
+import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.flows.WorkflowDataBag;
+import com.boatarde.regatasimulator.flows.WorkflowDataKey;
+import com.boatarde.regatasimulator.flows.WorkflowStep;
+import com.boatarde.regatasimulator.flows.WorkflowStepRegistration;
 import com.boatarde.regatasimulator.util.TelegramUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -46,8 +51,8 @@ public class BackupJsonDBStep implements WorkflowStep {
             // Create SendDocument request
             SendDocument sendDocument = new SendDocument();
             sendDocument.setChatId(backupChatId.toString());
-            sendDocument.setCaption(timestamp);
-            sendDocument.setDocument(new InputFile(zipFilePath.toFile(), "backup-" + timestamp + ".zip"));
+            sendDocument.setCaption("Database backup");
+            sendDocument.setDocument(new InputFile(zipFilePath.toFile(), "jsondb-" + timestamp + ".zip"));
 
             // Send the document
             Message response = regataSimulatorBot.execute(sendDocument);
@@ -60,7 +65,7 @@ public class BackupJsonDBStep implements WorkflowStep {
             return WorkflowAction.NONE;
         }
 
-        return WorkflowAction.SEND_REPORT_STEP;
+        return WorkflowAction.BACKUP_TEMPLATES_STEP;
     }
 
     private Path zipDirectory(String sourceDirPath) throws IOException {

@@ -35,8 +35,10 @@ public class GetRandomTemplateStep implements WorkflowStep {
 
     @Override
     public WorkflowAction run(WorkflowDataBag bag) {
-        List<Template> approvedTemplates =
-            jsonDBTemplate.find(JsonDBUtils.getJxQuery(Status.APPROVED, null), Template.class);
+        String jxQuery = JsonDBUtils.jxQuery()
+            .withStatus(Status.APPROVED)
+            .build();
+        List<Template> approvedTemplates = jsonDBTemplate.find(jxQuery, Template.class);
         if (approvedTemplates.isEmpty()) {
             log.error("No templates found.");
             return WorkflowAction.NONE;
