@@ -19,6 +19,7 @@ import org.springframework.beans.factory.annotation.Value;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Month;
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -41,7 +42,7 @@ public class GetRandomSourceStep implements WorkflowStep {
     public WorkflowAction run(WorkflowDataBag bag) {
         Template template = bag.getGeneric(WorkflowDataKey.TEMPLATE, Template.class);
         Path sourcesDirectory = Paths.get(sourcesPathString);
-        ZonedDateTime today = ZonedDateTime.now();
+        ZonedDateTime today = ZonedDateTime.now(ZoneId.of("America/Sao_Paulo"));
 
         List<Source> approvedSources =
             jsonDBTemplate.find(JsonDBUtils.getJxQuery(Status.APPROVED, null), Source.class)
