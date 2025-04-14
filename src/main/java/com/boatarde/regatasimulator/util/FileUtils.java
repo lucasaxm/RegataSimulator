@@ -46,8 +46,7 @@ public class FileUtils {
      * @return a list of Paths to the generated zip files.
      * @throws IOException if an I/O error occurs.
      */
-    public static List<Path> zipInChunks(String sourceDirPath, double chunkSize) throws IOException {
-        List<Path> zipFiles = new ArrayList<>();
+    public static List<Path> zipInChunks(String sourceDirPath, long chunkSize) throws IOException {
         Path templatesPath = Paths.get(sourceDirPath);
 
         // List only the subdirectories (UUID directories) in the templates folder.
