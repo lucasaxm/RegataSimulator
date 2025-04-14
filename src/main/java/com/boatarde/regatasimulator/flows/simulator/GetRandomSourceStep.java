@@ -47,7 +47,7 @@ public class GetRandomSourceStep implements WorkflowStep {
             jsonDBTemplate.find(JsonDBUtils.getJxQuery(Status.APPROVED, null), Source.class)
                 .stream()
                 .filter(source -> !(today.getMonth().equals(Month.APRIL) && today.getDayOfMonth() == 14)
-                    || source.getDescription().contains("gab"))
+                    || source.getDescription().toLowerCase().contains("gab"))
                 .toList();
         if (approvedSources.isEmpty()) {
             log.error("No sources found.");
