@@ -44,12 +44,12 @@ public class GetRandomSourceStep implements WorkflowStep {
         Path sourcesDirectory = Paths.get(sourcesPathString);
         ZonedDateTime today = ZonedDateTime.now(ZoneId.of("America/Sao_Paulo"));
 
-        List<Source> approvedSources =
+        List<Source> approvedSources = new ArrayList<>(
             jsonDBTemplate.find(JsonDBUtils.getJxQuery(Status.APPROVED, null), Source.class)
                 .stream()
                 .filter(source -> !(today.getMonth().equals(Month.APRIL) && today.getDayOfMonth() == 14)
                     || source.getDescription().toLowerCase().contains("gab"))
-                .toList();
+                .toList());
         if (approvedSources.isEmpty()) {
             log.error("No sources found.");
             return WorkflowAction.NONE;
