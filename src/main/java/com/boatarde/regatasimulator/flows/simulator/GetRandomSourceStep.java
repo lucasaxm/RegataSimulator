@@ -77,7 +77,8 @@ public class GetRandomSourceStep implements WorkflowStep {
         for (int i = 0; i < sources.size(); i++) {
             Source source = sources.get(i);
             Path selectedDirectory = sourcesDirectory.resolve(source.getId().toString());
-            Optional<Path> fileOpt = FileUtils.getFirstExistingFile(selectedDirectory, "source.jpg", "source.png");
+            Optional<Path> fileOpt = FileUtils.getFirstExistingFile(selectedDirectory, "source.jpg",
+                "source.jpeg", "source.png");
             if (fileOpt.isEmpty()) {
                 log.error("Source file not found: {}", source.getId());
                 return WorkflowAction.NONE;

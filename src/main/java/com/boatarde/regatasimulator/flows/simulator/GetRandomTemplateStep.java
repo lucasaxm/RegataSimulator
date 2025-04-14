@@ -81,7 +81,8 @@ public class GetRandomTemplateStep implements WorkflowStep {
     private Path getTemplateFile(Template template) {
         Path selectedDirectory = Paths.get(templatesPathString).resolve(template.getId().toString());
 
-        Optional<Path> fileOpt = FileUtils.getFirstExistingFile(selectedDirectory, "template.jpg", "template.png");
+        Optional<Path> fileOpt = FileUtils.getFirstExistingFile(selectedDirectory, "template.jpg",
+            "template.jpeg", "template.png");
         if (fileOpt.isEmpty()) {
             log.error("Template file not found: {}", template.getId());
             return null;
