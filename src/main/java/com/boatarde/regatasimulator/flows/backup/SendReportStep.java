@@ -24,6 +24,7 @@ public class SendReportStep implements WorkflowStep {
 
     private final JsonDBTemplate jsonDBTemplate;
 
+
     public SendReportStep(JsonDBTemplate jsonDBTemplate) {
         this.jsonDBTemplate = jsonDBTemplate;
     }
@@ -66,10 +67,8 @@ public class SendReportStep implements WorkflowStep {
         builder.append("<b>📊 Relatório Geral</b>\n");
 
         // Overall summary section
-        builder.append("<b>Resumo:</b>\n");
         builder.append("• Templates: ").append(templates.size()).append("\n");
-        builder.append("• Sources: ").append(sources.size()).append("\n");
-        builder.append("• Autores: ").append(authors.size()).append("\n\n");
+        builder.append("• Sources: ").append(sources.size()).append("\n\n");
 
         // Detailed section for templates per user
         builder.append("<b>📝 Templates</b>\n");
