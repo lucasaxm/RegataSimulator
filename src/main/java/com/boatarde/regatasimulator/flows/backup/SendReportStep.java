@@ -1,7 +1,11 @@
-package com.boatarde.regatasimulator.flows;
+package com.boatarde.regatasimulator.flows.backup;
 
+import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.flows.WorkflowDataBag;
+import com.boatarde.regatasimulator.flows.WorkflowDataKey;
+import com.boatarde.regatasimulator.flows.WorkflowStep;
+import com.boatarde.regatasimulator.flows.WorkflowStepRegistration;
 import com.boatarde.regatasimulator.models.Author;
-import com.boatarde.regatasimulator.models.Meme;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Template;
 import com.boatarde.regatasimulator.util.JsonDBUtils;
@@ -19,6 +23,7 @@ import java.util.Map;
 public class SendReportStep implements WorkflowStep {
 
     private final JsonDBTemplate jsonDBTemplate;
+
 
     public SendReportStep(JsonDBTemplate jsonDBTemplate) {
         this.jsonDBTemplate = jsonDBTemplate;
@@ -51,23 +56,23 @@ public class SendReportStep implements WorkflowStep {
     }
 
     private String getReportText() {
-        StringBuilder builder = new StringBuilder();
-        builder.append("Relatório:\n");
-
+        // Retrieve the data from the database
         List<Template> templates = jsonDBTemplate.findAll(Template.class);
-        builder.append("%d templates.\n".formatted(templates.size()));
-
         List<Source> sources = jsonDBTemplate.findAll(Source.class);
-        builder.append("%d sources.\n".formatted(sources.size()));
-
-        List<Meme> memes = jsonDBTemplate.findAll(Meme.class);
-        builder.append("%d memes.\n".formatted(memes.size()));
-
         List<Author> authors = jsonDBTemplate.findAll(Author.class);
-        builder.append("%d autores.\n".formatted(authors.size()));
-        builder.append("--------------------\n");
-        // Create a list of authors with their template counts
-        List<Map.Entry<Author, Long>> authorCounts = authors.stream()
+
+        StringBuilder builder = new StringBuilder();
+
+        // Header
+        builder.append("<b>📊 Relatório Geral</b>\n");
+
+        // Overall summary section
+        builder.append("• Templates: ").append(templates.size()).append("\n");
+        builder.append("• Sources: ").append(sources.size()).append("\n\n");
+
+        // Detailed section for templates per user
+        builder.append("<b>📝 Templates</b>\n");
+        List<Map.Entry<Author, Long>> authorTemplateCounts = authors.stream()
             .map(author -> Map.entry(author, templates.stream()
                 .filter(template -> template.getMessage() != null &&
                     template.getMessage().getFrom().getId().equals(author.getId()))
@@ -75,12 +80,30 @@ public class SendReportStep implements WorkflowStep {
             .sorted(Map.Entry.<Author, Long>comparingByValue().reversed())
             .toList();
 
-        // Append the sorted authors to the builder
-        authorCounts.forEach(entry -> {
-            Author author = entry.getKey();
-            Long count = entry.getValue();
-            builder.append("%s fez %d templates.\n".formatted(JsonDBUtils.usernameOrFullName(author), count));
-        });
+        int rank = 1;
+        for (Map.Entry<Author, Long> entry : authorTemplateCounts) {
+            builder.append(String.format("%d. <b>%s</b>: %d templates.%n",
+                rank++, JsonDBUtils.usernameOrFullName(entry.getKey()), entry.getValue()));
+        }
+
+        // Detailed section for sources per user
+        builder.append("\n<b>🖼 Sources</b>\n");
+        List<Map.Entry<Author, Long>> authorSourceCounts = authors.stream()
+            .map(author -> Map.entry(author, sources.stream()
+                .filter(source -> source.getMessage() != null &&
+                    source.getMessage().getFrom().getId().equals(author.getId()))
+                .count()))
+            .filter(authorSourceEntry -> authorSourceEntry.getValue() > 0)
+            .sorted(Map.Entry.<Author, Long>comparingByValue().reversed())
+            .toList();
+
+        rank = 1;
+        for (Map.Entry<Author, Long> entry : authorSourceCounts) {
+            builder.append(String.format("%d. <b>%s</b>: %d sources.%n",
+                rank++, JsonDBUtils.usernameOrFullName(entry.getKey()), entry.getValue()));
+        }
+
         return builder.toString();
     }
+
 }

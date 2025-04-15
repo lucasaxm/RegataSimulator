@@ -5,7 +5,6 @@ import com.boatarde.regatasimulator.models.Author;
 import com.boatarde.regatasimulator.models.CommonEntity;
 import com.boatarde.regatasimulator.models.Meme;
 import com.boatarde.regatasimulator.models.Source;
-import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.models.Template;
 import com.boatarde.regatasimulator.models.TemplateArea;
 import lombok.experimental.UtilityClass;
@@ -28,22 +27,8 @@ import java.util.stream.IntStream;
 public class JsonDBUtils {
     private static final String HEADER = "Area,Source,TLx,TLy,TRx,TRy,BRx,BRy,BLx,BLy,Background";
 
-    public static String getJxQuery(Status status, Long userId) {
-        StringBuilder jxQueryBuilder = new StringBuilder("/.");
-        if (status == null && userId == null) {
-            return jxQueryBuilder.toString();
-        }
-        if (status != null) {
-            jxQueryBuilder.append("[status='").append(status).append("'");
-        } else {
-            jxQueryBuilder.append("[message/from/id=").append(userId).append("]");
-            return jxQueryBuilder.toString();
-        }
-        if (userId != null) {
-            jxQueryBuilder.append(" and message/from/id=").append(userId);
-        }
-        jxQueryBuilder.append("]");
-        return jxQueryBuilder.toString();
+    public static JxQueryBuilder jxQuery() {
+        return new JxQueryBuilder();
     }
 
     public static Comparator<CommonEntity> getComparator() {

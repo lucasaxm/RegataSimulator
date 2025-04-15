@@ -40,7 +40,10 @@ public class TemplateService {
     }
 
     public GalleryResponse<Template> getTemplates(int page, int perPage, Status status, Long userId) {
-        String jxQuery = JsonDBUtils.getJxQuery(status, userId);
+        String jxQuery = JsonDBUtils.jxQuery()
+            .withStatus(status)
+            .withUserId(userId)
+            .build();
 
         List<Template> allMatchingTemplates = jsonDBTemplate.find(jxQuery, Template.class);
         int totalItems = allMatchingTemplates.size();

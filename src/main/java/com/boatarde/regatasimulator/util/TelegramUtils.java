@@ -68,8 +68,12 @@ public class TelegramUtils {
 
     public static SendMediaBotMethod<Message> inputMediaToSendMedia(SendMediaGroup sendMediaGroup, int mediaIndex) {
         InputMedia inputMedia = sendMediaGroup.getMedias().get(mediaIndex);
-        InputFile inputFile = new InputFile();
-        inputFile.setMedia(inputMedia.getMedia());
+        InputFile inputFile;
+        if (inputMedia.isNewMedia()) {
+            inputFile = new InputFile(inputMedia.getNewMediaFile(), inputMedia.getMediaName());
+        } else {
+            inputFile = new InputFile(inputMedia.getMedia());
+        }
         return switch (inputMedia) {
             case InputMediaPhoto inputMediaPhoto -> SendPhoto.builder()
                 .chatId(sendMediaGroup.getChatId())
