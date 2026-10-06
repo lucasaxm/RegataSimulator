@@ -43,3 +43,5 @@ out/
 /src/main/resources/templates_test/
 /src/main/resources/RegataSimulator.log
 /src/main/java/com/boatarde/regatasimulator/LogProcessor.java
+
+.env
