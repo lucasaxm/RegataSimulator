@@ -2,13 +2,15 @@
 
 Reviewed: 2026-10-06. Status: recommendations, **not implemented or approved architecture decisions**.
 
+Subsequent development-only smoke testing is recorded in [live test results](live-test-results.md). It confirms several error paths and refines the CORS assessment below; production was not tested.
+
 ## Executive decision
 
 | Question | Recommendation | Reason in this codebase |
 | --- | --- | --- |
 | Keep the chain of responsibility? | Gradually replace the custom workflow runner with explicit, typed application services. Keep lightweight Telegram routing. | Most flows are short, fixed sequences; the framework adds enum transitions and an untyped data bag without durable execution, retries, or recovery. |
 | Replace JsonDB with SQLite? | Yes, assuming one application deployment on a server with persistent local disk and modest write concurrency. Prefer Spring JDBC over JPA. | Transactions, uniqueness constraints, indexed queries, and versioned schema changes improve reliability without introducing a database server. |
-| Hide domains in CORS? | Externalize configuration, not encrypt it. First establish whether cross-origin API access is needed at all. | Domains are public. The problems are Java literals, environment coupling, and missing Spring Security CORS integration. |
+| Hide domains in CORS? | Externalize configuration, not encrypt it. First establish whether cross-origin API access is needed at all. | Domains are public. Java literals and environment coupling warrant improvement; tested runtime preflight handling works. |
 | Rewrite everything? | No. Add behavior tests, fix safety issues, introduce boundaries, then migrate one concern at a time. | Database, filesystem, rendering, and Telegram side effects are currently intertwined; replacing all of them together is unnecessarily risky. |
 
 Scope: all backend packages, tests, profiles, Gradle configuration, CI/deployment, and static client integration points. Frontend design/implementation review is deferred. No production database, traffic measurements, deployment host, reverse-proxy configuration, or live Telegram behavior was inspected. Dataset size, observed race frequency, and production performance are therefore unknown.
@@ -24,6 +26,8 @@ See [project map](project-map.md) for the package map and runtime setup.
 - There are 71 main Java files, 21 concrete workflow steps, six concrete Telegram routes, and three REST controllers in the reviewed tree.
 
 ### Verified baseline
+
+This is the historical pre-Phase-0 baseline. [Phase 0 results](phase-0-results.md) supersede the dormant-context/coverage assessment below with 293 passing cases and safe context testing; the diagnosed business/security defects remain unfixed.
 
 `./gradlew clean test` passed on OpenJDK 21.0.2 using Gradle 8.6: **12 tests, zero failures/errors/skips**.
 
@@ -180,7 +184,7 @@ Rehearse restore, not just upload. Keep rollback to the original store available
 ### Current configuration
 
 - [CorsConfig](../src/main/java/com/boatarde/regatasimulator/configuration/CorsConfig.java) hardcodes two origins, applies to `/**`, allows credentials and wildcard request headers.
-- [SecurityConfig](../src/main/java/com/boatarde/regatasimulator/configuration/SecurityConfig.java) has no explicit `.cors(...)` integration. MVC mappings alone should not be relied upon to process cookie-less preflight before authentication.
+- [SecurityConfig](../src/main/java/com/boatarde/regatasimulator/configuration/SecurityConfig.java) has no explicit `.cors(...)` call, but live dev tests verified that allowed cookie-less preflight returns 200 and an untrusted origin returns 403. Absence of that call alone does not establish broken integration; retain full-chain regression tests when changing configuration.
 - [SessionConfig](../src/main/java/com/boatarde/regatasimulator/configuration/SessionConfig.java) hardcodes a stage cookie domain, forces Secure cookies for dev, and defines no custom prod cookie serializer. Prod uses framework defaults rather than the exact stage policy.
 - [api.js](../src/main/resources/static/api.js) uses relative URLs and `window.location.origin`: normal administration is same-origin. Telegram embedding does not by itself make these API requests cross-origin; iframe policy is a separate concern.
 
@@ -188,7 +192,7 @@ Rehearse restore, not just upload. Keep rollback to the original store available
 
 1. Confirm browser/API hosting topology. If UI and API stay same-origin, remove unnecessary cross-origin access rather than preserve an allowlist that nobody needs. Same-origin requests do not require CORS permission.
 2. If cross-origin clients are required, bind validated `@ConfigurationProperties`, e.g. `regata-simulator.web.cors.allowed-origins`, supplied per environment through YAML/environment deployment configuration. Deny cross-origin access by default; do not default production to localhost or `*`.
-3. Use one authoritative `UrlBasedCorsConfigurationSource` wired into `SecurityFilterChain.cors(...)`; avoid conflicting MVC/controller/security policies. Scope the mapping to endpoints that need cross-origin access, accounting explicitly for login/logout if required.
+3. Keep one authoritative policy integrated with the security chain; the existing MVC policy can be retained if full-chain checks pass. An explicit `UrlBasedCorsConfigurationSource` is an alternative, not a required fix for a demonstrated failure. Avoid conflicting MVC/controller/security policies and scope grants to endpoints needing cross-origin access, including login/logout where required.
 4. Allow exact origins (scheme, host, port), needed methods and headers, and credentials only where necessary. Never reflect arbitrary `Origin` values or combine wildcard origins with credentialed access.
 5. Configure the actual Spring Session `CookieSerializer`, not just servlet cookie properties. Prefer host-only cookies unless subdomain sharing is truly required. Make Secure/SameSite policy explicit per environment; test local development and Telegram WebView/iframe behavior. Do not turn SameSite=None on globally without a reason and CSRF protection.
 6. Keep authentication/authorization and CSRF protections. CORS is a browser response-access policy, not a firewall or an authorization check. Moving a domain into an environment variable does not hide it from clients.

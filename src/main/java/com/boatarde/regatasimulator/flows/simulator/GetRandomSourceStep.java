@@ -15,10 +15,12 @@ import com.boatarde.regatasimulator.util.JsonDBUtils;
 import com.boatarde.regatasimulator.util.JxQueryBuilder;
 import io.jsondb.JsonDBTemplate;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Clock;
 import java.time.Month;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -32,11 +34,18 @@ public class GetRandomSourceStep implements WorkflowStep {
 
     private final String sourcesPathString;
     private final JsonDBTemplate jsonDBTemplate;
+    private final Clock clock;
 
+    public GetRandomSourceStep(String sourcesPathString, JsonDBTemplate jsonDBTemplate) {
+        this(sourcesPathString, jsonDBTemplate, Clock.system(ZoneId.of("America/Sao_Paulo")));
+    }
+
+    @Autowired
     public GetRandomSourceStep(@Value("${regata-simulator.sources.path}") String sourcesPathString,
-                               JsonDBTemplate jsonDBTemplate) {
+                               JsonDBTemplate jsonDBTemplate, Clock clock) {
         this.sourcesPathString = sourcesPathString;
         this.jsonDBTemplate = jsonDBTemplate;
+        this.clock = clock;
     }
 
     @Override
@@ -94,7 +103,7 @@ public class GetRandomSourceStep implements WorkflowStep {
     }
 
     private void addBirthdayFilter(JxQueryBuilder jxQueryBuilder) {
-        ZonedDateTime today = ZonedDateTime.now(ZoneId.of("America/Sao_Paulo"));
+        ZonedDateTime today = ZonedDateTime.now(clock.withZone(ZoneId.of("America/Sao_Paulo")));
         if (today.getMonth().equals(Month.JANUARY) && today.getDayOfMonth() == 22) {
             jxQueryBuilder.withDescription("brenda");
         } else if (today.getMonth().equals(Month.APRIL)) {

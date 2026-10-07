@@ -19,7 +19,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
-import java.util.stream.Collectors;
+import java.util.random.RandomGenerator;
 import java.util.stream.IntStream;
 
 @Slf4j
@@ -42,40 +42,46 @@ public class JsonDBUtils {
     }
 
     public static List<Source> selectSourcesWithWeight(List<Source> sources, int amount) {
-        return selectWithWeight(sources, amount).stream()
-            .filter(Source.class::isInstance)
-            .map(Source.class::cast)
-            .collect(Collectors.toList());
+        return selectSourcesWithWeight(sources, amount, new Random());
+    }
+
+    public static List<Source> selectSourcesWithWeight(List<Source> sources, int amount, RandomGenerator random) {
+        return selectWithWeight(sources, amount, random);
     }
 
     public static List<Template> selectTemplatesWithWeight(List<Template> templates, int amount) {
-        return selectWithWeight(templates, amount).stream()
-            .filter(Template.class::isInstance)
-            .map(Template.class::cast)
-            .collect(Collectors.toList());
+        return selectTemplatesWithWeight(templates, amount, new Random());
+    }
+
+    public static List<Template> selectTemplatesWithWeight(List<Template> templates, int amount,
+                                                          RandomGenerator random) {
+        return selectWithWeight(templates, amount, random);
     }
 
     public static Template selectRandomSingleAreaTemplate(List<Template> templates) {
+        return selectRandomSingleAreaTemplate(templates, new Random());
+    }
+
+    public static Template selectRandomSingleAreaTemplate(List<Template> templates, RandomGenerator random) {
         List<Template> filteredTemplates = templates.stream()
             .filter(template -> template.getAreas().size() == 1)
             .toList();
 
         if (filteredTemplates.isEmpty()) {
-            throw new RuntimeException("No single area templates found");
+            throw new IllegalStateException("No single area templates found");
         }
 
-        Random random = new Random();
         return filteredTemplates.get(random.nextInt(filteredTemplates.size()));
     }
 
-    private static List<? extends CommonEntity> selectWithWeight(List<? extends CommonEntity> entities, int amount) {
+    private static <T extends CommonEntity> List<T> selectWithWeight(List<T> entities, int amount,
+                                                                  RandomGenerator random) {
         if (entities.size() < amount) {
-            throw new RuntimeException(
+            throw new IllegalArgumentException(
                 "Not enough entities to select from. Amount requested: %d, entities available: %d".formatted(amount,
                     entities.size()));
         }
-        List<CommonEntity> selectedEntities = new ArrayList<>(); // List to store selected entities
-        Random random = new Random(); // Random object for generating random numbers
+        List<T> selectedEntities = new ArrayList<>(); // List to store selected entities
 
         for (int j = 0; j < amount && !entities.isEmpty(); j++) {
             int[] cumulativeWeights = new int[entities.size()]; // Array to store cumulative weights
@@ -95,8 +101,8 @@ public class JsonDBUtils {
                 .orElse(
                     cumulativeWeights.length - 1); // Find the index of the selected source based on the random number
 
-            selectedEntities.add(entities.get(selectedIndex)); // Add the selected source to the list
-            entities.remove(selectedIndex); // Remove the selected source from the original list
+            // Move the candidate at this position out of the pool to select without replacement.
+            selectedEntities.add(entities.remove(selectedIndex));
         }
 
         return selectedEntities; // Return the list of selected entities

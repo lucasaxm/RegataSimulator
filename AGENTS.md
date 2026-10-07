@@ -5,6 +5,8 @@
 - This is a Java/Spring Boot modular monolith: Telegram bot, administration APIs, static browser pages, ImageMagick rendering, scheduled publishing, and backups.
 - Put produced plans, research, reviews, and other Markdown in root `docs/`. Keep this `AGENTS.md` at repository root.
 - Read [project map](docs/project-map.md) for current architecture/setup; [backend review](docs/backend-review.md) and [improvement plan](docs/backend-improvement-plan.md) contain proposals, **not implemented decisions**.
+- [Live test results](docs/live-test-results.md) describe verified dev behavior and failures; that run used isolated storage, disabled schedules, and test-account destinations, not normal production configuration.
+- [Phase 0 results](docs/phase-0-results.md) describe implemented characterization coverage/test seams; later bug fixes and the service/SQLite migration remain proposals.
 - Frontend redesign was deferred in the backend review. Do not expand a backend task into UI/framework replacement.
 
 ## Source boundaries
@@ -19,15 +21,17 @@
 - Use Java 21 and checked-in Gradle wrapper (currently 8.6). The repository pins OpenJDK 21.0.2 in `.tool-versions`; check actual toolchain before changing it.
 - `./gradlew test` for normal verification; `./gradlew clean test` for a clean baseline; `./gradlew clean build` for full packaging/CI parity; `./gradlew bootJar` for the executable JAR.
 - Target tests with `./gradlew test --tests 'fully.qualified.TestClass'`.
-- Existing tests use JUnit 5/Mockito and need no runtime secrets. Add regression/use-case tests for behavioral changes; current coverage is narrow and the application-context test is commented out.
+- Tests use JUnit 5/Mockito, `@TempDir`, and a secret-free test profile; the isolated Spring context mocks bot/registration and dynamically overrides all storage paths. No real Telegram/ImageMagick is needed for `test`.
+- Known-failure characterization cases are explicitly named/commented. Update their expectations alongside fixes; do not interpret them as desired future behavior or freeze missing authorization as a valid security contract.
 - Java editor non-project warnings can be workspace-import problems; check Gradle output before changing valid packages to appease the editor.
 
 ## Runtime and data safety
 
 - Do not start `bootRun`, register bots, publish memes, send backups, or deploy as routine verification. Startup invokes Telegram and schedules side effects. Use isolated test adapters/storage; explicitly requested live tests need a dedicated development bot/environment.
+- Bot registration and schedules default on. Tests must disable `telegram.bots.regata-simulator.registration-enabled` and `regata-simulator.scheduling.enabled` **and** mock external calls; these switches do not disable manual mutations or Telegram health checks.
 - Never read/write/delete production data to test a migration or cleanup. Copy data to isolated storage, back it up, validate import/restore, and document rollback first.
 - Required runtime variables: `REGATA_SIMULATOR_ENC_PASSWORD`, `REGATA_SIMULATOR_DB_PATH`, `REGATA_SIMULATOR_SOURCES_PATH`, `REGATA_SIMULATOR_TEMPLATES_PATH`, `MAGICK_PATH`; select profile with `SPRING_PROFILES_ACTIVE`.
-- `.env` is a placeholder convenience file, not automatically loaded by Spring Boot. Ensure it is Git-ignored before entering real secrets. Do not print decrypted configuration, tokens, passwords, or token-bearing Telegram URLs.
+- `.env`/`.env.dev` are not automatically loaded by Spring Boot. Ensure local environment files are Git-ignored before entering real secrets. Do not print decrypted configuration, tokens, passwords, or token-bearing Telegram URLs.
 - JsonDB collections are `sources`, `templates`, `memes`, and `users`. Images live in separate UUID directories. Imported sources may have no Telegram Message; preserve that nullable contract.
 - Do not assume database transactions cover filesystem or Telegram effects. Explicitly handle partial failure, cleanup, and recovery.
 

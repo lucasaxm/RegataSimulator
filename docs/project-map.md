@@ -1,6 +1,6 @@
 # Project map and development baseline
 
-Verified: 2026-10-06. This describes the **current** application, not the proposed redesign.
+Verified: 2026-10-07. This describes the **current** application, not the proposed redesign.
 
 ## Stack and repository layout
 
@@ -30,7 +30,7 @@ All package paths below are relative to `src/main/java/com/boatarde/regatasimula
 
 | Package / class | Responsibility |
 | --- | --- |
-| `RegataSimulatorApplication` | Boot entry point; registers the bot and creates four JsonDB collections in `@PostConstruct` |
+| `RegataSimulatorApplication` | Boot entry point; conditionally registers the bot through TelegramBotRegistration and creates four JsonDB collections in `@PostConstruct` |
 | `bots/RegataSimulatorBot` | Telegram long-polling adapter forwarding updates to `RouterService` |
 | `routes/` | Six route predicates: ping, meme, report, backup, source upload/callback, template upload/callback |
 | `service/RouterService` | Runs all matching routes; enum-driven synchronous workflow loop |
@@ -92,18 +92,20 @@ Cookies/sessions use `MapSessionRepository`, not database-backed sessions. Stage
 - Neither scheduled annotation sets a zone; the scheduler timezone applies. Birthday selection separately uses America/Sao_Paulo.
 - Backups include JsonDB, templates, sources, then a statistics report, delivered to a configured Telegram backup chat. ZIP grouping targets 40 MiB of uncompressed items, not a guaranteed maximum output size.
 - Application startup calls the live Telegram API and starts long polling. Registered schedules can publish and send backups. `bootRun` is **not** a harmless startup smoke test.
+- Phase 0 added explicit default-on switches: `telegram.bots.regata-simulator.registration-enabled` and `regata-simulator.scheduling.enabled`. Tests set both false and mock Telegram; disabling these alone does not disable manual operations/remote health calls.
+- `TimeConfig` supplies a Clock for birthday rules; JsonDBUtils offers RandomGenerator overloads, and BuildMemeStep has a process-start seam. Normal time/selection/process behavior remains unchanged.
 
 ## Build and test commands
 
 Run from repository root with Java 21:
 
-- `./gradlew test` — existing unit suite.
+- `./gradlew test` — unit, characterization, and isolated Spring-context suite.
 - `./gradlew clean test` — clean baseline verification.
 - `./gradlew clean build` — compile/test/package (the standard PR CI command).
 - `./gradlew bootJar` — executable JAR under `build/libs/`.
 - `./gradlew test --tests 'com.boatarde.regatasimulator.service.RouterServiceTest'` — targeted test example.
 
-Tests passed without supplying runtime secrets or ImageMagick. Test reports: `build/reports/tests/test/index.html` and `build/test-results/test/`. The fully commented `BilubotApplicationTests.java` contributes no tests. IDE non-project diagnostics should be investigated via Gradle/Java workspace import, not fixed by changing valid package declarations.
+The suite has 300 passing cases across 23 suites after the 2026-10-07 Sonar cleanup, with no runtime secrets, Telegram calls, or ImageMagick dependency. Test reports: `build/reports/tests/test/index.html` and `build/test-results/test/`. The dormant `BilubotApplicationTests.java` was replaced with safe context/startup tests; test-only profile YAML and dynamic temporary paths isolate them. See [Phase 0 results](phase-0-results.md) for coverage and known-failure conventions. IDE non-project diagnostics should be investigated via Gradle/Java workspace import, not fixed by changing valid package declarations.
 
 ## Runtime environment and local safety
 
@@ -130,4 +132,4 @@ A placeholder-only root `.env` was added during the review because none existed.
 - A prior JAR is backed up; startup is detected through log text. No automatic rollback or HTTP readiness smoke check is defined.
 - Actual host layout, environment secrets, reverse proxy, and the external `subprocess` program were not verified.
 
-See [backend improvement plan](backend-improvement-plan.md) for proposed changes. None of the suggested SQLite/repository/service redesign has been applied yet.
+See [backend improvement plan](backend-improvement-plan.md) for the sequence and [Phase 0 results](phase-0-results.md) for implemented test coverage/seams. None of the suggested SQLite/repository/service redesign has been applied yet.

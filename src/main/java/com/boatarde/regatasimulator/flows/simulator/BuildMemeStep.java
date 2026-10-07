@@ -17,6 +17,8 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,6 +27,7 @@ import java.util.List;
 @WorkflowStepRegistration(WorkflowAction.BUILD_MEME_STEP)
 public class BuildMemeStep implements WorkflowStep {
 
+    private static final String COMPOSITE = "-composite";
     private final String magickPath;
 
     public BuildMemeStep(@Value("${magick.path}") String magickPath) {
@@ -55,11 +58,15 @@ public class BuildMemeStep implements WorkflowStep {
             Path result =
                 compositeFinalImage(templateFile, templateFile.getParent(), distortedSources, template.getAreas());
             bag.put(WorkflowDataKey.MEME_FILE, result);
-        } catch (Exception e) {
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Meme rendering interrupted", e);
+            return WorkflowAction.NONE;
+        } catch (IOException | RuntimeException e) {
             log.error(e.getLocalizedMessage(), e);
             return WorkflowAction.NONE;
         } finally {
-            distortedSources.forEach(p -> p.toFile().delete());
+            distortedSources.forEach(this::deleteTemporaryFile);
         }
 
         return WorkflowAction.SEND_MEME_STEP;
@@ -73,7 +80,7 @@ public class BuildMemeStep implements WorkflowStep {
                     .execute(EditMessageText.builder()
                         .chatId(creatingTemplateMessage.getChatId())
                         .messageId(creatingTemplateMessage.getMessageId())
-                        .text("Gerando meme de teste...\n<code>%s</code>".formatted(generateProgressBar(progress)))
+                        .text("Gerando meme de teste...%n<code>%s</code>".formatted(generateProgressBar(progress)))
                         .parseMode("HTML")
                         .build());
             } catch (TelegramApiException e) {
@@ -89,7 +96,12 @@ public class BuildMemeStep implements WorkflowStep {
         return "[" + "=".repeat(filledBars) + " ".repeat(emptyBars) + "] " + progress + "%";
     }
 
-    private Path buildDistortedSource(Path templateFile, Path sourceFile, TemplateArea templateArea) throws Exception {
+    protected Process startProcess(ProcessBuilder builder) throws IOException {
+        return builder.start();
+    }
+
+    private Path buildDistortedSource(Path templateFile, Path sourceFile, TemplateArea templateArea)
+        throws IOException, InterruptedException {
         Path templateDir = templateFile.getParent();
         Path resizedSource = templateDir.resolve("resized_source.png");
         Path distortedSourceTemp = templateDir.resolve("distorted_source_temp.png");
@@ -98,9 +110,8 @@ public class BuildMemeStep implements WorkflowStep {
         try {
             log.info("running command: {} identify -format %w %h {}", magickPath, templateFile);
             ProcessBuilder pb = new ProcessBuilder(magickPath, "identify", "-format", "%w %h", templateFile.toString());
-            Process process = pb.start();
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String[] dimensions = reader.readLine().split(" ");
+            Process process = startProcess(pb);
+            String[] dimensions = readDimensions(process);
             int width = Integer.parseInt(dimensions[0]);
             int height = Integer.parseInt(dimensions[1]);
             process.waitFor();
@@ -110,7 +121,7 @@ public class BuildMemeStep implements WorkflowStep {
                 resizedSource);
             pb = new ProcessBuilder(magickPath, sourceFile.toString(), "-resize", width + "x" + height + "!",
                 resizedSource.toString());
-            pb.start().waitFor();
+            startProcess(pb).waitFor();
 
             // Distort source image
             String coordinates = String.format("0,0 %d,%d 0,%d %d,%d %d,0 %d,%d %d,%d %d,%d",
@@ -123,7 +134,7 @@ public class BuildMemeStep implements WorkflowStep {
             pb = new ProcessBuilder(magickPath, resizedSource.toString(), "-alpha", "set", "-virtual-pixel",
                 "transparent",
                 "-distort", "Perspective", coordinates, distortedSourceTemp.toString());
-            pb.start().waitFor();
+            startProcess(pb).waitFor();
 
             // Create mask
             Path mask = templateDir.resolve(String.format("mask_%d.png", templateArea.getIndex()));
@@ -138,62 +149,76 @@ public class BuildMemeStep implements WorkflowStep {
                     drawCommand, mask);
                 pb = new ProcessBuilder(magickPath, "-size", width + "x" + height, "xc:black", "-fill", "white",
                     "-draw", drawCommand, mask.toString());
-                pb.start().waitFor();
+                startProcess(pb).waitFor();
             }
 
             // Apply mask to distorted source
             log.info("running command: {} {} {} -alpha off -compose CopyOpacity -composite {}", magickPath,
                 distortedSourceTemp, mask, distortedSource);
             pb = new ProcessBuilder(magickPath, distortedSourceTemp.toString(), mask.toString(), "-alpha", "off",
-                "-compose", "CopyOpacity", "-composite", distortedSource.toString());
-            pb.start().waitFor();
+                "-compose", "CopyOpacity", COMPOSITE, distortedSource.toString());
+            startProcess(pb).waitFor();
 
             return distortedSource;
         } finally {
-            resizedSource.toFile().delete();
-            distortedSourceTemp.toFile().delete();
+            deleteTemporaryFile(resizedSource);
+            deleteTemporaryFile(distortedSourceTemp);
+        }
+    }
+
+    private String[] readDimensions(Process process) throws IOException {
+        try (BufferedReader reader = new BufferedReader(
+            new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            String dimensions = reader.readLine();
+            if (dimensions == null) {
+                throw new IOException("ImageMagick returned no image dimensions");
+            }
+            return dimensions.split(" ");
+        }
+    }
+
+    private void deleteTemporaryFile(Path path) {
+        try {
+            Files.deleteIfExists(path);
+        } catch (IOException e) {
+            log.warn("Could not delete temporary render file: {}", path, e);
         }
     }
 
     private Path compositeFinalImage(Path templateFile, Path templateDir, List<Path> distortedSources,
                                      List<TemplateArea> templateAreaList)
         throws InterruptedException, IOException {
-        ProcessBuilder pb;
         // Composite final image
         Path finalOutput = templateDir.resolve("final_output.png");
 
         List<String> command = new ArrayList<>();
         command.add(magickPath);
 
-        templateAreaList.stream().filter(TemplateArea::isBackground).forEach(templateArea -> {
-            if (command.size() > 2) {
-                command.add("-composite");
-            }
-            command.add(distortedSources.get(templateArea.getIndex() - 1).toString());
-        });
+        appendLayers(command, distortedSources, templateAreaList, true);
+        appendImage(command, templateFile.toString());
+        appendLayers(command, distortedSources, templateAreaList, false);
+        appendImage(command, finalOutput.toString());
 
-        if (command.size() > 2) {
-            command.add("-composite");
-        }
-        command.add(templateFile.toString());
-
-        templateAreaList.stream().filter(area -> !area.isBackground()).forEach(templateArea -> {
-            if (command.size() > 2) {
-                command.add("-composite");
-            }
-            command.add(distortedSources.get(templateArea.getIndex() - 1).toString());
-        });
-
-        if (command.size() > 2) {
-            command.add("-composite");
-        }
-        command.add(finalOutput.toString());
-
-        log.info("running command: {}", String.join(" ", command));
-        pb = new ProcessBuilder(command.toArray(new String[0]));
-        pb.start().waitFor();
+        log.info("running command: {}", command);
+        ProcessBuilder pb = new ProcessBuilder(command);
+        startProcess(pb).waitFor();
 
         return finalOutput;
     }
 
+    private void appendLayers(List<String> command, List<Path> distortedSources, List<TemplateArea> areas,
+                              boolean background) {
+        for (TemplateArea area : areas) {
+            if (area.isBackground() == background) {
+                appendImage(command, distortedSources.get(area.getIndex() - 1).toString());
+            }
+        }
+    }
+
+    private void appendImage(List<String> command, String image) {
+        if (command.size() > 2) {
+            command.add(COMPOSITE);
+        }
+        command.add(image);
+    }
 }

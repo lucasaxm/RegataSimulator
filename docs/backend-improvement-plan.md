@@ -1,10 +1,12 @@
 # Backend improvement plan
 
-Date: 2026-10-06. Status: proposed; runtime changes have **not** been implemented.
+Date: 2026-10-06. Status: **Phase 0 implemented**; Phases 1–5 remain proposed. [Phase 0 results](phase-0-results.md) record the characterization coverage and small default-preserving test seams.
 
 Read [backend review](backend-review.md) for evidence/tradeoffs and [project map](project-map.md) for the current structure. The goal is a simpler, reliable modular monolith, not a rewrite or a distributed system.
 
 ## Phase 0 — Protect existing behavior
+
+Completed: isolated startup/context, submission/preview/publication, callback/moderation, import/backup, and deterministic edge-case tests. Known failures remain characterized, not fixed. See [Phase 0 results](phase-0-results.md).
 
 Work against temporary storage and mocked Telegram, never the production paths/tokens. Preserve the Portuguese user-facing messages unless a product change is intentional.
 
