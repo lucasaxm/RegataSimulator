@@ -1,6 +1,8 @@
 package com.boatarde.regatasimulator.flows.simulator;
 
 import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import static com.boatarde.regatasimulator.flows.ApplicationFailure.Kind.UNAVAILABLE;
 import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.flows.WorkflowStep;
@@ -38,18 +40,21 @@ public class GetRandomTemplateStep implements WorkflowStep {
         String jxQuery = JsonDBUtils.jxQuery()
             .withStatus(Status.APPROVED)
             .build();
-        List<Template> approvedTemplates = jsonDBTemplate.find(jxQuery, Template.class);
+        List<Template> approvedTemplates = new java.util.ArrayList<>(jsonDBTemplate.find(jxQuery, Template.class));
         if (approvedTemplates.isEmpty()) {
-            log.error("No templates found.");
-            return WorkflowAction.NONE;
+            throw new ApplicationFailure(UNAVAILABLE, "No approved templates available");
         }
 
         Message creatingSourceMessage = bag.get(WorkflowDataKey.CREATING_SOURCE_MESSAGE, Message.class);
         if (creatingSourceMessage != null) {
+            if (approvedTemplates.stream().noneMatch(template -> template.getAreas() != null
+                && template.getAreas().size() == 1)) {
+                throw new ApplicationFailure(UNAVAILABLE, "No single area templates available");
+            }
             Template template = JsonDBUtils.selectRandomSingleAreaTemplate(approvedTemplates);
             Path templateFile = getTemplateFile(template);
             if (templateFile == null) {
-                return WorkflowAction.NONE;
+                throw new ApplicationFailure(UNAVAILABLE, "Template media unavailable");
             }
             bag.put(WorkflowDataKey.TEMPLATE_FILE, templateFile);
             bag.put(WorkflowDataKey.TEMPLATE, template);
@@ -63,16 +68,12 @@ public class GetRandomTemplateStep implements WorkflowStep {
                 .toList();
             bag.put(WorkflowDataKey.MEMES_HISTORY, memesHistory);
         }
-        memesHistory.stream()
-            .map(Meme::getTemplateId)
-            .distinct()
-            .limit((long) Math.ceil(approvedTemplates.size() * 0.75))
-            .forEach(templateId -> approvedTemplates.removeIf(template -> template.getId().equals(templateId)));
+        JsonDBUtils.excludeRecent(approvedTemplates, memesHistory.stream().map(Meme::getTemplateId), 1);
 
         Template template = JsonDBUtils.selectTemplatesWithWeight(approvedTemplates, 1).getFirst();
         Path templateFile = getTemplateFile(template);
         if (templateFile == null) {
-            return WorkflowAction.NONE;
+            throw new ApplicationFailure(UNAVAILABLE, "Template media unavailable");
         }
 
         bag.put(WorkflowDataKey.TEMPLATE_FILE, templateFile);

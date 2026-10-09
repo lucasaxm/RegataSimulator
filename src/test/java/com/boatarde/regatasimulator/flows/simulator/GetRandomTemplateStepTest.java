@@ -1,6 +1,7 @@
 package com.boatarde.regatasimulator.flows.simulator;
 
 import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
 import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.models.Meme;
@@ -137,7 +138,8 @@ class GetRandomTemplateStepTest {
     void returnsNoneWithoutLoadingHistoryWhenNoApprovedTemplatesExist() {
         when(database.find(APPROVED_QUERY, Template.class)).thenReturn(new ArrayList<>());
 
-        assertEquals(WorkflowAction.NONE, step.run(bag));
+        assertEquals(ApplicationFailure.Kind.UNAVAILABLE,
+            assertThrows(ApplicationFailure.class, () -> step.run(bag)).getKind());
         assertNull(history());
         assertNull(bag.get(WorkflowDataKey.TEMPLATE, Template.class));
         assertNull(bag.get(WorkflowDataKey.TEMPLATE_FILE, Path.class));
@@ -151,24 +153,20 @@ class GetRandomTemplateStepTest {
         bag.put(WorkflowDataKey.MEMES_HISTORY, List.of());
         when(database.find(APPROVED_QUERY, Template.class)).thenReturn(new ArrayList<>(List.of(template)));
 
-        assertEquals(WorkflowAction.NONE, step.run(bag));
+        assertThrows(ApplicationFailure.class, () -> step.run(bag));
         assertNull(bag.get(WorkflowDataKey.TEMPLATE, Template.class));
         assertNull(bag.get(WorkflowDataKey.TEMPLATE_FILE, Path.class));
     }
 
     @Test
-    void oneItemPoolUsedInHistoryCurrentlyThrowsInsteadOfReturningNone() throws IOException {
+    void oneItemPoolUsedInHistoryRemainsSelectable() throws IOException {
         Template template = template(1, 1);
         media(template, "template.jpg");
         bag.put(WorkflowDataKey.MEMES_HISTORY, List.of(meme(1, template, 100)));
         when(database.find(APPROVED_QUERY, Template.class)).thenReturn(new ArrayList<>(List.of(template)));
 
-        // Known Phase 0 bug: history removes the only template; not the intended fallback behavior.
-        RuntimeException failure = assertThrows(RuntimeException.class, () -> step.run(bag));
-        assertEquals("Not enough entities to select from. Amount requested: 1, entities available: 0",
-            failure.getMessage());
-        assertNull(bag.get(WorkflowDataKey.TEMPLATE, Template.class));
-        assertNull(bag.get(WorkflowDataKey.TEMPLATE_FILE, Path.class));
+        assertEquals(WorkflowAction.GET_RANDOM_SOURCE, step.run(bag));
+        assertSame(template, bag.get(WorkflowDataKey.TEMPLATE, Template.class));
     }
 
     @Test
@@ -216,9 +214,8 @@ class GetRandomTemplateStepTest {
         Template multiArea = template(1, 2);
         when(database.find(APPROVED_QUERY, Template.class)).thenReturn(new ArrayList<>(List.of(multiArea)));
 
-        // Known Phase 0 bug: no eligible preview template leaks a RuntimeException, not NONE.
-        RuntimeException failure = assertThrows(RuntimeException.class, () -> step.run(bag));
-        assertEquals("No single area templates found", failure.getMessage());
+        assertEquals(ApplicationFailure.Kind.UNAVAILABLE,
+            assertThrows(ApplicationFailure.class, () -> step.run(bag)).getKind());
         assertSame(submittedSources, bag.getGeneric(WorkflowDataKey.SOURCES, List.class, Source.class));
         assertNull(bag.get(WorkflowDataKey.TEMPLATE, Template.class));
         assertNull(bag.get(WorkflowDataKey.TEMPLATE_FILE, Path.class));
@@ -233,7 +230,7 @@ class GetRandomTemplateStepTest {
         Template singleArea = template(1, 1);
         when(database.find(APPROVED_QUERY, Template.class)).thenReturn(new ArrayList<>(List.of(singleArea)));
 
-        assertEquals(WorkflowAction.NONE, step.run(bag));
+        assertThrows(ApplicationFailure.class, () -> step.run(bag));
         assertSame(submittedSources, bag.getGeneric(WorkflowDataKey.SOURCES, List.class, Source.class));
         assertSame(submittedFiles, bag.getGeneric(WorkflowDataKey.SOURCE_FILES, List.class, Path.class));
         assertNull(bag.get(WorkflowDataKey.TEMPLATE, Template.class));

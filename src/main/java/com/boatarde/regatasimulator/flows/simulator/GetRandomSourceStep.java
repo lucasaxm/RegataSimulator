@@ -1,6 +1,8 @@
 package com.boatarde.regatasimulator.flows.simulator;
 
 import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import static com.boatarde.regatasimulator.flows.ApplicationFailure.Kind.UNAVAILABLE;
 import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.flows.WorkflowStep;
@@ -51,6 +53,10 @@ public class GetRandomSourceStep implements WorkflowStep {
     @Override
     public WorkflowAction run(WorkflowDataBag bag) {
         Template template = bag.getGeneric(WorkflowDataKey.TEMPLATE, Template.class);
+        int required = (int) template.getAreas().stream().map(TemplateArea::getSource).distinct().count();
+        if (required == 0) {
+            throw new ApplicationFailure(UNAVAILABLE, "Template has no source slots");
+        }
         Path sourcesDirectory = Paths.get(sourcesPathString);
 
         JxQueryBuilder jxQueryBuilder = JsonDBUtils.jxQuery()
@@ -58,10 +64,14 @@ public class GetRandomSourceStep implements WorkflowStep {
 
         addBirthdayFilter(jxQueryBuilder);
 
-        List<Source> approvedSources = jsonDBTemplate.find(jxQueryBuilder.build(), Source.class);
-        if (approvedSources.isEmpty()) {
-            log.error("No sources found.");
-            return WorkflowAction.NONE;
+        String query = jxQueryBuilder.build();
+        String allApproved = JsonDBUtils.jxQuery().withStatus(Status.APPROVED).build();
+        List<Source> approvedSources = new ArrayList<>(jsonDBTemplate.find(query, Source.class));
+        if (approvedSources.size() < required && !query.equals(allApproved)) {
+            approvedSources = new ArrayList<>(jsonDBTemplate.find(allApproved, Source.class));
+        }
+        if (approvedSources.size() < required) {
+            throw new ApplicationFailure(UNAVAILABLE, "Insufficient approved sources for template slots");
         }
 
         // remove sources that have already been used from pool
@@ -72,16 +82,10 @@ public class GetRandomSourceStep implements WorkflowStep {
                 .toList();
             bag.put(WorkflowDataKey.MEMES_HISTORY, memesHistory);
         }
-        memesHistory.stream()
-            .flatMap(meme -> meme.getSourceIds().stream())
-            .distinct()
-            .limit((long) Math.ceil(approvedSources.size() * 0.75))
-            .forEach(sourceId -> approvedSources.removeIf(source -> source.getId().equals(sourceId)));
+        JsonDBUtils.excludeRecent(approvedSources, memesHistory.stream()
+            .filter(meme -> meme.getSourceIds() != null).flatMap(meme -> meme.getSourceIds().stream()), required);
 
-        List<Source> sources = JsonDBUtils.selectSourcesWithWeight(approvedSources, (int) template.getAreas().stream()
-            .map(TemplateArea::getSource)
-            .distinct()
-            .count());
+        List<Source> sources = JsonDBUtils.selectSourcesWithWeight(approvedSources, required);
         List<Path> sourceFiles = new ArrayList<>();
         for (int i = 0; i < sources.size(); i++) {
             Source source = sources.get(i);
@@ -89,8 +93,7 @@ public class GetRandomSourceStep implements WorkflowStep {
             Optional<Path> fileOpt = FileUtils.getFirstExistingFile(selectedDirectory, "source.jpg",
                 "source.jpeg", "source.png");
             if (fileOpt.isEmpty()) {
-                log.error("Source file not found: {}", source.getId());
-                return WorkflowAction.NONE;
+                throw new ApplicationFailure(UNAVAILABLE, "Source media unavailable");
             }
             Path sourceFile = fileOpt.get();
             sourceFiles.add(i, sourceFile);

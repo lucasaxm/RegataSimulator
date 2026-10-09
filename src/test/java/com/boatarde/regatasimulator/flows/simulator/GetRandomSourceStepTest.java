@@ -1,6 +1,7 @@
 package com.boatarde.regatasimulator.flows.simulator;
 
 import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
 import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.models.Meme;
@@ -172,7 +173,8 @@ class GetRandomSourceStepTest {
     void returnsNoneWithoutLoadingHistoryWhenNoApprovedSourcesExist() {
         when(database.find(APPROVED_QUERY, Source.class)).thenReturn(new ArrayList<>());
 
-        assertEquals(WorkflowAction.NONE, step.run(bag));
+        assertEquals(ApplicationFailure.Kind.UNAVAILABLE,
+            assertThrows(ApplicationFailure.class, () -> step.run(bag)).getKind());
 
         assertNull(history());
         assertNull(sources());
@@ -187,24 +189,20 @@ class GetRandomSourceStepTest {
         bag.put(WorkflowDataKey.MEMES_HISTORY, List.of());
         when(database.find(APPROVED_QUERY, Source.class)).thenReturn(new ArrayList<>(List.of(source)));
 
-        assertEquals(WorkflowAction.NONE, step.run(bag));
+        assertThrows(ApplicationFailure.class, () -> step.run(bag));
         assertNull(sources());
         assertNull(sourceFiles());
     }
 
     @Test
-    void oneItemPoolUsedInHistoryCurrentlyThrowsInsteadOfReturningNone() throws IOException {
+    void oneItemPoolUsedInHistoryRemainsSelectable() throws IOException {
         Source source = source(1);
         media(source, "source.jpg");
         bag.put(WorkflowDataKey.MEMES_HISTORY, List.of(meme(1, 100, source.getId())));
         when(database.find(APPROVED_QUERY, Source.class)).thenReturn(new ArrayList<>(List.of(source)));
 
-        // Known Phase 0 bug: ceil(1 * 0.75) removes the only candidate; not desired behavior.
-        RuntimeException failure = assertThrows(RuntimeException.class, () -> step.run(bag));
-        assertEquals("Not enough entities to select from. Amount requested: 1, entities available: 0",
-            failure.getMessage());
-        assertNull(sources());
-        assertNull(sourceFiles());
+        assertEquals(WorkflowAction.BUILD_MEME_STEP, step.run(bag));
+        assertEquals(List.of(source), sources());
     }
 
     @Test
@@ -213,10 +211,8 @@ class GetRandomSourceStepTest {
         bag.put(WorkflowDataKey.MEMES_HISTORY, List.of());
         when(database.find(APPROVED_QUERY, Source.class)).thenReturn(new ArrayList<>(List.of(source(1))));
 
-        // Known Phase 0 bug: workflow leaks the selection exception instead of ending gracefully.
-        RuntimeException failure = assertThrows(RuntimeException.class, () -> step.run(bag));
-        assertEquals("Not enough entities to select from. Amount requested: 2, entities available: 1",
-            failure.getMessage());
+        assertEquals(ApplicationFailure.Kind.UNAVAILABLE,
+            assertThrows(ApplicationFailure.class, () -> step.run(bag)).getKind());
         assertNull(sources());
         assertNull(sourceFiles());
     }
@@ -238,10 +234,11 @@ class GetRandomSourceStepTest {
         String expectedQuery = birthdayQuery(aliases);
         when(database.find(expectedQuery, Source.class)).thenReturn(new ArrayList<>());
 
-        assertEquals(WorkflowAction.NONE, step.run(bag));
+        assertThrows(ApplicationFailure.class, () -> step.run(bag));
         assertNull(sources());
         assertNull(sourceFiles());
         verify(database).find(expectedQuery, Source.class);
+        verify(database).find(APPROVED_QUERY, Source.class);
         verifyNoMoreInteractions(database);
     }
 
@@ -257,9 +254,45 @@ class GetRandomSourceStepTest {
             Clock.fixed(Instant.parse(instant), ZoneOffset.UTC));
         when(database.find(anyString(), eq(Source.class))).thenReturn(new ArrayList<>());
 
-        assertEquals(WorkflowAction.NONE, step.run(bag));
+        assertThrows(ApplicationFailure.class, () -> step.run(bag));
         verify(database).find(birthday ? birthdayQuery("brenda") : APPROVED_QUERY, Source.class);
+        if (birthday) verify(database).find(APPROVED_QUERY, Source.class);
         verifyNoMoreInteractions(database);
+    }
+
+    @Test
+    void fullyUsedMinimalPoolStillFillsEveryRequiredSlotWithoutMutatingDatabaseList() throws IOException {
+        Source first = source(1);
+        Source second = source(2);
+        media(first, "source.png");
+        media(second, "source.png");
+        List<Source> immutablePool = List.of(first, second);
+        bag.put(WorkflowDataKey.TEMPLATE, template(1, 2));
+        bag.put(WorkflowDataKey.MEMES_HISTORY, List.of(meme(1, 100, first.getId(), second.getId())));
+        when(database.find(APPROVED_QUERY, Source.class)).thenReturn(immutablePool);
+
+        assertEquals(WorkflowAction.BUILD_MEME_STEP, step.run(bag));
+        assertEquals(Set.of(first, second), Set.copyOf(sources()));
+        assertEquals(2, immutablePool.size());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void birthdayFallsBackWhenPoolIsEmptyOrTooSmall(boolean hasOneBirthdaySource) throws IOException {
+        step = new GetRandomSourceStep(sourcesDirectory.toString(), database,
+            Clock.fixed(Instant.parse("2026-01-22T12:00:00Z"), ZoneOffset.UTC));
+        Source first = source(1);
+        Source second = source(2);
+        media(first, "source.png");
+        media(second, "source.png");
+        bag.put(WorkflowDataKey.TEMPLATE, template(1, 2));
+        bag.put(WorkflowDataKey.MEMES_HISTORY, List.of());
+        when(database.find(birthdayQuery("brenda"), Source.class))
+            .thenReturn(hasOneBirthdaySource ? List.of(first) : List.of());
+        when(database.find(APPROVED_QUERY, Source.class)).thenReturn(List.of(first, second));
+
+        assertEquals(WorkflowAction.BUILD_MEME_STEP, step.run(bag));
+        assertEquals(Set.of(first, second), Set.copyOf(sources()));
     }
 
     private Source source(int id) {

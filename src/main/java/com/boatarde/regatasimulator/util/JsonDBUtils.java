@@ -20,6 +20,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Random;
 import java.util.random.RandomGenerator;
+import java.util.UUID;
+import java.util.stream.Stream;
 import java.util.stream.IntStream;
 
 @Slf4j
@@ -29,6 +31,17 @@ public class JsonDBUtils {
 
     public static JxQueryBuilder jxQuery() {
         return new JxQueryBuilder();
+    }
+
+    public static <T extends CommonEntity> void excludeRecent(List<T> candidates, Stream<UUID> recent, int required) {
+        int budget = Math.min((int) Math.ceil(candidates.size() * 0.75), candidates.size() - required);
+        if (budget <= 0) {
+            return;
+        }
+        List<UUID> excluded = recent.distinct()
+            .filter(id -> candidates.stream().anyMatch(item -> item.getId().equals(id)))
+            .limit(budget).toList();
+        candidates.removeIf(item -> excluded.contains(item.getId()));
     }
 
     public static Comparator<CommonEntity> getComparator() {
