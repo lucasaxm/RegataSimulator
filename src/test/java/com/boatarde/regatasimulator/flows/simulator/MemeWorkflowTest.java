@@ -247,6 +247,14 @@ class MemeWorkflowTest {
         @Override protected Process startProcess(ProcessBuilder builder) throws IOException {
             Process process = mock(Process.class);
             when(process.getInputStream()).thenReturn(new ByteArrayInputStream("400 300\n".getBytes(StandardCharsets.UTF_8)));
+            when(process.getErrorStream()).thenReturn(java.io.InputStream.nullInputStream());
+            try {
+                when(process.waitFor(org.mockito.ArgumentMatchers.anyLong(), eq(java.util.concurrent.TimeUnit.MILLISECONDS)))
+                    .thenReturn(true);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException(e);
+            }
             if (!builder.command().contains("identify")) Files.writeString(Path.of(builder.command().getLast()), "fake output");
             return process;
         }

@@ -11,6 +11,7 @@ import com.boatarde.regatasimulator.models.Meme;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Template;
 import com.boatarde.regatasimulator.util.TelegramUtils;
+import com.boatarde.regatasimulator.util.FileUtils;
 import io.jsondb.JsonDBTemplate;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -81,8 +82,10 @@ public class SendMemeStep implements WorkflowStep {
             log.error(String.format("TelegramApiException when sending media: %s", e.getMessage()), e);
             return WorkflowAction.NONE;
         } finally {
-            // Delete the temporary file when done
-            if (file.exists() && file.delete()) {
+            Path jobDirectory = bag.get(WorkflowDataKey.RENDER_JOB_DIRECTORY, Path.class);
+            if (jobDirectory != null) {
+                FileUtils.deleteTree(jobDirectory);
+            } else if (file.exists() && file.delete()) {
                 log.info("Temporary file deleted.");
             } else {
                 log.error("Failed to delete the temporary file.");

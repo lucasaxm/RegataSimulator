@@ -17,6 +17,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Executors;
+import com.boatarde.regatasimulator.util.FileUtils;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -38,21 +43,26 @@ class BuildMemeStepTest {
         assertThat(renderer.run(bag)).isEqualTo(WorkflowAction.SEND_MEME_STEP);
 
         Path output = bag.get(WorkflowDataKey.MEME_FILE, Path.class);
-        assertThat(output).isEqualTo(directory.resolve("final_output.png")).exists();
-        assertThat(renderer.commands.getFirst()).containsExactly(MAGICK_PATH, "identify", "-format", "%w %h",
+        assertThat(output).exists();
+        assertThat(output.getParent()).isNotEqualTo(directory);
+        assertThat(renderer.commands.getFirst()).containsSubsequence(MAGICK_PATH, "identify", "-format", "%w %h",
             directory.resolve("template with spaces.png").toString());
         assertThat(renderer.commands).anySatisfy(command -> assertThat(command).contains("Perspective"));
         assertThat(renderer.commands.getLast()).containsSubsequence(
-            directory.resolve("distorted_source_1.png").toString(),
+            output.getParent().resolve("distorted_source_1.png").toString(),
             directory.resolve("template with spaces.png").toString(), "-composite",
-            directory.resolve("distorted_source_2.png").toString());
+            output.getParent().resolve("distorted_source_2.png").toString());
         assertThat(directory.resolve("distorted_source_1.png")).doesNotExist();
         assertThat(directory.resolve("distorted_source_2.png")).doesNotExist();
         assertThat(directory.resolve("resized_source.png")).doesNotExist();
         assertThat(directory.resolve("distorted_source_temp.png")).doesNotExist();
         for (InputStream input : renderer.dimensionStreams) {
-            verify(input).close();
+            verify(input, org.mockito.Mockito.atLeastOnce()).close();
         }
+        try (var files = Files.list(output.getParent())) {
+            assertThat(files.toList()).containsExactly(output);
+        }
+        FileUtils.deleteTree(output.getParent());
     }
 
     @Test
@@ -100,19 +110,19 @@ class BuildMemeStepTest {
     }
 
     @Test
-    void nonzeroProcessExitCurrentlyDoesNotFailTheWorkflow() throws Exception {
-        // Phase 1 will check exit codes; no real process is executed here.
+    void nonzeroProcessExitFailsTheWorkflow() throws Exception {
         FakeRenderer renderer = new FakeRenderer();
         renderer.exitCode = 7;
 
-        assertThat(renderer.run(bag(List.of(area(1, 1, true))))).isEqualTo(WorkflowAction.SEND_MEME_STEP);
+        assertThat(renderer.run(bag(List.of(area(1, 1, true))))).isEqualTo(WorkflowAction.NONE);
     }
 
     @Test
     void interruptedRenderingPreservesTheThreadInterruptFlag() throws Exception {
         Process process = mock(Process.class);
         when(process.getInputStream()).thenReturn(new ByteArrayInputStream("400 300\n".getBytes(StandardCharsets.UTF_8)));
-        when(process.waitFor()).thenThrow(new InterruptedException("synthetic interruption"));
+        when(process.getErrorStream()).thenReturn(InputStream.nullInputStream());
+        when(process.waitFor(anyLong(), eq(TimeUnit.MILLISECONDS))).thenThrow(new InterruptedException("synthetic interruption"));
         BuildMemeStep renderer = rendererReturning(process);
         WorkflowDataBag bag = bag(List.of(area(1, 1, true)));
 
@@ -130,11 +140,13 @@ class BuildMemeStepTest {
         Process process = mock(Process.class);
         InputStream input = spy(new ByteArrayInputStream(new byte[0]));
         when(process.getInputStream()).thenReturn(input);
+        when(process.getErrorStream()).thenReturn(InputStream.nullInputStream());
+        when(process.waitFor(anyLong(), eq(TimeUnit.MILLISECONDS))).thenReturn(true);
         WorkflowDataBag bag = bag(List.of(area(1, 1, true)));
 
         assertThat(rendererReturning(process).run(bag)).isEqualTo(WorkflowAction.NONE);
         assertThat(bag.get(WorkflowDataKey.MEME_FILE, Path.class)).isNull();
-        verify(input).close();
+        verify(input, org.mockito.Mockito.atLeastOnce()).close();
     }
 
     private BuildMemeStep rendererReturning(Process process) {
@@ -167,8 +179,8 @@ class BuildMemeStepTest {
     private AreaCorner corner(int x, int y) { return AreaCorner.builder().x(x).y(y).build(); }
 
     private static class FakeRenderer extends BuildMemeStep {
-        final List<List<String>> commands = new ArrayList<>();
-        final List<InputStream> dimensionStreams = new ArrayList<>();
+        final List<List<String>> commands = java.util.Collections.synchronizedList(new ArrayList<>());
+        final List<InputStream> dimensionStreams = java.util.Collections.synchronizedList(new ArrayList<>());
         int exitCode;
 
         FakeRenderer() { super(MAGICK_PATH); }
@@ -180,17 +192,38 @@ class BuildMemeStepTest {
             Process process = mock(Process.class);
             InputStream input = spy(new ByteArrayInputStream("400 300\n".getBytes(StandardCharsets.UTF_8)));
             when(process.getInputStream()).thenReturn(input);
+            when(process.getErrorStream()).thenReturn(InputStream.nullInputStream());
+            when(process.exitValue()).thenReturn(exitCode);
             if (command.contains("identify")) {
                 dimensionStreams.add(input);
             }
             try {
-                when(process.waitFor()).thenReturn(exitCode);
+                when(process.waitFor(anyLong(), eq(TimeUnit.MILLISECONDS))).thenReturn(true);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new IOException(e);
             }
             if (!command.contains("identify")) Files.writeString(Path.of(command.getLast()), "fake rendered image");
             return process;
+        }
+    }
+
+    @Test
+    void concurrentJobsSharingTemplateUseDifferentDirectories() throws Exception {
+        WorkflowDataBag first = bag(List.of(area(1, 1, true)));
+        WorkflowDataBag second = bag(List.of(area(1, 1, true)));
+        FakeRenderer renderer = new FakeRenderer();
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var a = executor.submit(() -> renderer.run(first));
+            var b = executor.submit(() -> renderer.run(second));
+            assertThat(a.get()).isEqualTo(WorkflowAction.SEND_MEME_STEP);
+            assertThat(b.get()).isEqualTo(WorkflowAction.SEND_MEME_STEP);
+            Path one = first.get(WorkflowDataKey.MEME_FILE, Path.class);
+            Path two = second.get(WorkflowDataKey.MEME_FILE, Path.class);
+            assertThat(one).isNotEqualTo(two).exists();
+            assertThat(two).exists();
+            FileUtils.deleteTree(one.getParent());
+            FileUtils.deleteTree(two.getParent());
         }
     }
 }

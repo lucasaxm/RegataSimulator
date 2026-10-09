@@ -21,6 +21,19 @@ import java.util.zip.ZipOutputStream;
 @UtilityClass
 public class FileUtils {
 
+    public static void deleteTree(Path directory) {
+        if (directory == null || !Files.exists(directory)) {
+            return;
+        }
+        try (Stream<Path> paths = Files.walk(directory)) {
+            for (Path path : paths.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(path);
+            }
+        } catch (IOException e) {
+            log.warn("Could not clean temporary directory: {}", directory);
+        }
+    }
+
     public static Optional<Path> getFirstExistingFile(Path directory, String... filenames) {
         for (String filename : filenames) {
             Path filePath = directory.resolve(filename);

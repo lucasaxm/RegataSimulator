@@ -14,10 +14,10 @@ import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageTe
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
+import com.boatarde.regatasimulator.util.FileUtils;
+import com.boatarde.regatasimulator.util.ProcessRunner;
+import java.time.Duration;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -28,7 +28,9 @@ import java.util.List;
 public class BuildMemeStep implements WorkflowStep {
 
     private static final String COMPOSITE = "-composite";
+    private static final String LIMIT = "-limit";
     private final String magickPath;
+    private final ProcessRunner processRunner = new ProcessRunner(Duration.ofSeconds(30));
 
     public BuildMemeStep(@Value("${magick.path}") String magickPath) {
         this.magickPath = magickPath;
@@ -44,20 +46,27 @@ public class BuildMemeStep implements WorkflowStep {
         Template template = bag.get(WorkflowDataKey.TEMPLATE, Template.class);
 
         var distortedSources = new ArrayList<Path>();
+        Path jobDirectory = null;
+        boolean handedOff = false;
         try {
+            jobDirectory = Files.createTempDirectory("regata-render-",
+                java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
+                    java.nio.file.attribute.PosixFilePermissions.fromString("rwx------")));
             int templateAreasCount = template.getAreas().size();
             for (int i = 0; i < templateAreasCount; i++) {
                 TemplateArea templateArea = template.getAreas().get(i);
                 distortedSources.add(i,
-                    buildDistortedSource(templateFile, sourceFiles.get(templateArea.getSource() - 1), templateArea));
+                    buildDistortedSource(templateFile, jobDirectory, sourceFiles.get(templateArea.getSource() - 1), templateArea));
                 int progress = (i + 1) * 100 / (templateAreasCount + 2);
                 editCreatingTemplateMessage(bag, progress);
             }
             int progress = (templateAreasCount + 1) * 100 / (templateAreasCount + 2);
             editCreatingTemplateMessage(bag, progress);
             Path result =
-                compositeFinalImage(templateFile, templateFile.getParent(), distortedSources, template.getAreas());
+                compositeFinalImage(templateFile, jobDirectory, distortedSources, template.getAreas());
             bag.put(WorkflowDataKey.MEME_FILE, result);
+            bag.put(WorkflowDataKey.RENDER_JOB_DIRECTORY, jobDirectory);
+            handedOff = true;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.error("Meme rendering interrupted", e);
@@ -67,6 +76,16 @@ public class BuildMemeStep implements WorkflowStep {
             return WorkflowAction.NONE;
         } finally {
             distortedSources.forEach(this::deleteTemporaryFile);
+            if (!handedOff) {
+                FileUtils.deleteTree(jobDirectory);
+            } else {
+                try (var paths = Files.list(jobDirectory)) {
+                    paths.filter(path -> !path.getFileName().toString().equals("final_output.png"))
+                        .forEach(this::deleteTemporaryFile);
+                } catch (IOException e) {
+                    log.warn("Could not clean render intermediates");
+                }
+            }
         }
 
         return WorkflowAction.SEND_MEME_STEP;
@@ -100,9 +119,8 @@ public class BuildMemeStep implements WorkflowStep {
         return builder.start();
     }
 
-    private Path buildDistortedSource(Path templateFile, Path sourceFile, TemplateArea templateArea)
+    private Path buildDistortedSource(Path templateFile, Path templateDir, Path sourceFile, TemplateArea templateArea)
         throws IOException, InterruptedException {
-        Path templateDir = templateFile.getParent();
         Path resizedSource = templateDir.resolve("resized_source.png");
         Path distortedSourceTemp = templateDir.resolve("distorted_source_temp.png");
         Path distortedSource = templateDir.resolve("distorted_source_%d.png".formatted(templateArea.getIndex()));
@@ -110,18 +128,22 @@ public class BuildMemeStep implements WorkflowStep {
         try {
             log.info("running command: {} identify -format %w %h {}", magickPath, templateFile);
             ProcessBuilder pb = new ProcessBuilder(magickPath, "identify", "-format", "%w %h", templateFile.toString());
-            Process process = startProcess(pb);
-            String[] dimensions = readDimensions(process);
+            String[] dimensions = execute(pb, templateDir).strip().split("\\s+");
+            if (dimensions.length != 2) {
+                throw new IOException("ImageMagick returned invalid image dimensions");
+            }
             int width = Integer.parseInt(dimensions[0]);
             int height = Integer.parseInt(dimensions[1]);
-            process.waitFor();
+            if (width <= 0 || height <= 0 || (long) width * height > 40_000_000) {
+                throw new IOException("Image dimensions exceed render limits");
+            }
 
             // Resize source image
             log.info("running command: {} {} -resize {}x{}! {}", magickPath, sourceFile.toString(), width, height,
                 resizedSource);
             pb = new ProcessBuilder(magickPath, sourceFile.toString(), "-resize", width + "x" + height + "!",
                 resizedSource.toString());
-            startProcess(pb).waitFor();
+            execute(pb, templateDir);
 
             // Distort source image
             String coordinates = String.format("0,0 %d,%d 0,%d %d,%d %d,0 %d,%d %d,%d %d,%d",
@@ -134,7 +156,7 @@ public class BuildMemeStep implements WorkflowStep {
             pb = new ProcessBuilder(magickPath, resizedSource.toString(), "-alpha", "set", "-virtual-pixel",
                 "transparent",
                 "-distort", "Perspective", coordinates, distortedSourceTemp.toString());
-            startProcess(pb).waitFor();
+            execute(pb, templateDir);
 
             // Create mask
             Path mask = templateDir.resolve(String.format("mask_%d.png", templateArea.getIndex()));
@@ -149,7 +171,7 @@ public class BuildMemeStep implements WorkflowStep {
                     drawCommand, mask);
                 pb = new ProcessBuilder(magickPath, "-size", width + "x" + height, "xc:black", "-fill", "white",
                     "-draw", drawCommand, mask.toString());
-                startProcess(pb).waitFor();
+                execute(pb, templateDir);
             }
 
             // Apply mask to distorted source
@@ -157,7 +179,7 @@ public class BuildMemeStep implements WorkflowStep {
                 distortedSourceTemp, mask, distortedSource);
             pb = new ProcessBuilder(magickPath, distortedSourceTemp.toString(), mask.toString(), "-alpha", "off",
                 "-compose", "CopyOpacity", COMPOSITE, distortedSource.toString());
-            startProcess(pb).waitFor();
+            execute(pb, templateDir);
 
             return distortedSource;
         } finally {
@@ -166,15 +188,14 @@ public class BuildMemeStep implements WorkflowStep {
         }
     }
 
-    private String[] readDimensions(Process process) throws IOException {
-        try (BufferedReader reader = new BufferedReader(
-            new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-            String dimensions = reader.readLine();
-            if (dimensions == null) {
-                throw new IOException("ImageMagick returned no image dimensions");
-            }
-            return dimensions.split(" ");
-        }
+    private String execute(ProcessBuilder builder, Path jobDirectory) throws IOException, InterruptedException {
+        // Global options belong after the identify subcommand, otherwise directly after magick.
+        int offset = builder.command().contains("identify") ? 2 : 1;
+        builder.command().addAll(offset, List.of(LIMIT, "memory", "128MiB", LIMIT, "map", "256MiB",
+            LIMIT, "disk", "512MiB", LIMIT, "thread", "2", LIMIT, "time", "25"));
+        builder.directory(jobDirectory.toFile());
+        builder.environment().put("MAGICK_TEMPORARY_PATH", jobDirectory.toString());
+        return processRunner.run(builder, this::startProcess);
     }
 
     private void deleteTemporaryFile(Path path) {
@@ -201,7 +222,10 @@ public class BuildMemeStep implements WorkflowStep {
 
         log.info("running command: {}", command);
         ProcessBuilder pb = new ProcessBuilder(command);
-        startProcess(pb).waitFor();
+        execute(pb, templateDir);
+        if (!Files.isRegularFile(finalOutput) || Files.size(finalOutput) == 0) {
+            throw new IOException("Image process produced no output");
+        }
 
         return finalOutput;
     }
