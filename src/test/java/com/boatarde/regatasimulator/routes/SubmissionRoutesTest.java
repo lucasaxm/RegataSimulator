@@ -120,9 +120,8 @@ class SubmissionRoutesTest {
     @ParameterizedTest
     @CsvSource({"source,confirm,CONFIRM_REVIEW_SOURCE", "source,cancel,DELETE_REVIEW_SOURCE",
         "template,confirm,CONFIRM_REVIEW_TEMPLATE", "template,cancel,DELETE_REVIEW_TEMPLATE"})
-    void currentlyMalformedCallbackUuidStillDispatchesBySuffix(String type, String action,
-                                                               WorkflowAction expected) {
-        // Phase1: validate the identifier before dispatch; the callback step currently throws.
+    void malformedCallbackUuidDispatchesExclusivelyToSafeRejectionHandler(String type, String action,
+                                                                         WorkflowAction expected) {
         Update update = callback("not-a-uuid:" + type + ":" + action);
 
         assertEquals(Optional.of(expected), type.equals("source")
@@ -132,11 +131,22 @@ class SubmissionRoutesTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"source:approve", "template:approve", "source:CONFIRM", "unknown:cancel"})
-    void unrelatedOrCaseMismatchedCallbackSuffixDoesNotDispatch(String suffix) {
+    void unrelatedOrCaseMismatchedCallbackDispatchesToExactlyOneRejectionHandler(String suffix) {
         Update update = callback(ITEM_ID + ":" + suffix);
 
-        assertTrue(sourceRoute.test(update, bot).isEmpty());
-        assertTrue(templateRoute.test(update, bot).isEmpty());
+        assertEquals(1, (sourceRoute.test(update, bot).isPresent() ? 1 : 0)
+            + (templateRoute.test(update, bot).isPresent() ? 1 : 0));
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"garbage", "1-1-1-1-1:source:cancel", ITEM_ID + ":template", ITEM_ID + ":template:cancel:extra"})
+    void incompleteCallbackDataIsDispatchedOnceForAcknowledgement(String data) {
+        Update update = callback(data);
+
+        assertEquals(1, (sourceRoute.test(update, bot).isPresent() ? 1 : 0)
+            + (templateRoute.test(update, bot).isPresent() ? 1 : 0));
+        verifyNoInteractions(bot);
     }
 
     @ParameterizedTest

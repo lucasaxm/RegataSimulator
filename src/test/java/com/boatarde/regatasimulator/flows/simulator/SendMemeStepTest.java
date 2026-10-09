@@ -5,8 +5,10 @@ import com.boatarde.regatasimulator.factory.TelegramTestFactory;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
 import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
+import com.boatarde.regatasimulator.models.CommonEntity;
 import com.boatarde.regatasimulator.models.Meme;
 import com.boatarde.regatasimulator.models.Source;
+import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.models.Template;
 import com.boatarde.regatasimulator.util.TelegramUtils;
 import io.jsondb.JsonDBTemplate;
@@ -35,6 +37,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -193,7 +196,7 @@ class SendMemeStepTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"source", "template"})
-    void previewSendsInlineConfirmCancelWithoutUpdatingDatabaseAndCleansOutput(String type) throws Exception {
+    void previewSendsInlineConfirmCancelAndPersistsOnlyItsBinding(String type) throws Exception {
         Path output = output();
         WorkflowDataBag bag = publicationBag(output);
         Update update = TelegramTestFactory.buildTextMessageUpdate("submission");
@@ -202,6 +205,10 @@ class SendMemeStepTest {
         UUID itemId = UUID.randomUUID();
         Path original = previewPath(type, itemId);
         Message progress = addPreviewToBag(bag, type, original);
+        CommonEntity item = previewItem(bag, type);
+        Message origin = item.getMessage();
+        Message response = TelegramTestFactory.buildTextMessage("preview");
+        stubStoredPreview(type, item);
         AtomicReference<SendPhoto> sent = new AtomicReference<>();
 
         try (MockedStatic<TelegramUtils> telegram = mockStatic(TelegramUtils.class)) {
@@ -210,7 +217,8 @@ class SendMemeStepTest {
                     verify(bot).execute(any(DeleteMessage.class));
                     sent.set(invocation.getArgument(1));
                     assertTrue(Files.exists(output));
-                    return TelegramTestFactory.buildTextMessage("preview");
+                    verifyNoInteractions(database);
+                    return response;
                 });
 
             assertEquals(WorkflowAction.NONE, new SendMemeStep(CHANNEL_ID, database).run(bag));
@@ -236,7 +244,10 @@ class SendMemeStepTest {
             assertEquals(itemId + ":" + type + ":cancel", cancel.getCallbackData());
             assertEquals(1, markup.getKeyboard().getFirst().size());
             assertEquals(1, markup.getKeyboard().getLast().size());
-            verifyNoInteractions(database);
+            verifyPreviewUpdate(type, item.getId(), response);
+            assertEquals(response.getChatId(), item.getPreviewChatId());
+            assertEquals(response.getMessageId(), item.getPreviewMessageId());
+            assertSame(origin, item.getMessage());
             assertWeightsUnchanged(bag);
             assertFalse(Files.exists(output));
             assertTrue(Files.exists(original), "preview cleanup must preserve the uploaded item");
@@ -298,6 +309,184 @@ class SendMemeStepTest {
         }
     }
 
+    @ParameterizedTest
+    @CsvSource({"source,nullMessage", "template,nullMessage", "source,nullChat", "template,nullChat",
+        "source,nullMessageId", "template,nullMessageId", "source,zeroId", "template,zeroId"})
+    void invalidPreviewResponseLeavesBindingDisabledWithoutDatabaseCalls(String type, String invalidIdentity)
+        throws Exception {
+        Preview preview = preview(type);
+        Message response = TelegramTestFactory.buildTextMessage("preview");
+        switch (invalidIdentity) {
+            case "nullMessage" -> response = null;
+            case "nullChat" -> response.setChat(null);
+            case "nullMessageId" -> response.setMessageId(null);
+            case "zeroId" -> response.setMessageId(0);
+            default -> throw new IllegalArgumentException(invalidIdentity);
+        }
+
+        try (MockedStatic<TelegramUtils> telegram = mockStatic(TelegramUtils.class)) {
+            stubPreviewSend(telegram, preview, response);
+
+            assertEquals(WorkflowAction.NONE, new SendMemeStep(CHANNEL_ID, database).run(preview.bag()));
+
+            verifyNoInteractions(database);
+            assertNull(preview.item().getPreviewChatId());
+            assertNull(preview.item().getPreviewMessageId());
+            assertPreviewPreserved(preview);
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"source,missing", "template,missing", "source,approved", "template,approved"})
+    void absentOrApprovedStoredPreviewRejectsAtomicUpdate(String type, String storedState) throws Exception {
+        Preview preview = preview(type);
+        CommonEntity stored = storedState.equals("missing") ? null : storedPreview(preview);
+        if (stored != null) {
+            stored.setStatus(Status.APPROVED);
+            stored.setPreviewChatId(-7000L);
+            stored.setPreviewMessageId(71);
+        }
+        Message response = TelegramTestFactory.buildTextMessage("preview");
+        if (type.equals("source")) {
+            when(database.findAndModify(eq(previewQuery(preview.item().getId())),
+                any(io.jsondb.query.Update.class), eq(Source.class))).thenReturn(null);
+        } else {
+            when(database.findAndModify(eq(previewQuery(preview.item().getId())),
+                any(io.jsondb.query.Update.class), eq(Template.class))).thenReturn(null);
+        }
+
+        try (MockedStatic<TelegramUtils> telegram = mockStatic(TelegramUtils.class)) {
+            stubPreviewSend(telegram, preview, response);
+
+            assertEquals(WorkflowAction.NONE, new SendMemeStep(CHANNEL_ID, database).run(preview.bag()));
+
+            verifyPreviewUpdate(type, preview.item().getId(), response);
+            assertNull(preview.item().getPreviewChatId());
+            assertNull(preview.item().getPreviewMessageId());
+            if (stored != null) {
+                assertEquals(Status.APPROVED, stored.getStatus());
+                assertEquals(-7000L, stored.getPreviewChatId());
+                assertEquals(71, stored.getPreviewMessageId());
+                assertSame(preview.origin(), stored.getMessage());
+                assertEquals(preview.item().getWeight(), stored.getWeight());
+            }
+            assertPreviewPreserved(preview);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"source", "template"})
+    void atomicPreviewMetadataFailurePropagatesAndFinallyCleansOutput(String type)
+        throws Exception {
+        Preview preview = preview(type);
+        Message response = TelegramTestFactory.buildTextMessage("preview");
+        IllegalStateException failure = new IllegalStateException("atomic preview metadata update failed");
+        if (type.equals("source")) {
+            when(database.findAndModify(eq(previewQuery(preview.item().getId())),
+                any(io.jsondb.query.Update.class), eq(Source.class))).thenThrow(failure);
+        } else {
+            when(database.findAndModify(eq(previewQuery(preview.item().getId())),
+                any(io.jsondb.query.Update.class), eq(Template.class))).thenThrow(failure);
+        }
+
+        try (MockedStatic<TelegramUtils> telegram = mockStatic(TelegramUtils.class)) {
+            stubPreviewSend(telegram, preview, response);
+
+            assertSame(failure, assertThrowsExactly(IllegalStateException.class,
+                () -> new SendMemeStep(CHANNEL_ID, database).run(preview.bag())));
+
+            verifyPreviewUpdate(type, preview.item().getId(), response);
+            assertNull(preview.item().getPreviewChatId());
+            assertNull(preview.item().getPreviewMessageId());
+            assertPreviewPreserved(preview);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"source", "template"})
+    void previewCallbackAndAtomicQueryUseEntityIdRatherThanUploadDirectory(String type) throws Exception {
+        Preview preview = preview(type);
+        UUID uploadId = UUID.fromString(preview.original().getParent().getFileName().toString());
+        UUID entityId = UUID.randomUUID();
+        preview.item().setId(entityId);
+        assertNotEquals(uploadId, entityId);
+        stubStoredPreview(type, preview.item());
+        Message response = TelegramTestFactory.buildTextMessage("preview");
+
+        try (MockedStatic<TelegramUtils> telegram = mockStatic(TelegramUtils.class)) {
+            stubPreviewSend(telegram, preview, response);
+
+            assertEquals(WorkflowAction.NONE, new SendMemeStep(CHANNEL_ID, database).run(preview.bag()));
+
+            ArgumentCaptor<SendPhoto> photo = ArgumentCaptor.forClass(SendPhoto.class);
+            telegram.verify(() -> TelegramUtils.executeSendMediaBotMethod(eq(bot), photo.capture()));
+            InlineKeyboardMarkup markup = (InlineKeyboardMarkup) photo.getValue().getReplyMarkup();
+            assertEquals(entityId + ":" + type + ":confirm",
+                markup.getKeyboard().getFirst().getFirst().getCallbackData());
+            assertEquals(entityId + ":" + type + ":cancel",
+                markup.getKeyboard().getLast().getFirst().getCallbackData());
+            verifyPreviewUpdate(type, entityId, response);
+            assertEquals(response.getChatId(), preview.item().getPreviewChatId());
+            assertEquals(response.getMessageId(), preview.item().getPreviewMessageId());
+            assertPreviewPreserved(preview);
+        }
+    }
+
+    private Preview preview(String type) throws IOException {
+        Path output = output();
+        WorkflowDataBag bag = publicationBag(output);
+        bag.put(WorkflowDataKey.TELEGRAM_UPDATE, TelegramTestFactory.buildTextMessageUpdate("submission"));
+        Path original = previewPath(type, UUID.randomUUID());
+        addPreviewToBag(bag, type, original);
+        CommonEntity item = previewItem(bag, type);
+        Message origin = item.getMessage();
+        origin.setMessageId(41);
+        origin.getChat().setId(-8000L);
+        List<Meme> history = List.of(Meme.builder().id(UUID.randomUUID()).build());
+        bag.put(WorkflowDataKey.MEMES_HISTORY, new ArrayList<>(history));
+        return new Preview(bag, item, origin, output, original, history);
+    }
+
+    private void stubPreviewSend(MockedStatic<TelegramUtils> telegram, Preview preview, Message response) {
+        telegram.when(() -> TelegramUtils.executeSendMediaBotMethod(eq(bot), any(SendPhoto.class)))
+            .thenAnswer(invocation -> {
+                verifyNoInteractions(database);
+                assertWeightsUnchanged(preview.bag());
+                assertEquals(preview.history(), preview.bag().getGeneric(WorkflowDataKey.MEMES_HISTORY,
+                    List.class, Meme.class));
+                assertNull(preview.item().getPreviewChatId());
+                assertNull(preview.item().getPreviewMessageId());
+                assertSame(preview.origin(), preview.item().getMessage());
+                assertTrue(Files.exists(preview.output()));
+                return response;
+            });
+    }
+
+    private CommonEntity storedPreview(Preview preview) {
+        CommonEntity stored = preview.item() instanceof Source ? new Source() : new Template();
+        stored.setId(preview.item().getId());
+        stored.setStatus(Status.REVIEW);
+        stored.setMessage(preview.origin());
+        stored.setWeight(preview.item().getWeight());
+        return stored;
+    }
+
+    private void assertPreviewPreserved(Preview preview) {
+        assertSame(preview.origin(), preview.item().getMessage());
+        assertEquals(-8000L, preview.origin().getChatId());
+        assertEquals(41, preview.origin().getMessageId());
+        assertEquals(Status.REVIEW, preview.item().getStatus());
+        assertWeightsUnchanged(preview.bag());
+        assertEquals(preview.history(), preview.bag().getGeneric(WorkflowDataKey.MEMES_HISTORY,
+            List.class, Meme.class));
+        assertFalse(Files.exists(preview.output()));
+        assertTrue(Files.exists(preview.original()));
+    }
+
+    private record Preview(WorkflowDataBag bag, CommonEntity item, Message origin, Path output, Path original,
+                           List<Meme> history) {
+    }
+
     private Path output() throws IOException {
         return Files.writeString(temporaryDirectory.resolve("rendered-output.png"), "not a real image");
     }
@@ -310,6 +499,10 @@ class SendMemeStepTest {
     private Message addPreviewToBag(WorkflowDataBag bag, String type, Path original) {
         Message progress = TelegramTestFactory.buildTextMessage("creating");
         progress.setMessageId(90);
+        CommonEntity item = previewItem(bag, type);
+        item.setId(UUID.fromString(original.getParent().getFileName().toString()));
+        item.setStatus(Status.REVIEW);
+        item.setMessage(TelegramTestFactory.buildTextMessage("original submission"));
         if (type.equals("template")) {
             bag.put(WorkflowDataKey.CREATING_TEMPLATE_MESSAGE, progress);
             bag.put(WorkflowDataKey.TEMPLATE_FILE, original);
@@ -318,6 +511,50 @@ class SendMemeStepTest {
             bag.put(WorkflowDataKey.SOURCE_FILES, List.of(original));
         }
         return progress;
+    }
+
+    private CommonEntity previewItem(WorkflowDataBag bag, String type) {
+        return type.equals("template") ? bag.get(WorkflowDataKey.TEMPLATE, Template.class)
+            : bag.<List<Source>>getGeneric(WorkflowDataKey.SOURCES, List.class, Source.class).getFirst();
+    }
+
+    private void stubStoredPreview(String type, CommonEntity item) {
+        if (type.equals("source")) {
+            when(database.findAndModify(eq(previewQuery(item.getId())),
+                any(io.jsondb.query.Update.class), eq(Source.class))).thenAnswer(invocation -> {
+                    applyPreviewUpdate(item, invocation.getArgument(1));
+                    return (Source) item;
+                });
+        } else {
+            when(database.findAndModify(eq(previewQuery(item.getId())),
+                any(io.jsondb.query.Update.class), eq(Template.class))).thenAnswer(invocation -> {
+                    applyPreviewUpdate(item, invocation.getArgument(1));
+                    return (Template) item;
+                });
+        }
+    }
+
+    private void applyPreviewUpdate(CommonEntity item, io.jsondb.query.Update update) {
+        item.setPreviewChatId((Long) update.getUpdateData().get("previewChatId"));
+        item.setPreviewMessageId((Integer) update.getUpdateData().get("previewMessageId"));
+    }
+
+    private String previewQuery(UUID id) {
+        return "/.[id='%s' and status='REVIEW']".formatted(id);
+    }
+
+    private void verifyPreviewUpdate(String type, UUID id, Message response) {
+        ArgumentCaptor<String> query = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<io.jsondb.query.Update> update = ArgumentCaptor.forClass(io.jsondb.query.Update.class);
+        if (type.equals("source")) {
+            verify(database).findAndModify(query.capture(), update.capture(), eq(Source.class));
+        } else {
+            verify(database).findAndModify(query.capture(), update.capture(), eq(Template.class));
+        }
+        assertEquals(previewQuery(id), query.getValue());
+        assertEquals(Map.of("previewChatId", response.getChatId(),
+            "previewMessageId", response.getMessageId()), update.getValue().getUpdateData());
+        verifyNoMoreInteractions(database);
     }
 
     private WorkflowDataBag publicationBag(Path output) {

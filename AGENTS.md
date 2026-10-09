@@ -6,7 +6,7 @@
 - Put produced plans, research, reviews, and other Markdown in root `docs/`. Keep this `AGENTS.md` at repository root.
 - Read [project map](docs/project-map.md) for current architecture/setup; [backend review](docs/backend-review.md) and [improvement plan](docs/backend-improvement-plan.md) contain proposals, **not implemented decisions**.
 - [Live test results](docs/live-test-results.md) describe verified dev behavior and failures; that run used isolated storage, disabled schedules, and test-account destinations, not normal production configuration.
-- [Phase 0 results](docs/phase-0-results.md) describe implemented characterization coverage/test seams; later bug fixes and the service/SQLite migration remain proposals.
+- [Phase 0 results](docs/phase-0-results.md) describe implemented characterization coverage/test seams. [Phase 1 callback results](docs/phase-1-callback-safety-results.md) describe implemented preview authorization/binding safety; the rest of Phase 1 and the service/SQLite migration remain proposed.
 - Frontend redesign was deferred in the backend review. Do not expand a backend task into UI/framework replacement.
 
 ## Source boundaries
@@ -42,6 +42,7 @@
 - Prefer typed use-case inputs/results, thin adapters, domain services, and reusable rendering/storage/Telegram boundaries for new work. Do not grow the custom workflow framework unnecessarily or rewrite it as a side effect of an unrelated task.
 - While workflows remain, steps register with `@WorkflowStepRegistration`; verify transitions and required bag values. A fresh bag is created per invocation, and the runner is synchronous, not a durable/resumable workflow system.
 - Separate submitter confirmation from administrator approval. Check actor authorization and allowed status transitions for callback and HTTP mutations.
+- Preview callbacks require the original submitter, REVIEW status, and stored preview chat/message binding. Legacy/unbound items fail closed; never trust callback metadata to backfill ownership. Preserve the original upload Message, and update binding fields without saving stale full-entity snapshots. Same-item callback locks are process-local, not a cross-adapter/database transaction.
 - Keep per-job scratch files isolated. Bound external process/network work, check exit codes, preserve interruption, and clean up on failure. Retain argument-array ProcessBuilder calls rather than shell interpolation.
 - Treat CORS origins/cookie domains as deployable public configuration, not secrets. CORS is not authentication or CSRF protection; test security changes through the full filter chain.
 - Introduce SQLite, schema migrations, and dependency upgrades only in explicitly scoped changes with data migration/backup tests. Do not assume review proposals are already present.

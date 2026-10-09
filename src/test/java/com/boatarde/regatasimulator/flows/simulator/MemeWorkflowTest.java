@@ -6,6 +6,7 @@ import com.boatarde.regatasimulator.flows.WorkflowManager;
 import com.boatarde.regatasimulator.flows.WorkflowStepRegistration;
 import com.boatarde.regatasimulator.models.AreaCorner;
 import com.boatarde.regatasimulator.models.Author;
+import com.boatarde.regatasimulator.models.CommonEntity;
 import com.boatarde.regatasimulator.models.Meme;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;
@@ -73,6 +74,10 @@ class MemeWorkflowTest {
         templatesRoot = Files.createDirectories(root.resolve("templates"));
         database = mock(JsonDBTemplate.class);
         bot = mock(RegataSimulatorBot.class);
+        when(database.findAndModify(anyString(), any(io.jsondb.query.Update.class), eq(Source.class)))
+            .thenAnswer(invocation -> bindPreview(sources.values(), invocation.getArgument(0), invocation.getArgument(1)));
+        when(database.findAndModify(anyString(), any(io.jsondb.query.Update.class), eq(Template.class)))
+            .thenAnswer(invocation -> bindPreview(templates.values(), invocation.getArgument(0), invocation.getArgument(1)));
         when(database.findAll(Source.class)).thenAnswer(invocation -> new ArrayList<>(sources.values()));
         when(database.findAll(Meme.class)).thenAnswer(invocation -> new ArrayList<>(history));
         when(database.find(anyString(), eq(Source.class)))
@@ -112,6 +117,9 @@ class MemeWorkflowTest {
             Source submitted = sources.values().stream().filter(s -> s.getStatus() == Status.REVIEW).findFirst().orElseThrow();
             assertThat(submitted.getDescription()).isEqualTo("new source");
             assertThat(submitted.getWeight()).isEqualTo(10);
+            assertThat(submitted.getPreviewChatId()).isEqualTo(1234L);
+            assertThat(submitted.getPreviewMessageId()).isEqualTo(333);
+            assertThat(submitted.getMessage().getMessageId()).isEqualTo(111);
             assertPreviewKeyboard(submitted.getId(), "source");
             verify(database).upsert(any(Author.class));
             verify(database, never()).upsert(any(Source.class));
@@ -135,6 +143,9 @@ class MemeWorkflowTest {
             Template submitted = templates.values().stream().filter(t -> t.getStatus() == Status.REVIEW).findFirst().orElseThrow();
             assertThat(submitted.getAreas()).hasSize(2);
             assertThat(submitted.getWeight()).isEqualTo(10);
+            assertThat(submitted.getPreviewChatId()).isEqualTo(1234L);
+            assertThat(submitted.getPreviewMessageId()).isEqualTo(333);
+            assertThat(submitted.getMessage().getMessageId()).isEqualTo(111);
             assertPreviewKeyboard(submitted.getId(), "template");
             assertThat(history).isEmpty();
             verify(database, never()).upsert(any(Template.class));
@@ -175,6 +186,17 @@ class MemeWorkflowTest {
                 return message(333);
             });
         return telegram;
+    }
+
+    private <T extends CommonEntity> T bindPreview(java.util.Collection<T> items, String query,
+                                                 io.jsondb.query.Update changes) {
+        T item = items.stream().filter(candidate -> query.contains(candidate.getId().toString())
+            && candidate.getStatus() == Status.REVIEW).findFirst().orElse(null);
+        if (item != null) {
+            item.setPreviewChatId((Long) changes.getUpdateData().get("previewChatId"));
+            item.setPreviewMessageId((Integer) changes.getUpdateData().get("previewMessageId"));
+        }
+        return item;
     }
 
     private void assertPreviewKeyboard(UUID id, String type) {

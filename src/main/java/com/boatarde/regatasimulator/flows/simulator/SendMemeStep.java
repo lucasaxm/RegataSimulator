@@ -6,6 +6,7 @@ import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.flows.WorkflowStep;
 import com.boatarde.regatasimulator.flows.WorkflowStepRegistration;
+import com.boatarde.regatasimulator.models.CommonEntity;
 import com.boatarde.regatasimulator.models.Meme;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Template;
@@ -26,6 +27,8 @@ import java.io.File;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
+
+import static io.jsondb.query.Update.update;
 
 @Slf4j
 @WorkflowStepRegistration(WorkflowAction.SEND_MEME_STEP)
@@ -68,6 +71,11 @@ public class SendMemeStep implements WorkflowStep {
                 List<Source> sources = bag.getGeneric(WorkflowDataKey.SOURCES, List.class, Source.class);
                 updateWeights(template, sources);
                 updateMemesDB(pastMemes, template, sources, response);
+            } else if (creatingTemplateMessage != null) {
+                savePreview(bag.get(WorkflowDataKey.TEMPLATE, Template.class), Template.class, response);
+            } else {
+                List<Source> sources = bag.getGeneric(WorkflowDataKey.SOURCES, List.class, Source.class);
+                savePreview(sources.getFirst(), Source.class, response);
             }
         } catch (TelegramApiException e) {
             log.error(String.format("TelegramApiException when sending media: %s", e.getMessage()), e);
@@ -101,6 +109,19 @@ public class SendMemeStep implements WorkflowStep {
             .build();
         jsonDBTemplate.insert(meme);
         log.info("Meme {} saved.", meme.getId());
+    }
+
+    private <T extends CommonEntity> void savePreview(T item, Class<T> itemClass, Message response) {
+        if (response == null || response.getChat() == null || response.getChatId() == null
+            || response.getMessageId() == null || response.getMessageId() <= 0) {
+            log.error("Preview send returned no usable message identity; callbacks remain disabled");
+            return;
+        }
+        T stored = jsonDBTemplate.findAndModify("/.[id='%s' and status='REVIEW']".formatted(item.getId()),
+            update("previewChatId", response.getChatId()).set("previewMessageId", response.getMessageId()), itemClass);
+        if (stored == null) {
+            log.warn("Preview item {} is absent or no longer in review; callbacks remain disabled", item.getId());
+        }
     }
 
     private void updateWeights(Template template, List<Source> sources) {
@@ -147,15 +168,9 @@ public class SendMemeStep implements WorkflowStep {
             .chatId(creatingTemplateMessage.getChatId())
             .messageId(creatingTemplateMessage.getMessageId())
             .build());
-        Path path;
-        if (type.equals("template")) {
-            path = bag.get(WorkflowDataKey.TEMPLATE_FILE, Path.class);
-        } else {
-            List<Path> sourceFiles = bag.getGeneric(WorkflowDataKey.SOURCE_FILES, List.class, Path.class);
-            path = sourceFiles.getFirst();
-        }
-
-        String itemId = path.getParent().getFileName().toString();
+        List<Source> sources = bag.getGeneric(WorkflowDataKey.SOURCES, List.class, Source.class);
+        UUID itemId = type.equals("template") ? bag.get(WorkflowDataKey.TEMPLATE, Template.class).getId()
+            : sources.getFirst().getId();
         sendPhoto.setReplyMarkup(InlineKeyboardMarkup.builder()
             .keyboard(List.of(List.of(InlineKeyboardButton.builder()
                     .text("✅ Confirmar")

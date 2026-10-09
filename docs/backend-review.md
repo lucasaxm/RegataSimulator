@@ -4,6 +4,8 @@ Reviewed: 2026-10-06. Status: recommendations, **not implemented or approved arc
 
 Subsequent development-only smoke testing is recorded in [live test results](live-test-results.md). It confirms several error paths and refines the CORS assessment below; production was not tested.
 
+This is a historical review, not a current open-issue inventory. [Phase 0 results](phase-0-results.md) and [Phase 1 callback results](phase-1-callback-safety-results.md) record subsequent implemented changes; the service/SQLite redesign remains proposed.
+
 ## Executive decision
 
 | Question | Recommendation | Reason in this codebase |
@@ -27,7 +29,7 @@ See [project map](project-map.md) for the package map and runtime setup.
 
 ### Verified baseline
 
-This is the historical pre-Phase-0 baseline. [Phase 0 results](phase-0-results.md) supersede the dormant-context/coverage assessment below with 293 passing cases and safe context testing; the diagnosed business/security defects remain unfixed.
+This is the historical pre-Phase-0 baseline. [Phase 0 results](phase-0-results.md) supersede the dormant-context/coverage assessment below; [callback results](phase-1-callback-safety-results.md) record the now-fixed callback authorization/binding defects and the latest 590-case suite. Other diagnosed defects remain deferred unless explicitly marked implemented in the plan.
 
 `./gradlew clean test` passed on OpenJDK 21.0.2 using Gradle 8.6: **12 tests, zero failures/errors/skips**.
 
@@ -208,7 +210,7 @@ These are code-evidenced defects/risks, not claims of observed production incide
 | Priority | Finding and evidence | Improvement |
 | --- | --- | --- |
 | P1 | `SecurityConfig` globally disables CSRF despite cookie/form login. `AdminController` exposes meme publishing and backups as GET. | Convert mutations to POST; enable CSRF with token acquisition/submission in login/API clients. Protecting only POST while leaving side-effecting GETs would not fix this. |
-| P1 | `DeleteReviewSourceStep`/`DeleteReviewTemplateStep` accept an item ID without checking callback actor ownership or `REVIEW` status; confirm steps also omit ownership. | Check actor, item state, callback structure, and expected message association; acknowledge rejected callbacks. Confirmation must remain distinct from administrator approval. |
+| P1 — callback slice implemented | At review time, delete/confirm steps omitted actor ownership, REVIEW status, and preview identity checks. | Fixed on 2026-10-09 with generic rejection, persisted binding, and replay tests; see [results](phase-1-callback-safety-results.md). Broader cross-adapter/crash recovery is still pending. |
 | P1 | `BuildMemeStep` uses fixed `resized_source.png`, `distorted_source_temp.png`, indexed distortions, and `final_output.png` inside the chosen template directory. | Give each rendering invocation a unique scratch directory. Concurrent scheduled, HTTP, and preview operations can otherwise overwrite/delete one another's files. |
 | P1 | `BuildMemeStep` waits on subprocesses without timeouts, generally ignores exit codes, and does not drain stderr. | Centralize command execution with bounded output capture, exit-code checks, timeout/process termination, interruption handling, and ImageMagick memory/disk/time limits. Keep argument-array `ProcessBuilder`; do not switch to shell interpolation. |
 | P1 | `GetRandomTemplateStep`/`GetRandomSourceStep` remove `ceil(poolSize * 0.75)` historically used candidates, then select. A pool of one with that item in history becomes empty; source selection can also leave fewer candidates than required slots. | Bound history exclusion by required capacity; progressively relax recent-history filtering. Return explicit unavailable-data results. Add small-pool and special-date tests. |

@@ -1,8 +1,23 @@
 # Backend improvement plan
 
-Date: 2026-10-06. Status: **Phase 0 implemented**; Phases 1–5 remain proposed. [Phase 0 results](phase-0-results.md) record the characterization coverage and small default-preserving test seams.
+Date: 2026-10-06. Updated: 2026-10-09. Status: **Phase 0 and the first Phase 1 callback-safety slice implemented**; remaining Phase 1 work and Phases 2–5 remain proposed. [Phase 0 results](phase-0-results.md) record the characterization coverage/test seams; [callback-safety results](phase-1-callback-safety-results.md) record the implemented behavior and compatibility/recovery limits.
 
 Read [backend review](backend-review.md) for evidence/tradeoffs and [project map](project-map.md) for the current structure. The goal is a simpler, reliable modular monolith, not a rewrite or a distributed system.
+
+## Progress checkpoint — 2026-10-09
+
+- **Complete:** owner/REVIEW/preview-context validation, strict callback parsing, safe generic rejection, persisted nullable preview binding, successful-confirmation consumption, and process-local concurrent replay protection.
+- **Verified:** focused regression suites and `./gradlew clean build`, with **590 cases across 24 suites**, zero failures/errors/skips. Changed Java files were explicitly reanalyzed with Sonar; returned rule findings were fixed, with Java workspace-import warnings remaining rather than a verified server-wide quality-gate result.
+- **Compatibility:** original submission messages and publication weights/history are preserved; binding writes update fields rather than stale full entities. Legacy JSON still loads, but legacy preview buttons without trust metadata are intentionally rejected. No live data was changed.
+- **Next:** isolated rendering scratch directories and bounded subprocess execution. Capacity-aware selection, wider failure recovery, web security, typed services, and SQLite remain pending. This is not completion of all Phase 1 acceptance criteria.
+
+## Progress checkpoint — 2026-10-07
+
+- **Complete:** backend review/project guidance, isolated live development smoke tests, Phase 0 characterization and test seams, and the documented Sonar-driven cleanup. See [live test results](live-test-results.md) and [Phase 0 results](phase-0-results.md) for evidence and limits.
+- **Fresh verification:** `./gradlew clean build` passed on Java 21.0.2; test XML reports **300 executed cases across 23 suites**, zero failures/errors/skips. Current editor diagnostics report no errors. This does not establish a project-wide SonarQube scan or server quality-gate result.
+- **Local setup:** `.env.dev` exists, is Git-ignored, and is not tracked. The original live-test report's unignored-file warning is historical, not its current Git status.
+- **Still pending:** callback actor/status protection, per-job rendering isolation, process timeouts/exit-code checks, capacity-aware selection, failure recovery, web security, typed services, SQLite, and dependency/deployment work. A green characterization suite does not mean these defects are fixed.
+- **Ready to begin Phase 1**, not to claim production readiness or start the SQLite cutover. The next slice is callback safety below; no application was started or external data accessed during this readiness check.
 
 ## Phase 0 — Protect existing behavior
 
@@ -18,6 +33,8 @@ Work against temporary storage and mocked Telegram, never the production paths/t
 Acceptance: baseline 12 tests remain green; new tests describe known failures and intended contracts. Desired security behavior should be tested alongside its fix rather than enshrined as existing behavior.
 
 ## Phase 1 — Safety and reliability fixes
+
+Callback safety (item 1) is implemented as scoped in [callback-safety results](phase-1-callback-safety-results.md); cross-adapter transaction/recovery guarantees are still deferred. Items 2–5 remain next work.
 
 Small independent changes, each with a regression test:
 
@@ -96,6 +113,16 @@ Acceptance: a backup can actually restore the app; failed deployments are detect
 
 ## First implementation slice
 
-Start with callback authorization tests/fix and isolated, bounded rendering, then small-pool selection. Follow with CORS/cookie/CSRF configuration. These address safety before replacing infrastructure; repository isolation then makes SQLite migration much less invasive.
+**Completed on 2026-10-09:** source/template preview callback authorization and status checks. The acceptance criteria below describe that completed slice; see [results](phase-1-callback-safety-results.md) for verification and limits. Rendering changes stay in a separate PR.
+
+Acceptance for that first slice:
+
+1. Validate callback UUID/type/action and safely handle absent or inaccessible callback messages. Invalid, missing-item, unauthorized, and stale-state callbacks are acknowledged without deleting files/records, clearing another user's keyboard, or forwarding a submission for approval.
+2. Verify the submitter identity from the original stored submission and require REVIEW status for submitter confirm/cancel. Preserve the distinction: confirmation requests administrator approval; it never sets APPROVED itself. Define fail-closed behavior when legacy origin/author metadata cannot prove ownership.
+3. Bind callbacks to the expected preview context using the implemented nullable preview chat/message metadata, separately from the original upload Message. Capture preview identity from the send response in `SendMemeStep`; do not overwrite the original submission or infer legacy binding from incoming callbacks.
+4. Add adversarial/replay cases alongside existing valid-owner cases in `ReviewCallbackStepsTest` and route/workflow tests. Update known-failure expectations with their fixes, preserving callback formats and Portuguese messages where compatible.
+5. Pass targeted tests and `./gradlew clean build`; explicitly reanalyze changed Java files for Sonar findings. Do not suppress rules, include production data, migrate storage, or redesign the workflow framework in this slice.
+
+Then tackle isolated scratch directories and bounded subprocess execution, followed by small-pool selection and the remaining Phase 1 items. Follow with CORS/cookie/CSRF configuration in Phase 2. These address safety before replacing infrastructure; repository isolation then makes SQLite migration much less invasive.
 
 Each phase is a sequence of small PRs, not one giant PR. Estimates should follow the data audit and required test work; the existing green suite does not justify calling a whole migration low-risk or a two-day task.

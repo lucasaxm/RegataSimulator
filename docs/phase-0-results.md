@@ -2,6 +2,8 @@
 
 Implemented: 2026-10-06. Scope: protect existing behavior and make tests safe; this is **not** the Phase 1 bug/security fix or the service/SQLite migration.
 
+This report preserves the Phase 0/Sonar baseline. The 2026-10-09 [callback-safety slice](phase-1-callback-safety-results.md) supersedes its callback failure characterizations and increases the suite to 590 cases across 24 suites. Other characterized defects remain pending.
+
 ## Outcome
 
 The original 12 tests remain green. Phase 0 initially delivered 293 cases. After subsequent Sonar-driven cleanup and focused regression/test splits, the suite contains **300 executed cases across 23 suites**: 288 additional cases in 18 new test classes. Parameterized cases are included in those totals; this is not a line/branch coverage percentage.
@@ -55,7 +57,7 @@ Test names containing `currently`, `characterizes`, or `Phase1...Gap/Bug` descri
 - Recent-history filtering can remove the only candidate or leave insufficient source capacity.
 - Sparse/duplicate geometry is not rejected before rendering; subprocess exit codes are ignored.
 - Partial download/import/backup failures can leave files behind.
-- A missing callback item or malformed UUID may fail without acknowledgment.
+- At Phase 0, missing callback items/malformed UUIDs could fail without acknowledgment; these expectations were replaced with safe rejection tests in the 2026-10-09 callback slice.
 - Template rejection with null origin metadata can persist the decision and then fail in notification.
 - Invalid pagination/missing media and metadata/file deletion failures lack useful domain error/recovery handling.
 
@@ -79,4 +81,4 @@ Earlier cleanup also narrowed exceptions, preserved rendering interruption, clos
 
 ImageMagick pixels, real Telegram transport, backup restoration/crash consistency, concurrency, timeouts, and production startup/deployment are not proven by these fake-boundary tests. [Live test results](live-test-results.md) remain a separate historical dev run. Security fixes, frontend fixes, typed services, SQLite, and dependency updates are still deferred.
 
-Phase 0 is complete for the planned behavior/testability coverage. Start Phase 1 with actor/status authorization and isolated, bounded rendering using these tests as a safety net; do not combine that work with a database cutover.
+Phase 0 is complete for the planned behavior/testability coverage. Actor/status/preview authorization is now implemented in the [first Phase 1 slice](phase-1-callback-safety-results.md). Continue with isolated, bounded rendering using these tests as a safety net; do not combine that work with a database cutover.

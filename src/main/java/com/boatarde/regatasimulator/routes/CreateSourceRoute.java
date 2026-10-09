@@ -2,6 +2,7 @@ package com.boatarde.regatasimulator.routes;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.flows.simulator.ReviewCallbackSupport;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.generics.TelegramBot;
@@ -20,14 +21,14 @@ public class CreateSourceRoute implements Route {
             return Optional.empty();
         }
 
-        // Check for confirm/cancel callback queries first
+        // This bot only has source/template callbacks. Unknown callbacks are safely rejected by the source step.
         if (update.hasCallbackQuery()) {
             String data = update.getCallbackQuery().getData();
-            if (data.endsWith(":source:confirm")) {
-                return Optional.of(WorkflowAction.CONFIRM_REVIEW_SOURCE);
-            } else if (data.endsWith(":source:cancel")) {
-                return Optional.of(WorkflowAction.DELETE_REVIEW_SOURCE);
+            if (ReviewCallbackSupport.isType(data, "template")) {
+                return Optional.empty();
             }
+            return Optional.of(data != null && data.endsWith(":source:cancel")
+                ? WorkflowAction.DELETE_REVIEW_SOURCE : WorkflowAction.CONFIRM_REVIEW_SOURCE);
         }
 
         // Check if it's a new source creation message

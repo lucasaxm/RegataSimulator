@@ -1,6 +1,6 @@
 # Project map and development baseline
 
-Verified: 2026-10-07. This describes the **current** application, not the proposed redesign.
+Verified: 2026-10-09. This describes the **current** application, not the proposed redesign.
 
 ## Stack and repository layout
 
@@ -58,8 +58,8 @@ Each invocation gets a fresh bag. `NONE` has no registered step and ends executi
 
 | Collection | Entity | Stored domain fields |
 | --- | --- | --- |
-| `sources` | `Source extends CommonEntity` | UUID, description, weight, status, full Telegram Message |
-| `templates` | `Template extends CommonEntity` | UUID, areas, weight, status, full Telegram Message |
+| `sources` | `Source extends CommonEntity` | UUID, description, weight, status, original Telegram Message, nullable preview chat/message IDs |
+| `templates` | `Template extends CommonEntity` | UUID, areas, weight, status, original Telegram Message, nullable preview chat/message IDs |
 | `memes` | `Meme` | UUID, template UUID, ordered source UUID list, Telegram Message |
 | `users` | `Author` | Long Telegram user ID, first/last name, optional username |
 
@@ -69,6 +69,7 @@ JsonDB discovers `@Document` entities under `models`. Review status values are e
 - Template image layout: configured templates directory / UUID / `template.jpg`, `template.jpeg`, or `template.png`.
 - Template geometry stores 1-based area/source numbers, four integer corners, and background flags. The CSV header is exactly `Area,Source,TLx,TLy,TRx,TRy,BRx,BRy,BLx,BLy,Background`.
 - Imported sources have no Telegram origin message. Current entity sorting derives dates from Message or zero.
+- Preview callbacks require the original submitter, REVIEW state, and the exact persisted preview chat/message identity. Successful confirmation consumes the binding without approving the record. Legacy/unbound previews fail closed. Binding metadata is updated with JsonDB field operations; process-local callback locks prevent concurrent successful replays, not all HTTP/multi-process races. See [callback-safety results](phase-1-callback-safety-results.md).
 - Files and JsonDB metadata are separate; neither source deletion nor create operations are application-level atomic across them.
 
 ## HTTP and browser integration
@@ -105,7 +106,7 @@ Run from repository root with Java 21:
 - `./gradlew bootJar` — executable JAR under `build/libs/`.
 - `./gradlew test --tests 'com.boatarde.regatasimulator.service.RouterServiceTest'` — targeted test example.
 
-The suite has 300 passing cases across 23 suites after the 2026-10-07 Sonar cleanup, with no runtime secrets, Telegram calls, or ImageMagick dependency. Test reports: `build/reports/tests/test/index.html` and `build/test-results/test/`. The dormant `BilubotApplicationTests.java` was replaced with safe context/startup tests; test-only profile YAML and dynamic temporary paths isolate them. See [Phase 0 results](phase-0-results.md) for coverage and known-failure conventions. IDE non-project diagnostics should be investigated via Gradle/Java workspace import, not fixed by changing valid package declarations.
+The suite has **590 passing cases across 24 suites** after the 2026-10-09 callback-safety slice (previous baseline: 300/23), with no runtime secrets, Telegram calls, or ImageMagick dependency. Test reports: `build/reports/tests/test/index.html` and `build/test-results/test/`. The dormant `BilubotApplicationTests.java` was replaced with safe context/startup tests; test-only profile YAML and dynamic temporary paths isolate them. See [Phase 0 results](phase-0-results.md) for characterization conventions and [callback-safety results](phase-1-callback-safety-results.md) for current regression coverage. IDE non-project diagnostics should be investigated via Gradle/Java workspace import, not fixed by changing valid package declarations.
 
 ## Runtime environment and local safety
 
@@ -122,7 +123,9 @@ Required variables referenced by shared YAML:
 
 Web credentials and profile bot tokens/IDs are encrypted in configuration; no decrypted values should enter documentation or logs. Use a dedicated development bot and isolated directories outside source/build outputs. Do not assume profile selection disables scheduling or bot registration: it currently does not.
 
-A placeholder-only root `.env` was added during the review because none existed. Spring Boot does **not** automatically load dotenv files: supply variables through the process environment/IDE or deliberately configure loading in a future task. `.env` was not ignored by Git at review time; add it to the project's ignore rules before entering any real secrets. Placeholders cannot decrypt the existing encrypted configuration and are not a working local runtime setup.
+A placeholder-only root `.env` was initially added during the review. Development setup subsequently moved to the user-created `.env.dev`, with the supplied development-only decryption key and local storage/ImageMagick settings. The 2026-10-07 readiness check confirms `.env.dev` exists, is Git-ignored, and is not tracked; the earlier live-test warning about its ignore status is historical.
+
+Spring Boot does **not** automatically load dotenv files: supply `.env.dev` variables explicitly through the process environment/IDE. Never print or commit the decryption key. Loading the dev environment alone does not make startup side-effect-free: use registration/scheduling opt-outs, isolated storage, and mocked or dedicated test destinations as appropriate. The live test found a mismatch between dev source metadata and image paths; that dataset issue has not been repaired by configuring the environment or adding Phase 0 tests.
 
 ## CI and deployment
 

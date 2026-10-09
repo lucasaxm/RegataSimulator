@@ -5,6 +5,7 @@ import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.models.Template;
 import com.boatarde.regatasimulator.util.JsonDBUtils;
 import io.jsondb.JsonDBTemplate;
+import io.jsondb.query.Update;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
@@ -93,6 +94,16 @@ public class TemplateService {
 
     public Optional<Template> getTemplate(UUID id) {
         return Optional.ofNullable(jsonDBTemplate.findById(id, Template.class));
+    }
+
+    public void completePreviewReview(Template template) {
+        Template updated = jsonDBTemplate.findAndModify("/.[id='%s']".formatted(template.getId()),
+            Update.update("previewChatId", null).set("previewMessageId", null), Template.class);
+        if (updated == null) {
+            throw new IllegalStateException("Template no longer exists: " + template.getId());
+        }
+        template.setPreviewChatId(null);
+        template.setPreviewMessageId(null);
     }
 
     public void approveTemplate(Template template) {

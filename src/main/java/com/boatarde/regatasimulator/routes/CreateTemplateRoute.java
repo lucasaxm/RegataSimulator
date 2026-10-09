@@ -2,6 +2,7 @@ package com.boatarde.regatasimulator.routes;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.flows.simulator.ReviewCallbackSupport;
 import com.boatarde.regatasimulator.models.TemplateArea;
 import com.boatarde.regatasimulator.util.JsonDBUtils;
 import org.springframework.stereotype.Component;
@@ -24,12 +25,17 @@ public class CreateTemplateRoute implements Route {
             return Optional.empty();
         }
 
+        if (update.hasCallbackQuery()) {
+            String data = update.getCallbackQuery().getData();
+            if (!ReviewCallbackSupport.isType(data, "template")) {
+                return Optional.empty();
+            }
+            return Optional.of(data.endsWith(":template:cancel")
+                ? WorkflowAction.DELETE_REVIEW_TEMPLATE : WorkflowAction.CONFIRM_REVIEW_TEMPLATE);
+        }
+
         if (isValidTemplateFile(update)) {
             return Optional.of(WorkflowAction.CREATE_TEMPLATE);
-        } else if (cancelButtonPressed(update)) {
-            return Optional.of(WorkflowAction.DELETE_REVIEW_TEMPLATE);
-        } else if (confirmButtonPressed(update)) {
-            return Optional.of(WorkflowAction.CONFIRM_REVIEW_TEMPLATE);
         }
         return Optional.empty();
     }
@@ -61,11 +67,4 @@ public class CreateTemplateRoute implements Route {
         }
     }
 
-    private boolean cancelButtonPressed(Update update) {
-        return update.hasCallbackQuery() && update.getCallbackQuery().getData().endsWith(":template:cancel");
-    }
-
-    private boolean confirmButtonPressed(Update update) {
-        return update.hasCallbackQuery() && update.getCallbackQuery().getData().endsWith(":template:confirm");
-    }
 }

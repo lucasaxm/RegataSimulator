@@ -6,6 +6,7 @@ import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.util.JsonDBUtils;
 import io.jsondb.JsonDBTemplate;
+import io.jsondb.query.Update;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
@@ -93,6 +94,16 @@ public class SourceService {
 
     public Optional<Source> getSource(UUID id) {
         return Optional.ofNullable(jsonDBTemplate.findById(id, Source.class));
+    }
+
+    public void completePreviewReview(Source source) {
+        Source updated = jsonDBTemplate.findAndModify("/.[id='%s']".formatted(source.getId()),
+            Update.update("previewChatId", null).set("previewMessageId", null), Source.class);
+        if (updated == null) {
+            throw new IllegalStateException("Source no longer exists: " + source.getId());
+        }
+        source.setPreviewChatId(null);
+        source.setPreviewMessageId(null);
     }
 
     public void approveSource(Source source) {

@@ -1,11 +1,15 @@
 package com.boatarde.regatasimulator.service;
 
 import com.boatarde.regatasimulator.dto.SearchCriteria;
+import com.boatarde.regatasimulator.models.AreaCorner;
+import com.boatarde.regatasimulator.models.CommonEntity;
 import com.boatarde.regatasimulator.models.GalleryResponse;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.models.Template;
 import com.boatarde.regatasimulator.models.TemplateArea;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.jsondb.JsonDBTemplate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,12 +25,14 @@ import org.telegram.telegrambots.meta.api.objects.User;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -59,6 +65,242 @@ class SourceAndTemplateServiceTest {
         sources = sourceService(db);
         templates = new TemplateService(templateRoot.toString(), db);
         ReflectionTestUtils.setField(templates, "initialWeight", 37);
+    }
+
+    @Test
+    void sourcePreviewBindingRoundTripsOnDiskWithoutChangingOriginOrMetadata() {
+        Source original = sourceWithPreview();
+        db.insert(List.of(original), Source.class);
+
+        Source stored = reopenDatabase().findById(original.getId(), Source.class);
+
+        assertEquals(original.getPreviewChatId(), stored.getPreviewChatId());
+        assertEquals(original.getPreviewMessageId(), stored.getPreviewMessageId());
+        assertSourceMetadata(original, stored);
+    }
+
+    @Test
+    void templatePreviewBindingRoundTripsOnDiskWithoutChangingOriginOrMetadata() {
+        Template original = templateWithPreview();
+        db.insert(List.of(original), Template.class);
+
+        Template stored = reopenDatabase().findById(original.getId(), Template.class);
+
+        assertEquals(original.getPreviewChatId(), stored.getPreviewChatId());
+        assertEquals(original.getPreviewMessageId(), stored.getPreviewMessageId());
+        assertTemplateMetadata(original, stored);
+    }
+
+    @Test
+    void completeSourcePreviewReviewPersistsNullBindingAndPreservesReviewOrigin() {
+        Source original = sourceWithPreview();
+        db.insert(List.of(original), Source.class);
+        Source pending = reopenDatabase().findById(original.getId(), Source.class);
+        assertEquals(original.getPreviewChatId(), pending.getPreviewChatId());
+        assertEquals(original.getPreviewMessageId(), pending.getPreviewMessageId());
+
+        sources.completePreviewReview(pending);
+
+        assertNull(pending.getPreviewChatId());
+        assertNull(pending.getPreviewMessageId());
+        Source stored = reopenDatabase().findById(original.getId(), Source.class);
+        assertNull(stored.getPreviewChatId());
+        assertNull(stored.getPreviewMessageId());
+        assertSourceMetadata(original, stored);
+    }
+
+    @Test
+    void completeTemplatePreviewReviewPersistsNullBindingAndPreservesReviewOrigin() {
+        Template original = templateWithPreview();
+        db.insert(List.of(original), Template.class);
+        Template pending = reopenDatabase().findById(original.getId(), Template.class);
+        assertEquals(original.getPreviewChatId(), pending.getPreviewChatId());
+        assertEquals(original.getPreviewMessageId(), pending.getPreviewMessageId());
+
+        templates.completePreviewReview(pending);
+
+        assertNull(pending.getPreviewChatId());
+        assertNull(pending.getPreviewMessageId());
+        Template stored = reopenDatabase().findById(original.getId(), Template.class);
+        assertNull(stored.getPreviewChatId());
+        assertNull(stored.getPreviewMessageId());
+        assertTemplateMetadata(original, stored);
+    }
+
+    @Test
+    void completeSourcePreviewReviewWithStaleSnapshotPreservesCurrentApprovedMetadata() {
+        Source original = sourceWithPreview();
+        db.insert(List.of(original), Source.class);
+        Source staleReview = reopenDatabase().findById(original.getId(), Source.class);
+        Source current = db.findById(original.getId(), Source.class);
+        current.setWeight(41);
+        current.setDescription("updated approved source description");
+        sources.approveSource(current);
+        assertEquals(Status.REVIEW, staleReview.getStatus());
+        assertEquals(original.getPreviewChatId(), staleReview.getPreviewChatId());
+        assertEquals(original.getPreviewMessageId(), staleReview.getPreviewMessageId());
+        assertEquals(Status.APPROVED, reopenDatabase().findById(original.getId(), Source.class).getStatus());
+
+        sources.completePreviewReview(staleReview);
+
+        assertNull(staleReview.getPreviewChatId());
+        assertNull(staleReview.getPreviewMessageId());
+        assertSourceMetadata(original, staleReview);
+        Source stored = reopenDatabase().findById(original.getId(), Source.class);
+        assertNotNull(stored);
+        assertEquals(original.getId(), stored.getId());
+        assertNull(stored.getPreviewChatId());
+        assertNull(stored.getPreviewMessageId());
+        assertEquals(Status.APPROVED, stored.getStatus());
+        assertEquals(current.getWeight(), stored.getWeight());
+        assertEquals(current.getDescription(), stored.getDescription());
+        ObjectMapper mapper = new ObjectMapper();
+        assertEquals(mapper.valueToTree(original.getMessage()), mapper.valueToTree(stored.getMessage()));
+    }
+
+    @Test
+    void completeTemplatePreviewReviewWithStaleSnapshotPreservesCurrentApprovedMetadata() {
+        Template original = templateWithPreview();
+        db.insert(List.of(original), Template.class);
+        Template staleReview = reopenDatabase().findById(original.getId(), Template.class);
+        Template current = db.findById(original.getId(), Template.class);
+        current.setWeight(43);
+        current.setAreas(List.of(TemplateArea.builder().index(3).source(9)
+            .topLeft(new AreaCorner(30, 40)).topRight(new AreaCorner(130, 45))
+            .bottomRight(new AreaCorner(135, 240)).bottomLeft(new AreaCorner(35, 235))
+            .background(false).build()));
+        templates.approveTemplate(current);
+        assertEquals(Status.REVIEW, staleReview.getStatus());
+        assertEquals(original.getPreviewChatId(), staleReview.getPreviewChatId());
+        assertEquals(original.getPreviewMessageId(), staleReview.getPreviewMessageId());
+        assertEquals(Status.APPROVED, reopenDatabase().findById(original.getId(), Template.class).getStatus());
+
+        templates.completePreviewReview(staleReview);
+
+        assertNull(staleReview.getPreviewChatId());
+        assertNull(staleReview.getPreviewMessageId());
+        assertTemplateMetadata(original, staleReview);
+        Template stored = reopenDatabase().findById(original.getId(), Template.class);
+        assertNotNull(stored);
+        assertEquals(original.getId(), stored.getId());
+        assertNull(stored.getPreviewChatId());
+        assertNull(stored.getPreviewMessageId());
+        assertEquals(Status.APPROVED, stored.getStatus());
+        assertEquals(current.getWeight(), stored.getWeight());
+        assertEquals(current.getAreas(), stored.getAreas());
+        ObjectMapper mapper = new ObjectMapper();
+        assertEquals(mapper.valueToTree(original.getMessage()), mapper.valueToTree(stored.getMessage()));
+    }
+
+    @Test
+    void completeMissingSourcePreviewReviewFailsWithoutReinsertingOrClearingSnapshotBinding() {
+        Source original = sourceWithPreview();
+        db.insert(List.of(original), Source.class);
+        Source staleReview = reopenDatabase().findById(original.getId(), Source.class);
+        db.remove(original, Source.class);
+        assertNull(db.findById(original.getId(), Source.class));
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+            () -> sources.completePreviewReview(staleReview));
+
+        assertEquals("Source no longer exists: " + original.getId(), failure.getMessage());
+        assertEquals(original.getPreviewChatId(), staleReview.getPreviewChatId());
+        assertEquals(original.getPreviewMessageId(), staleReview.getPreviewMessageId());
+        assertSourceMetadata(original, staleReview);
+        assertNull(db.findById(original.getId(), Source.class));
+        JsonDBTemplate reopened = reopenDatabase();
+        assertNull(reopened.findById(original.getId(), Source.class));
+        assertTrue(reopened.findAll(Source.class).isEmpty());
+    }
+
+    @Test
+    void completeMissingTemplatePreviewReviewFailsWithoutReinsertingOrClearingSnapshotBinding() {
+        Template original = templateWithPreview();
+        db.insert(List.of(original), Template.class);
+        Template staleReview = reopenDatabase().findById(original.getId(), Template.class);
+        db.remove(original, Template.class);
+        assertNull(db.findById(original.getId(), Template.class));
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+            () -> templates.completePreviewReview(staleReview));
+
+        assertEquals("Template no longer exists: " + original.getId(), failure.getMessage());
+        assertEquals(original.getPreviewChatId(), staleReview.getPreviewChatId());
+        assertEquals(original.getPreviewMessageId(), staleReview.getPreviewMessageId());
+        assertTemplateMetadata(original, staleReview);
+        assertNull(db.findById(original.getId(), Template.class));
+        JsonDBTemplate reopened = reopenDatabase();
+        assertNull(reopened.findById(original.getId(), Template.class));
+        assertTrue(reopened.findAll(Template.class).isEmpty());
+    }
+
+    @Test
+    void jacksonDeserializesLegacySourceWithoutPreviewFieldsAsNull() throws IOException {
+        Source original = sourceWithPreview();
+        ObjectMapper mapper = new ObjectMapper();
+        ObjectNode legacy = mapper.valueToTree(original);
+        legacy.remove(List.of("previewChatId", "previewMessageId"));
+
+        Source stored = mapper.readValue(legacy.toString(), Source.class);
+
+        assertNull(stored.getPreviewChatId());
+        assertNull(stored.getPreviewMessageId());
+        assertSourceMetadata(original, stored);
+    }
+
+    @Test
+    void jacksonDeserializesLegacyTemplateWithoutPreviewFieldsAsNull() throws IOException {
+        Template original = templateWithPreview();
+        ObjectMapper mapper = new ObjectMapper();
+        ObjectNode legacy = mapper.valueToTree(original);
+        legacy.remove(List.of("previewChatId", "previewMessageId"));
+
+        Template stored = mapper.readValue(legacy.toString(), Template.class);
+
+        assertNull(stored.getPreviewChatId());
+        assertNull(stored.getPreviewMessageId());
+        assertTemplateMetadata(original, stored);
+    }
+
+    @Test
+    void freshJsonDbLoadsLegacySourcesWithoutPreviewFieldsAndPreservesMetadata() throws IOException {
+        Source original = sourceWithPreview();
+        Source imported = sourceWithPreview();
+        imported.setDescription("legacy imported source");
+        imported.setMessage(null);
+        db.insert(List.of(original, imported), Source.class);
+        removePreviewFieldsFromTemporaryCollection("sources", 2);
+
+        JsonDBTemplate reopened = reopenDatabase();
+
+        assertEquals(2, reopened.findAll(Source.class).size());
+        for (Source expected : List.of(original, imported)) {
+            Source stored = reopened.findById(expected.getId(), Source.class);
+            assertNotNull(stored);
+            assertNull(stored.getPreviewChatId());
+            assertNull(stored.getPreviewMessageId());
+            assertSourceMetadata(expected, stored);
+        }
+    }
+
+    @Test
+    void freshJsonDbLoadsLegacyTemplatesWithoutPreviewFieldsAndPreservesMetadata() throws IOException {
+        Template original = templateWithPreview();
+        Template imported = templateWithPreview();
+        imported.setMessage(null);
+        db.insert(List.of(original, imported), Template.class);
+        removePreviewFieldsFromTemporaryCollection("templates", 2);
+
+        JsonDBTemplate reopened = reopenDatabase();
+
+        assertEquals(2, reopened.findAll(Template.class).size());
+        for (Template expected : List.of(original, imported)) {
+            Template stored = reopened.findById(expected.getId(), Template.class);
+            assertNotNull(stored);
+            assertNull(stored.getPreviewChatId());
+            assertNull(stored.getPreviewMessageId());
+            assertTemplateMetadata(expected, stored);
+        }
     }
 
     @Test
@@ -344,6 +586,85 @@ class SourceAndTemplateServiceTest {
 
         assertEquals(List.of(1, 2), templates.getTemplate(template.getId()).orElseThrow()
             .getAreas().stream().map(TemplateArea::getSource).toList());
+    }
+
+    private JsonDBTemplate reopenDatabase() {
+        JsonDBTemplate reopened = new JsonDBTemplate(tempDir.resolve("db").toString(),
+            "com.boatarde.regatasimulator.models");
+        assertFalse(reopened.hasCollectionFileChangeListener());
+        return reopened;
+    }
+
+    private Source sourceWithPreview() {
+        Source source = source("original source description", Status.REVIEW, message(1700000000, 456L));
+        source.setWeight(19);
+        source.setPreviewChatId(-1001234567890L);
+        source.setPreviewMessageId(9876);
+        return source;
+    }
+
+    private Template templateWithPreview() {
+        Template template = template(Status.REVIEW, message(1700000001, 789L));
+        template.setWeight(23);
+        template.setPreviewChatId(-1009876543210L);
+        template.setPreviewMessageId(5432);
+        template.setAreas(List.of(TemplateArea.builder().index(1).source(7)
+            .topLeft(new AreaCorner(10, 20)).topRight(new AreaCorner(110, 25))
+            .bottomRight(new AreaCorner(115, 220)).bottomLeft(new AreaCorner(15, 215))
+            .background(true).build(), TemplateArea.builder().index(2).source(8).build()));
+        return template;
+    }
+
+    private void assertSourceMetadata(Source expected, Source actual) {
+        assertCommonMetadata(expected, actual);
+        assertEquals(expected.getDescription(), actual.getDescription());
+    }
+
+    private void assertTemplateMetadata(Template expected, Template actual) {
+        assertCommonMetadata(expected, actual);
+        assertEquals(expected.getAreas(), actual.getAreas());
+    }
+
+    private void assertCommonMetadata(CommonEntity expected, CommonEntity actual) {
+        assertNotNull(actual);
+        assertEquals(expected.getId(), actual.getId());
+        assertEquals(Status.REVIEW, actual.getStatus());
+        assertEquals(expected.getWeight(), actual.getWeight());
+        if (expected.getMessage() == null) {
+            assertNull(actual.getMessage());
+            return;
+        }
+        Message origin = expected.getMessage();
+        Message storedOrigin = actual.getMessage();
+        assertNotNull(storedOrigin);
+        assertEquals(origin.getMessageId(), storedOrigin.getMessageId());
+        assertEquals(origin.getDate(), storedOrigin.getDate());
+        assertNotNull(storedOrigin.getFrom());
+        assertEquals(origin.getFrom().getId(), storedOrigin.getFrom().getId());
+        assertNotNull(storedOrigin.getChat());
+        assertEquals(origin.getChat().getId(), storedOrigin.getChat().getId());
+        ObjectMapper mapper = new ObjectMapper();
+        assertEquals(mapper.valueToTree(origin), mapper.valueToTree(storedOrigin));
+    }
+
+    private void removePreviewFieldsFromTemporaryCollection(String collection, int recordCount) throws IOException {
+        Path file = tempDir.resolve("db").resolve(collection + ".json");
+        List<String> lines = new ArrayList<>(Files.readAllLines(file));
+        assertEquals(recordCount + 1, lines.size());
+        String header = lines.getFirst();
+        ObjectMapper mapper = new ObjectMapper();
+        // JsonDB stores a schema header followed by one JSON object per data record.
+        for (int index = 1; index < lines.size(); index++) {
+            ObjectNode dataRecord = (ObjectNode) mapper.readTree(lines.get(index));
+            assertTrue(dataRecord.hasNonNull("previewChatId"));
+            assertTrue(dataRecord.hasNonNull("previewMessageId"));
+            dataRecord.remove(List.of("previewChatId", "previewMessageId"));
+            assertFalse(dataRecord.has("previewChatId"));
+            assertFalse(dataRecord.has("previewMessageId"));
+            lines.set(index, mapper.writeValueAsString(dataRecord));
+        }
+        Files.write(file, lines);
+        assertEquals(header, Files.readAllLines(file).getFirst());
     }
 
     private SourceService sourceService(JsonDBTemplate database) {
