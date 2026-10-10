@@ -11,7 +11,7 @@ import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.models.Template;
 import com.boatarde.regatasimulator.models.TemplateArea;
-import com.boatarde.regatasimulator.service.RouterService;
+import com.boatarde.regatasimulator.adapter.telegram.TelegramRouter;
 import com.boatarde.regatasimulator.service.SourceImporterService;
 import com.boatarde.regatasimulator.service.SourceService;
 import com.boatarde.regatasimulator.service.TemplateService;
@@ -68,7 +68,7 @@ class ApiControllerTest {
     @MockBean private SourceService sources;
     @MockBean private TemplateService templates;
     @MockBean private SourceImporterService importer;
-    @MockBean private RouterService router;
+    @MockBean private TelegramRouter router;
     @MockBean private RegataSimulatorBot bot;
     @MockBean private TelegramGateway telegram;
     @TempDir private Path storage;

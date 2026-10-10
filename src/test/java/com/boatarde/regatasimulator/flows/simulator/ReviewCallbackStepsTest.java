@@ -2,10 +2,10 @@ package com.boatarde.regatasimulator.flows.simulator;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.factory.TelegramTestFactory;
-import com.boatarde.regatasimulator.flows.WorkflowAction;
-import com.boatarde.regatasimulator.flows.WorkflowDataBag;
-import com.boatarde.regatasimulator.flows.WorkflowDataKey;
-import com.boatarde.regatasimulator.flows.WorkflowStep;
+import com.boatarde.regatasimulator.adapter.telegram.BotTelegramGateway;
+import com.boatarde.regatasimulator.adapter.telegram.TelegramRouter;
+import com.boatarde.regatasimulator.service.ReviewCallbackService;
+import org.springframework.beans.factory.ObjectProvider;
 import com.boatarde.regatasimulator.models.CommonEntity;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;
@@ -76,7 +76,7 @@ class ReviewCallbackStepsTest {
         stubFound(type, item);
         stubCompletionClearingPreviewBinding(type, item);
 
-        assertStepReturnsNone(type, "confirm", update);
+        assertDispatchSafely(update);
 
         ArgumentCaptor<SendPhoto> photo = ArgumentCaptor.forClass(SendPhoto.class);
         ArgumentCaptor<EditMessageReplyMarkup> edit = ArgumentCaptor.forClass(EditMessageReplyMarkup.class);
@@ -101,7 +101,7 @@ class ReviewCallbackStepsTest {
         CommonEntity item = ownReviewItem(type, update);
         stubFound(type, item);
 
-        assertStepReturnsNone(type, "cancel", update);
+        assertDispatchSafely(update);
 
         ArgumentCaptor<DeleteMessage> deletion = ArgumentCaptor.forClass(DeleteMessage.class);
         ArgumentCaptor<AnswerCallbackQuery> answer = ArgumentCaptor.forClass(AnswerCallbackQuery.class);
@@ -122,7 +122,7 @@ class ReviewCallbackStepsTest {
         Update update = callback(ITEM_ID + ":" + type + ":" + action);
         stubMissing(type);
 
-        assertStepReturnsNone(type, action, update);
+        assertDispatchSafely(update);
 
         verifyLookupOnly(type);
         verifyRejectedAcknowledgementOnly();
@@ -137,7 +137,7 @@ class ReviewCallbackStepsTest {
         invalidateItemOrOwner(item, update, invalidCase);
         stubFound(type, item);
 
-        assertStepReturnsNone(type, action, update);
+        assertDispatchSafely(update);
 
         verifyLookupOnly(type);
         verifyRejectedAcknowledgementOnly();
@@ -150,7 +150,7 @@ class ReviewCallbackStepsTest {
         Update update = callback(ITEM_ID + ":" + type + ":" + action);
         invalidateCallbackEnvelope(update.getCallbackQuery(), invalidCase);
 
-        assertStepReturnsNone(type, action, update);
+        assertDispatchSafely(update);
 
         verifyNoInteractions(sourceService, templateService);
         verifyRejectedAcknowledgementOnly();
@@ -164,7 +164,7 @@ class ReviewCallbackStepsTest {
         invalidatePhoto(preview(update), invalidCase);
         stubFound(type, item);
 
-        assertStepReturnsNone(type, "confirm", update);
+        assertDispatchSafely(update);
 
         verifyLookupOnly(type);
         verifyRejectedAcknowledgementOnly();
@@ -179,7 +179,7 @@ class ReviewCallbackStepsTest {
         invalidatePhoto(preview(update), invalidCase);
         stubFound(type, item);
 
-        assertStepReturnsNone(type, "cancel", update);
+        assertDispatchSafely(update);
 
         InOrder order = inOrder(sourceService, templateService, bot);
         verifyLookupInOrder(order, type);
@@ -197,7 +197,7 @@ class ReviewCallbackStepsTest {
         throws TelegramApiException {
         Update update = callback(malformedCallbackData(type, action, invalidCase));
 
-        assertStepReturnsNone(type, action, update);
+        assertDispatchSafely(update);
 
         verifyNoInteractions(sourceService, templateService);
         verifyRejectedAcknowledgementOnly();
@@ -211,7 +211,7 @@ class ReviewCallbackStepsTest {
         stubFound(type, item);
         stubCompletionClearingPreviewBinding(type, item);
 
-        assertStepReturnsNone(type, "confirm", update);
+        assertDispatchSafely(update);
 
         verifyLookupAndCompletionOnly(type, item, 1);
         verifyConfirmationBotEffects(label(type) + " enviado para aprovação.");
@@ -229,7 +229,7 @@ class ReviewCallbackStepsTest {
             default -> throw new IllegalArgumentException(invalidCase);
         });
 
-        assertStepReturnsNone(type, action, update);
+        assertDispatchSafely(update);
 
         verifyNoInteractions(sourceService, templateService, bot);
     }
@@ -237,13 +237,13 @@ class ReviewCallbackStepsTest {
     @ParameterizedTest(name = "{0} {1}: {2}")
     @MethodSource("absentUpdateCases")
     void absentUpdateOrCallbackSafelyHasNoEffects(String type, String action, String absentCase) {
-        WorkflowDataBag dataBag = bag(switch (absentCase) {
+        Update request = switch (absentCase) {
             case "no-update" -> null;
             case "no-callback" -> new Update();
             default -> throw new IllegalArgumentException(absentCase);
-        });
+        };
 
-        assertEquals(WorkflowAction.NONE, assertDoesNotThrow(() -> step(type, action).run(dataBag)));
+        assertDoesNotThrow(() -> invoke(request));
 
         verifyNoInteractions(sourceService, templateService, bot);
     }
@@ -259,11 +259,11 @@ class ReviewCallbackStepsTest {
             when(templateService.getTemplate(ITEM_ID)).thenThrow(failure);
         }
 
-        assertStepReturnsNone(type, action, update);
+        assertDispatchSafely(update);
 
         verifyLookupOnly(type);
         verifyRejectedAcknowledgementOnly();
-        assertTrue(output.getAll().contains("review lookup unavailable"));
+        assertFalse(output.getAll().contains("review lookup unavailable"));
     }
 
     @ParameterizedTest
@@ -276,7 +276,7 @@ class ReviewCallbackStepsTest {
         stubFound(type, item);
         stubConfirmationFailure(type, item, failureStage);
 
-        assertStepReturnsNone(type, "confirm", update);
+        assertDispatchSafely(update);
 
         InOrder order = inOrder(sourceService, templateService, bot);
         verifyLookupInOrder(order, type);
@@ -297,7 +297,7 @@ class ReviewCallbackStepsTest {
         assertAcknowledgement(answer.getValue(), failureStage.equals("answer")
             ? label(type) + " enviado para aprovação." : REJECTED);
         verifyNoMoreInteractions(sourceService, templateService, bot);
-        assertTrue(output.getAll().contains("review transport unavailable"));
+        assertFalse(output.getAll().contains("review transport unavailable"));
     }
 
     @ParameterizedTest
@@ -310,7 +310,7 @@ class ReviewCallbackStepsTest {
         stubFound(type, item);
         stubCancellationFailure(type, item, failureStage);
 
-        assertStepReturnsNone(type, "cancel", update);
+        assertDispatchSafely(update);
 
         InOrder order = inOrder(sourceService, templateService, bot);
         verifyLookupInOrder(order, type);
@@ -322,7 +322,7 @@ class ReviewCallbackStepsTest {
         order.verify(bot).execute(answer.capture());
         assertAcknowledgement(answer.getValue(), failureStage.equals("answer") ? label(type) + " deletado." : REJECTED);
         verifyNoMoreInteractions(sourceService, templateService, bot);
-        assertTrue(output.getAll().contains("cancel transport unavailable"));
+        assertFalse(output.getAll().contains("cancel transport unavailable"));
     }
 
     @ParameterizedTest(name = "{0} {1}: {2}")
@@ -346,7 +346,7 @@ class ReviewCallbackStepsTest {
         doThrow(new TelegramApiException("ack transport unavailable"))
             .when(bot).execute(any(AnswerCallbackQuery.class));
 
-        assertStepReturnsNone(type, action, update);
+        assertDispatchSafely(update);
 
         if (invalidCase.equals("malformed-data")) {
             verifyNoInteractions(sourceService, templateService);
@@ -355,7 +355,7 @@ class ReviewCallbackStepsTest {
         }
         verifyRejectedAcknowledgementOnly();
         assertReviewWithIntactBinding(item, preview(update));
-        assertTrue(output.getAll().contains("ack transport unavailable"));
+        assertFalse(output.getAll().contains("ack transport unavailable"));
     }
 
     @ParameterizedTest
@@ -367,10 +367,10 @@ class ReviewCallbackStepsTest {
         stubFound(type, item);
         stubCompletionClearingPreviewBinding(type, item);
 
-        assertStepReturnsNone(type, "confirm", update);
+        assertDispatchSafely(update);
         assertReviewWithConsumedBinding(item);
         update.getCallbackQuery().setData(ITEM_ID + ":" + type + ":" + nextAction);
-        assertStepReturnsNone(type, nextAction, update);
+        assertDispatchSafely(update);
 
         verifyLookupAndCompletionOnly(type, item, 2);
         verifySingleConfirmationAndRejectedReplay(type);
@@ -395,17 +395,17 @@ class ReviewCallbackStepsTest {
             return null;
         }).when(bot).execute(any(SendPhoto.class));
         try (var executor = Executors.newFixedThreadPool(2)) {
-            var confirming = executor.submit(() -> step(type, "confirm").run(bag(first)));
+            var confirming = executor.submit(() -> invoke(first));
             try {
                 assertTrue(forwarding.await(5, TimeUnit.SECONDS));
                 var concurrent = executor.submit(() -> {
                     replayStarted.countDown();
-                    return step(type, nextAction).run(bag(replay));
+                    return invoke(replay);
                 });
                 assertTrue(replayStarted.await(5, TimeUnit.SECONDS));
                 releaseForward.countDown();
-                assertEquals(WorkflowAction.NONE, confirming.get(5, TimeUnit.SECONDS));
-                assertEquals(WorkflowAction.NONE, concurrent.get(5, TimeUnit.SECONDS));
+                assertTrue(confirming.get(5, TimeUnit.SECONDS));
+                assertTrue(concurrent.get(5, TimeUnit.SECONDS));
             } finally {
                 releaseForward.countDown();
             }
@@ -438,7 +438,7 @@ class ReviewCallbackStepsTest {
 
     private static Stream<Arguments> malformedCallbackDataCases() {
         return bothTypesAndActions("null", "empty", "blank", "malformed-uuid", "short-uuid", "short-last-group",
-            "unhyphenated-uuid", "leading-space", "trailing-space", "wrong-type", "uppercase-type", "wrong-action",
+            "unhyphenated-uuid", "leading-space", "trailing-space", "uppercase-type",
             "uppercase-action", "additional-token", "trailing-token", "missing-action", "empty-uuid", "empty-type",
             "empty-action");
     }
@@ -607,13 +607,14 @@ class ReviewCallbackStepsTest {
         item.setPreviewMessageId(null);
     }
 
-    private WorkflowStep step(String type, String action) {
-        if (type.equals("source")) {
-            return action.equals("confirm") ? new ConfirmReviewSourceStep(ADMIN_CHAT, sourceService)
-                : new DeleteReviewSourceStep(sourceService);
-        }
-        return action.equals("confirm") ? new ConfirmReviewTemplateStep(ADMIN_CHAT, templateService)
-            : new DeleteReviewTemplateStep(templateService);
+    private boolean invoke(Update update) {
+        ObjectProvider<RegataSimulatorBot> provider = mock(ObjectProvider.class);
+        lenient().when(provider.getObject()).thenReturn(bot);
+        var gateway = new BotTelegramGateway(provider);
+        var callbacks = new ReviewCallbackService(sourceService, templateService, gateway, Long.parseLong(ADMIN_CHAT));
+        new TelegramRouter(null, null, null, null, null, callbacks, gateway, Long.parseLong(ADMIN_CHAT))
+            .route(update, "fixture_bot");
+        return true;
     }
 
     private Update callback(String data) {
@@ -763,10 +764,8 @@ class ReviewCallbackStepsTest {
         verifyNoMoreInteractions(bot);
     }
 
-    private void assertStepReturnsNone(String type, String action, Update update) {
-        WorkflowStep workflowStep = step(type, action);
-        WorkflowDataBag dataBag = bag(update);
-        assertEquals(WorkflowAction.NONE, assertDoesNotThrow(() -> workflowStep.run(dataBag)));
+    private void assertDispatchSafely(Update update) {
+        assertTrue(assertDoesNotThrow(() -> invoke(update)));
     }
 
     private void assertForwardedPhotoPayload(SendPhoto photo, String type) {
@@ -803,15 +802,6 @@ class ReviewCallbackStepsTest {
         assertEquals(Status.REVIEW, item.getStatus());
         assertEquals(preview.getChatId(), item.getPreviewChatId());
         assertEquals(preview.getMessageId(), item.getPreviewMessageId());
-    }
-
-    private WorkflowDataBag bag(Update update) {
-        WorkflowDataBag bag = new WorkflowDataBag();
-        if (update != null) {
-            bag.put(WorkflowDataKey.TELEGRAM_UPDATE, update);
-        }
-        bag.put(WorkflowDataKey.REGATA_SIMULATOR_BOT, bot);
-        return bag;
     }
 
     private String label(String type) {

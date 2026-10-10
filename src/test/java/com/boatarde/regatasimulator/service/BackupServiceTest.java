@@ -1,6 +1,9 @@
 package com.boatarde.regatasimulator.service;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
+import com.boatarde.regatasimulator.adapter.telegram.BotTelegramGateway;
+import com.boatarde.regatasimulator.application.ApplicationFailure;
+import org.springframework.beans.factory.ObjectProvider;
 import com.boatarde.regatasimulator.util.FileUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,7 +54,10 @@ class BackupServiceTest {
     @BeforeEach
     void setUp() throws IOException {
         backupDirectory = Files.createDirectories(tempDir.resolve("input"));
-        service = new BackupService(456L);
+        ObjectProvider<RegataSimulatorBot> provider = org.mockito.Mockito.mock(ObjectProvider.class);
+        org.mockito.Mockito.lenient().when(provider.getObject()).thenReturn(bot);
+        service = new BackupService(456L, new BotTelegramGateway(provider), org.mockito.Mockito.mock(ReportService.class),
+            backupDirectory.toString(), backupDirectory.toString(), backupDirectory.toString());
     }
 
     @Test
@@ -72,7 +78,7 @@ class BackupServiceTest {
             files.when(() -> FileUtils.zipInChunks(backupDirectory.toString(), CHUNK_SIZE))
                 .thenReturn(List.of(first, second));
 
-            service.zipToTelegram(bot, backupDirectory.toString(), "sources");
+            service.archive(backupDirectory.toString(), "sources");
 
             files.verify(() -> FileUtils.zipInChunks(backupDirectory.toString(), CHUNK_SIZE));
         }
@@ -96,7 +102,7 @@ class BackupServiceTest {
         try (MockedStatic<FileUtils> files = mockStatic(FileUtils.class)) {
             files.when(() -> FileUtils.zipInChunks(backupDirectory.toString(), CHUNK_SIZE)).thenReturn(List.of(zip));
 
-            service.zipToTelegram(bot, backupDirectory.toString(), "jsondb");
+            service.archive(backupDirectory.toString(), "jsondb");
 
             files.verify(() -> FileUtils.zipInChunks(backupDirectory.toString(), CHUNK_SIZE));
         }
@@ -120,8 +126,8 @@ class BackupServiceTest {
             files.when(() -> FileUtils.zipInChunks(backupDirectory.toString(), CHUNK_SIZE))
                 .thenReturn(List.of(first, second));
 
-            assertSame(failure, assertThrows(TelegramApiException.class,
-                () -> service.zipToTelegram(bot, backupDirectory.toString(), "templates")));
+            assertSame(failure, assertThrows(ApplicationFailure.class,
+                () -> service.archive(backupDirectory.toString(), "templates")).getCause());
         }
 
         verify(bot).execute(any(SendDocument.class));
@@ -142,8 +148,8 @@ class BackupServiceTest {
             files.when(() -> FileUtils.zipInChunks(backupDirectory.toString(), CHUNK_SIZE))
                 .thenReturn(List.of(first, second, third));
 
-            assertSame(failure, assertThrows(TelegramApiException.class,
-                () -> service.zipToTelegram(bot, backupDirectory.toString(), "sources")));
+            assertSame(failure, assertThrows(ApplicationFailure.class,
+                () -> service.archive(backupDirectory.toString(), "sources")).getCause());
         }
 
         ArgumentCaptor<SendDocument> documents = ArgumentCaptor.forClass(SendDocument.class);
@@ -162,8 +168,8 @@ class BackupServiceTest {
         try (MockedStatic<FileUtils> files = mockStatic(FileUtils.class)) {
             files.when(() -> FileUtils.zipInChunks(backupDirectory.toString(), CHUNK_SIZE)).thenThrow(failure);
 
-            assertSame(failure, assertThrows(IOException.class,
-                () -> service.zipToTelegram(bot, backupDirectory.toString(), "jsondb")));
+            assertSame(failure, assertThrows(ApplicationFailure.class,
+                () -> service.archive(backupDirectory.toString(), "jsondb")).getCause());
         }
         verifyNoInteractions(bot);
     }
@@ -173,7 +179,7 @@ class BackupServiceTest {
         try (MockedStatic<FileUtils> files = mockStatic(FileUtils.class)) {
             files.when(() -> FileUtils.zipInChunks(backupDirectory.toString(), CHUNK_SIZE)).thenReturn(List.of());
 
-            service.zipToTelegram(bot, backupDirectory.toString(), "jsondb");
+            service.archive(backupDirectory.toString(), "jsondb");
         }
         verifyNoInteractions(bot);
     }

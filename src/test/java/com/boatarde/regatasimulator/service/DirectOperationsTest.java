@@ -2,12 +2,8 @@ package com.boatarde.regatasimulator.service;
 
 import com.boatarde.regatasimulator.application.TelegramGateway;
 import com.boatarde.regatasimulator.application.ApplicationFailure;
-import com.boatarde.regatasimulator.flows.WorkflowManager;
-import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
+import com.boatarde.regatasimulator.adapter.telegram.TelegramRouter;
 import com.boatarde.regatasimulator.factory.TelegramTestFactory;
-import com.boatarde.regatasimulator.routes.PingRoute;
-import com.boatarde.regatasimulator.routes.SendReportRoute;
-import com.boatarde.regatasimulator.routes.BackupJsonDBRoute;
 import com.boatarde.regatasimulator.models.*;
 import com.boatarde.regatasimulator.repository.jsondb.*;
 import com.boatarde.regatasimulator.util.FileUtils;
@@ -110,19 +106,15 @@ class DirectOperationsTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"/ping", "/report", "/backup"})
-    void productionCommandDispatchCallsServicesWithoutTheWorkflowRegistry(String command) {
+    void productionCommandDispatchCallsTypedServices(String command) {
         var request = TelegramTestFactory.buildCommandTextMessageUpdate(command);
         request.getMessage().setDate(100);
-        RegataSimulatorBot bot = mock(RegataSimulatorBot.class);
-        when(bot.getBotUsername()).thenReturn("fixture_bot");
-        WorkflowManager manager = mock(WorkflowManager.class);
         PingService ping = mock(PingService.class);
         ReportService report = mock(ReportService.class);
         BackupService backup = mock(BackupService.class);
         long chat = request.getMessage().getChatId();
-        RouterService router = new RouterService(manager, List.of(new PingRoute(), new SendReportRoute(chat),
-            new BackupJsonDBRoute(chat)), ping, report, backup);
-        router.route(request, bot);
+        TelegramRouter router = new TelegramRouter(ping, report, backup, null, null, null, telegram, chat);
+        router.route(request, "fixture_bot");
         var destination = new TelegramGateway.Destination(chat, request.getMessage().getMessageId(),
             request.getMessage().getMessageThreadId());
         switch (command) {
@@ -130,7 +122,7 @@ class DirectOperationsTest {
             case "/report" -> verify(report).send(destination);
             default -> verify(backup).create(destination);
         }
-        verifyNoInteractions(manager);
+        verifyNoInteractions(telegram);
     }
 
     @ParameterizedTest
