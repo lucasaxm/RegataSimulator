@@ -52,7 +52,10 @@ public final class RecoveryBundle {
         if (snapshot.blocked()) throw new IOException("Snapshot metadata/media invalid");
         Map<String,String> hashes = OfflinePaths.hashes(stage);
         long bytes=0;
-        for (String name:hashes.keySet()) bytes=Math.addExact(bytes,Files.size(stage.resolve(name)));
+        for (String name:hashes.keySet()) {
+            safeRelative(name);
+            bytes=Math.addExact(bytes,Files.size(stage.resolve(name)));
+        }
         if (hashes.size()>MAX_FILES || bytes>MAX_EXPANDED_BYTES || chunkBytes<1 || chunkBytes>CHUNK_BYTES) throw new IOException("Bundle exceeds restoration limits");
         privateDirectory(destination);
         try {
@@ -74,6 +77,11 @@ public final class RecoveryBundle {
     }
 
     public static Path restore(Path bundle, Path target) throws IOException {
+        return restore(bundle,target,MAX_EXPANDED_BYTES,MAX_FILES);
+    }
+
+    static Path restore(Path bundle,Path target,long maximumBytes,int maximumEntries) throws IOException {
+        if(maximumBytes<1 || maximumBytes>MAX_EXPANDED_BYTES || maximumEntries<1 || maximumEntries>MAX_FILES) throw new IOException("Invalid restoration bounds");
         OfflinePaths.checked(bundle);
         OfflinePaths.newTarget(target,List.of(bundle));
         Manifest manifest = manifest(bundle);
@@ -87,7 +95,7 @@ public final class RecoveryBundle {
             for (Part part : manifest.parts()) {
                 Path archive = bundle.resolve(part.file());
                 if (Files.size(archive) > CHUNK_BYTES || !OfflinePaths.hash(archive).equals(part.sha256())) throw new IOException("Archive hash/size mismatch");
-                extract(archive,target.resolve(part.category()),entries,expanded);
+                extract(archive,target.resolve(part.category()),entries,expanded,maximumBytes,maximumEntries);
             }
             if (!manifest.hashes().equals(OfflinePaths.hashes(target))) throw new IOException("Restored file manifest mismatch");
             OfflineSnapshot restored = inspect(target,manifest.engine());
@@ -104,25 +112,33 @@ public final class RecoveryBundle {
     static Manifest manifest(Path bundle) throws IOException {
         Map<String,String> files = OfflinePaths.hashes(bundle);
         Path file = bundle.resolve("manifest.json");
-        if (!files.containsKey("COMPLETE") || Files.size(file) > 8L * 1024 * 1024
+        if (!files.containsKey("COMPLETE") || Files.size(bundle.resolve("COMPLETE"))!=64 || Files.size(file) > 8L * 1024 * 1024
             || !Files.readString(bundle.resolve("COMPLETE")).equals(OfflinePaths.hash(file))) throw new IOException("Incomplete bundle");
         Manifest m = MAPPER.readValue(Files.readAllBytes(file),Manifest.class);
-        if (m.format()!=1 || !Set.of("sqlite","jsondb").contains(m.engine())
+        if (m==null || m.format()!=1 || m.engine()==null || !Set.of("sqlite","jsondb").contains(m.engine())
             || !(m.engine().equals("sqlite") ? m.schemaVersion()>=2 && m.schemaVersion()<=SqliteStore.SCHEMA_VERSION : m.schemaVersion()==1)
             || !Objects.equals(m.databaseFile(),m.engine().equals("sqlite") ? "db/store.db" : "jsondb")
-            || m.parts()==null || m.parts().size()>10_000 || m.hashes()==null || m.hashes().size()>MAX_FILES) throw new IOException("Unsupported bundle");
+            || m.parts()==null || m.parts().size()>10_000 || m.hashes()==null || m.hashes().size()>MAX_FILES
+            || m.counts()==null || !m.counts().keySet().containsAll(List.of("sources","templates","users","memes"))
+            || m.counts().values().stream().anyMatch(n -> n==null || n<0) || m.anomalies()==null
+            || m.anomalies().stream().anyMatch(issue -> issue==null || issue.collection()==null || issue.code()==null)) throw new IOException("Unsupported bundle");
         Set<String> allowed = new HashSet<>(List.of("manifest.json","COMPLETE"));
         for (Part part : m.parts()) {
-            if (!Set.of(m.engine().equals("sqlite") ? "db" : "jsondb","sources","templates").contains(part.category())
+            if (part==null || part.category()==null || part.file()==null || part.sha256()==null
+                || !Set.of(m.engine().equals("sqlite") ? "db" : "jsondb","sources","templates").contains(part.category())
                 || !part.file().matches("regata-backup-[a-zA-Z0-9-]+\\.zip") || !allowed.add(part.file())
                 || !part.sha256().matches("[a-f0-9]{64}")) throw new IOException("Invalid archive manifest");
+            if (!part.sha256().equals(files.get(part.file())) || Files.size(bundle.resolve(part.file()))>CHUNK_BYTES) throw new IOException("Archive checksum/size mismatch");
         }
         if (!allowed.equals(files.keySet())) throw new IOException("Missing or unexpected bundle parts");
-        for (String name : m.hashes().keySet()) safeRelative(name);
+        for (var entry : m.hashes().entrySet()) {
+            safeRelative(entry.getKey());
+            if(entry.getValue()==null || !entry.getValue().matches("[a-f0-9]{64}")) throw new IOException("Invalid file checksum");
+        }
         return m;
     }
 
-    private static void extract(Path archive, Path root, Set<String> seen, long[] expanded) throws IOException {
+    private static void extract(Path archive, Path root, Set<String> seen, long[] expanded,long maximumBytes,int maximumEntries) throws IOException {
         rejectSpecialZipEntries(archive);
         try (var input = new ZipInputStream(Files.newInputStream(archive))) {
             java.util.zip.ZipEntry entry;
@@ -131,7 +147,7 @@ public final class RecoveryBundle {
                 String name = entry.getName();
                 Path relative = safeRelative(entry.isDirectory() ? name.substring(0,name.length()-1) : name);
                 String key = root.getFileName()+"/"+relative;
-                if (!seen.add(key) || seen.size()>MAX_FILES) throw new IOException("Duplicate/excessive entries");
+                if (!seen.add(key) || seen.size()>maximumEntries) throw new IOException("Duplicate/excessive entries");
                 Path output = root.resolve(relative);
                 createParents(root,output.getParent());
                 if (entry.isDirectory()) { if (!Files.exists(output)) privateDirectory(output); }
@@ -141,7 +157,7 @@ public final class RecoveryBundle {
                         int n;
                         while ((n=input.read(buffer))!=-1) {
                             expanded[0] = Math.addExact(expanded[0],n);
-                            if (expanded[0]>MAX_EXPANDED_BYTES) throw new IOException("Expanded byte limit exceeded");
+                            if (expanded[0]>maximumBytes) throw new IOException("Expanded byte limit exceeded");
                             stream.write(buffer,0,n);
                         }
                     }
@@ -174,9 +190,10 @@ public final class RecoveryBundle {
     }
 
     private static Path safeRelative(String name) throws IOException {
-        if (name==null || name.isEmpty() || name.length()>2048 || name.contains("\\") || name.contains(":") || name.contains("%")
+        if (name==null || name.isEmpty() || name.length()>2048 || name.contains("\\") || name.contains(":") || name.contains("%") || name.chars().anyMatch(Character::isISOControl)
             || name.startsWith("/") || Arrays.stream(name.split("/",-1)).anyMatch(p -> p.isEmpty() || p.equals(".") || p.equals(".."))) throw new IOException("Unsafe archive path");
-        return Path.of(name);
+        try { return Path.of(name); }
+        catch(InvalidPathException e) { throw new IOException("Unsafe archive path",e); }
     }
 
     private static void createParents(Path root, Path parent) throws IOException {
@@ -189,7 +206,7 @@ public final class RecoveryBundle {
     static OfflineSnapshot inspect(Path stage, String engine) throws IOException {
         OfflineSnapshot snapshot;
         if (engine.equals("sqlite")) {
-            try (var store = new SqliteStore(stage.resolve("db/store.db"),2000,true)) { snapshot=load(store); }
+            snapshot=readSqliteCopy(stage.resolve("db/store.db"),RecoveryBundle::load);
             snapshot.audit(stage.resolve("sources"),stage.resolve("templates"));
         } else if (engine.equals("jsondb")) {
             snapshot=new OfflineSnapshot(MAPPER);
@@ -198,10 +215,31 @@ public final class RecoveryBundle {
         return snapshot;
     }
 
-    private static int schemaVersion(Path stage,String engine) {
+    private static int schemaVersion(Path stage,String engine) throws IOException {
         if (!engine.equals("sqlite")) return 1;
-        try(var store=new SqliteStore(stage.resolve("db/store.db"),2000,true)) {
-            return store.jdbc().queryForObject("SELECT count(*) FROM DATABASECHANGELOG",Integer.class);
+        return readSqliteCopy(stage.resolve("db/store.db"),store -> store.jdbc().queryForObject("SELECT count(*) FROM DATABASECHANGELOG",Integer.class));
+    }
+
+    /** A read-only WAL connection can still write sidecars. Open only a private stopped-copy clone. */
+    static <T> T readSqliteCopy(Path database,java.util.function.Function<SqliteStore,T> reader) throws IOException {
+        OfflinePaths.checked(database);
+        if(!Files.isRegularFile(database,LinkOption.NOFOLLOW_LINKS)) throw new IOException("Database absent");
+        Path scratch=Files.createTempDirectory("regata-inspection-",PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------"))).toRealPath();
+        try {
+            for(String suffix:List.of("","-wal","-shm")) {
+                Path input=database.resolveSibling(database.getFileName()+suffix);
+                OfflinePaths.checked(input);
+                if(!Files.exists(input,LinkOption.NOFOLLOW_LINKS)) continue;
+                if(!Files.isRegularFile(input,LinkOption.NOFOLLOW_LINKS)) throw new IOException("Invalid database sidecar");
+                Path copy=scratch.resolve("store.db"+suffix);
+                Files.copy(input,copy);
+                Files.setPosixFilePermissions(copy,PosixFilePermissions.fromString("rw-------"));
+            }
+            try(var store=new SqliteStore(scratch.resolve("store.db"),2000,true)) { return reader.apply(store); }
+        } catch(RuntimeException e) {
+            throw new IOException("Database metadata unreadable",e);
+        } finally {
+            deleteOwned(scratch);
         }
     }
 

@@ -20,25 +20,24 @@ public class BackupService {
     private final Long backupChatId;
     private final TelegramGateway telegram;
     private final ReportService reports;
-    private final String databasePath;
-    private final String templatesPath;
-    private final String sourcesPath;
-    @org.springframework.beans.factory.annotation.Autowired
-    private com.boatarde.regatasimulator.migration.RecoverySnapshotService snapshots;
-    @Value("${regata-simulator.database.engine:jsondb}")
-    private String databaseEngine = "jsondb";
+    private final com.boatarde.regatasimulator.migration.RecoverySnapshotService snapshots;
 
     public BackupService(@Value("${telegram.bots.regata-simulator.backup-chat}") Long backupChatId,
                          TelegramGateway telegram, ReportService reports,
                          @Value("${regata-simulator.database.path}") String databasePath,
                          @Value("${regata-simulator.templates.path}") String templatesPath,
                          @Value("${regata-simulator.sources.path}") String sourcesPath) {
+        this(backupChatId,telegram,reports,null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public BackupService(@Value("${telegram.bots.regata-simulator.backup-chat}") Long backupChatId,
+                         TelegramGateway telegram,ReportService reports,
+                         com.boatarde.regatasimulator.migration.RecoverySnapshotService snapshots) {
         this.backupChatId = backupChatId;
         this.telegram = telegram;
         this.reports = reports;
-        this.databasePath = databasePath;
-        this.templatesPath = templatesPath;
-        this.sourcesPath = sourcesPath;
+        this.snapshots=snapshots;
     }
 
     /** Explicit backup orchestration; no Update or reply-origin fabrication. */

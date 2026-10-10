@@ -19,15 +19,12 @@ public class RecoverySnapshotService {
     private final TemplateRepository templates;
     private final AuthorRepository authors;
     private final MemeHistoryRepository history;
-    @org.springframework.beans.factory.annotation.Autowired
-    private AuditRepository audits;
+    private final AuditRepository audits;
     private final ObjectProvider<SqliteStore> sqlite;
     private final Path sourceMedia;
     private final Path templateMedia;
-    @Value("${regata-simulator.database.path:}")
-    private String jsonDirectory="";
-    @Value("${regata-simulator.database.sqlite-file:}")
-    private String sqliteFile="";
+    private final String jsonDirectory;
+    private final String sqliteFile;
     private final String localDirectory;
     private final int retention;
 
@@ -37,9 +34,22 @@ public class RecoverySnapshotService {
         @Value("${regata-simulator.templates.path}") String templateMedia,
         @Value("${regata-simulator.backup.local-directory:}") String localDirectory,
         @Value("${regata-simulator.backup.retention-count:7}") int retention) {
+        this(guard,sources,templates,authors,history,sqlite,sourceMedia,templateMedia,localDirectory,retention,null,"","");
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public RecoverySnapshotService(MediaMutationGuard guard, SourceRepository sources, TemplateRepository templates,
+        AuthorRepository authors, MemeHistoryRepository history, ObjectProvider<SqliteStore> sqlite,
+        @Value("${regata-simulator.sources.path}") String sourceMedia,
+        @Value("${regata-simulator.templates.path}") String templateMedia,
+        @Value("${regata-simulator.backup.local-directory:}") String localDirectory,
+        @Value("${regata-simulator.backup.retention-count:7}") int retention, AuditRepository audits,
+        @Value("${regata-simulator.database.path:}") String jsonDirectory,
+        @Value("${regata-simulator.database.sqlite-file:}") String sqliteFile) {
         this.guard=guard; this.sources=sources; this.templates=templates; this.authors=authors; this.history=history;
         this.sqlite=sqlite; this.sourceMedia=Path.of(sourceMedia); this.templateMedia=Path.of(templateMedia);
         this.localDirectory=localDirectory; this.retention=retention;
+        this.audits=audits; this.jsonDirectory=jsonDirectory; this.sqliteFile=sqliteFile;
     }
 
     public synchronized Path capture() {

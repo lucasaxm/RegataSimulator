@@ -118,7 +118,7 @@ class RecoveryBundleTest {
     }
 
     @Test void maliciousTraversalAndDuplicateZipEntriesCannotEscapeFreshTarget() throws Exception {
-        for (String malicious:List.of("../escaped","/absolute","a/../../escaped","a\\b","a%2fb","a/./b")) {
+        for (String malicious:List.of("../escaped","/absolute","a/../../escaped","a\\b","a%2fb","a/./b","a//b","a\nb","a\u0000b")) {
             Path stage=Files.createDirectory(temp.toRealPath().resolve("stage-"+UUID.randomUUID()));
             for(String category:List.of("db","sources","templates")) Files.createDirectory(stage.resolve(category));
             try (var store=new SqliteStore(stage.resolve("db/store.db"),100)) { store.verifyIntegrity(); }
@@ -152,5 +152,124 @@ class RecoveryBundleTest {
         var part=m.parts().getFirst(); Path file=bundle.resolve(part.file());
         try(var zip=new ZipOutputStream(Files.newOutputStream(file))) { zip.putNextEntry(new ZipEntry(name)); zip.write(1); zip.closeEntry(); }
         return new PartReplacement(List.of(new RecoveryBundle.Part(part.category(),part.file(),OfflinePaths.hash(file))));
+    }
+
+    @Test void expansionAndEntryBoundsFailWithSmallRealFixturesAndNoVerifiedMarker() throws Exception {
+        Path stage=stage();
+        Files.writeString(stage.resolve("sources/a"),"a"); Files.writeString(stage.resolve("sources/b"),"b");
+        try(var store=new SqliteStore(stage.resolve("db/store.db"),100)) { store.verifyIntegrity(); }
+        Path bundle=RecoveryBundle.pack(stage,temp.resolve("backup-"+UUID.randomUUID()),"sqlite",RecoveryBundle.CHUNK_BYTES);
+        assertThrows(java.io.IOException.class,()->RecoveryBundle.restore(bundle,temp.resolve("byte-limit"),10,100));
+        assertThrows(java.io.IOException.class,()->RecoveryBundle.restore(bundle,temp.resolve("entry-limit"),1024*1024,1));
+        assertFalse(Files.exists(temp.resolve("byte-limit/RESTORED_VERIFIED"))); assertFalse(Files.exists(temp.resolve("entry-limit/RESTORED_VERIFIED")));
+    }
+
+    @Test void duplicateEntriesAcrossPartsAreRefusedEvenWithValidPartHashes() throws Exception {
+        Path stage=stage();
+        try(var store=new SqliteStore(stage.resolve("db/store.db"),100)) { store.verifyIntegrity(); }
+        Path bundle=RecoveryBundle.pack(stage,temp.resolve("backup-"+UUID.randomUUID()),"sqlite",RecoveryBundle.CHUNK_BYTES);
+        var m=RecoveryBundle.manifest(bundle); var first=m.parts().getFirst();
+        Path duplicate=bundle.resolve("regata-backup-duplicate.zip"); Files.copy(bundle.resolve(first.file()),duplicate);
+        var parts=new ArrayList<>(m.parts()); parts.add(new RecoveryBundle.Part(first.category(),duplicate.getFileName().toString(),OfflinePaths.hash(duplicate)));
+        var updated=new RecoveryBundle.Manifest(m.format(),m.engine(),m.schemaVersion(),m.databaseFile(),m.counts(),m.hashes(),m.anomalies(),parts);
+        Files.write(bundle.resolve("manifest.json"),mapper.writeValueAsBytes(updated)); Files.writeString(bundle.resolve("COMPLETE"),OfflinePaths.hash(bundle.resolve("manifest.json")));
+        assertThrows(java.io.IOException.class,()->RecoveryBundle.restore(bundle,temp.resolve("duplicate")));
+        assertFalse(Files.exists(temp.resolve("duplicate/RESTORED_VERIFIED")));
+    }
+
+    @Test void malformedManifestNullFieldsAndUnsafeHashPathsRefuseBeforeCreatingTarget() throws Exception {
+        Path stage=stage();
+        try(var store=new SqliteStore(stage.resolve("db/store.db"),100)) { store.verifyIntegrity(); }
+        Path bundle=RecoveryBundle.pack(stage,temp.resolve("backup-"+UUID.randomUUID()),"sqlite",RecoveryBundle.CHUNK_BYTES);
+        byte[] original=Files.readAllBytes(bundle.resolve("manifest.json"));
+        for(String field:List.of("engine","databaseFile","counts","hashes","anomalies","parts","part","category","file","sha256","count","anomaly","hash","nul-path","newline-path","manifest")) {
+            var tree=(com.fasterxml.jackson.databind.node.ObjectNode)mapper.readTree(original);
+            switch(field) {
+                case "part" -> ((com.fasterxml.jackson.databind.node.ArrayNode)tree.get("parts")).set(0,mapper.nullNode());
+                case "category","file","sha256" -> ((com.fasterxml.jackson.databind.node.ObjectNode)tree.get("parts").get(0)).putNull(field);
+                case "count" -> ((com.fasterxml.jackson.databind.node.ObjectNode)tree.get("counts")).putNull("sources");
+                case "anomaly" -> ((com.fasterxml.jackson.databind.node.ArrayNode)tree.get("anomalies")).addNull();
+                case "hash" -> ((com.fasterxml.jackson.databind.node.ObjectNode)tree.get("hashes")).putNull("db/store.db");
+                case "nul-path","newline-path" -> ((com.fasterxml.jackson.databind.node.ObjectNode)tree.get("hashes")).put(field.equals("nul-path") ? "a\u0000b" : "a\nb","a".repeat(64));
+                default -> tree.putNull(field);
+            }
+            Files.write(bundle.resolve("manifest.json"),field.equals("manifest") ? "null".getBytes(java.nio.charset.StandardCharsets.UTF_8) : mapper.writeValueAsBytes(tree));
+            Files.writeString(bundle.resolve("COMPLETE"),OfflinePaths.hash(bundle.resolve("manifest.json")));
+            Path target=temp.resolve("null-"+field);
+            assertThrows(java.io.IOException.class,()->RecoveryBundle.restore(bundle,target),field);
+            assertFalse(Files.exists(target),field);
+        }
+    }
+
+    @Test void incompleteOrCorruptUuidBundleHoldsAllEarlierRetentionCandidates() throws Exception {
+        Path stage=stage();
+        try(var store=new SqliteStore(stage.resolve("db/store.db"),100)) { store.verifyIntegrity(); }
+        Path root=Files.createDirectory(temp.resolve("backups"));
+        RecoveryBundle.pack(stage,root.resolve("backup-00000000-0000-0000-0000-000000000001"),"sqlite",RecoveryBundle.CHUNK_BYTES);
+        RecoveryBundle.pack(stage,root.resolve("backup-00000000-0000-0000-0000-000000000002"),"sqlite",RecoveryBundle.CHUNK_BYTES);
+        Path incomplete=Files.createDirectory(root.resolve("backup-ffffffff-ffff-ffff-ffff-ffffffffffff"));
+        Files.writeString(incomplete.resolve("operator-bytes"),"retain");
+        var before=OfflinePaths.hashes(root);
+        assertThrows(java.io.IOException.class,()->RecoveryBundle.retain(root,1));
+        assertEquals(before,OfflinePaths.hashes(root));
+        Files.writeString(incomplete.resolve("manifest.json"),"null");
+        Files.writeString(incomplete.resolve("COMPLETE"),OfflinePaths.hash(incomplete.resolve("manifest.json")));
+        before=OfflinePaths.hashes(root);
+        assertThrows(java.io.IOException.class,()->RecoveryBundle.retain(root,1));
+        assertEquals(before,OfflinePaths.hashes(root));
+    }
+
+    @Test void equalTimestampsRetainDeterministicLexicalSubset() throws Exception {
+        Path stage=stage();
+        try(var store=new SqliteStore(stage.resolve("db/store.db"),100)) { store.verifyIntegrity(); }
+        Path root=Files.createDirectory(temp.resolve("backups")); var bundles=new ArrayList<Path>();
+        for(String suffix:List.of("3","1","2")) {
+            Path bundle=RecoveryBundle.pack(stage,root.resolve("backup-00000000-0000-0000-0000-00000000000"+suffix),"sqlite",RecoveryBundle.CHUNK_BYTES);
+            Files.setLastModifiedTime(bundle.resolve("COMPLETE"),java.nio.file.attribute.FileTime.fromMillis(1234)); bundles.add(bundle);
+        }
+        RecoveryBundle.retain(root,2);
+        assertFalse(Files.exists(bundles.get(0))); assertTrue(Files.exists(bundles.get(1))); assertTrue(Files.exists(bundles.get(2)));
+    }
+
+    @Test void packFailureCleansOnlyOwnedCandidateAndUnsafeSourcePathsFailBeforeCreation() throws Exception {
+        Path stage=stage();
+        try(var store=new SqliteStore(stage.resolve("db/store.db"),100)) { store.verifyIntegrity(); }
+        Path unrelated=Files.createDirectory(temp.resolve("backup-"+UUID.randomUUID())); Files.writeString(unrelated.resolve("keep"),"operator bytes");
+        var before=OfflinePaths.hashes(stage); Path candidate=temp.resolve("backup-"+UUID.randomUUID());
+        assertThrows(java.io.IOException.class,()->RecoveryBundle.pack(stage,candidate,"sqlite",10));
+        assertFalse(Files.exists(candidate)); assertEquals(before,OfflinePaths.hashes(stage)); assertEquals("operator bytes",Files.readString(unrelated.resolve("keep")));
+        assertThrows(java.io.IOException.class,()->RecoveryBundle.pack(stage,unrelated,"sqlite",10));
+        assertEquals("operator bytes",Files.readString(unrelated.resolve("keep")));
+        Files.writeString(stage.resolve("sources/a\nb"),"unsafe name");
+        assertThrows(java.io.IOException.class,()->RecoveryBundle.pack(stage,candidate,"sqlite",RecoveryBundle.CHUNK_BYTES));
+        assertFalse(Files.exists(candidate)); assertTrue(Files.exists(stage.resolve("sources/a\nb")));
+    }
+
+    @Test void restoredTemplateAndSourceCanBeRenderedThroughFakeBoundaryUsingActualDecodedPixels() throws Exception {
+        Path stage=stage(); Source source=source(stage);
+        Template template=new Template(); template.setId(UUID.randomUUID()); template.setWeight(10); template.setStatus(Status.APPROVED);
+        template.setAreas(List.of(TemplateArea.builder().index(1).source(1).topLeft(new AreaCorner(0,0)).topRight(new AreaCorner(20,0))
+            .bottomRight(new AreaCorner(20,20)).bottomLeft(new AreaCorner(0,20)).build()));
+        ImageTestFactory.image(Files.createDirectory(stage.resolve("templates").resolve(template.getId().toString())).resolve("template.png"));
+        try(var store=new SqliteStore(stage.resolve("db/store.db"),100)) {
+            new SqliteSourceRepository(store,mapper).insertSubmission(source); new SqliteTemplateRepository(store,mapper).insertSubmission(template);
+        }
+        Path bundle=RecoveryBundle.pack(stage,temp.resolve("backup-"+UUID.randomUUID()),"sqlite",RecoveryBundle.CHUNK_BYTES);
+        Path restored=RecoveryBundle.restore(bundle,temp.resolve("render-candidate"));
+        com.boatarde.regatasimulator.application.ImageRenderer fake=request -> {
+            try {
+                assertNotNull(javax.imageio.ImageIO.read(request.template().toFile()));
+                var pixels=javax.imageio.ImageIO.read(request.sources().getFirst().toFile()); assertNotNull(pixels);
+                com.boatarde.regatasimulator.util.MediaValidation.geometry(request.areas(),com.boatarde.regatasimulator.util.MediaValidation.image(request.template()));
+                Path job=Files.createTempDirectory(temp,"fake-render-"); Path output=job.resolve("final.png");
+                javax.imageio.ImageIO.write(pixels,"png",output.toFile());
+                return new com.boatarde.regatasimulator.application.ImageRenderer.RenderedImage(output,job);
+            } catch(java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
+        };
+        var request=new com.boatarde.regatasimulator.application.ImageRenderer.Request(restored.resolve("templates").resolve(template.getId().toString()).resolve("template.png"),template.getAreas(),
+            List.of(restored.resolve("sources").resolve(source.getId().toString()).resolve("source.png")),null);
+        Path job;
+        try(var image=fake.render(request)) { job=image.jobDirectory(); assertNotNull(javax.imageio.ImageIO.read(image.file().toFile())); }
+        assertFalse(Files.exists(job));
     }
 }
