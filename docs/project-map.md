@@ -2,6 +2,12 @@
 
 Verified: 2026-10-09. This describes the **current** application, not the proposed redesign.
 
+## Phase 3 intermediate checkpoint
+
+Typed repositories with JsonDB adapters, Telegram/media/render boundaries, and direct ping/report/backup/meme/submission/moderation/callback services are implemented in sequential local slices. Bot dispatch now uses `adapter.telegram.TelegramRouter`; scheduler publication/backup and HTTP moderation use typed services. There is no registered production workflow runner/step graph. Persisted nullable Telegram messages and Phase 2 DTO/security contracts remain compatible. See [Phase 3 service results](phase-3-service-results.md).
+
+The workflow package map/count below describes retained **obsolete intermediate sources**, not current production dispatch; final source removal/test migration, wider media-boundary consumption, failure-package relocation and administrator-origin cleanup remain pending. Phase 3 is **not complete**, and SQLite/Phases 4–5 remain unimplemented. Latest verified clean build: **829 cases / 38 suites**, zero failures/errors/skips, plus **5 Node cases**.
+
 ## Stack and repository layout
 
 - Java 21; `.tool-versions` pins OpenJDK 21.0.2.
@@ -141,4 +147,4 @@ Spring Boot does **not** automatically load dotenv files: supply `.env.dev` vari
 - A prior JAR is backed up; startup is detected through log text. No automatic rollback or HTTP readiness smoke check is defined.
 - Actual host layout, environment secrets, reverse proxy, and the external `subprocess` program were not verified.
 
-See [backend improvement plan](backend-improvement-plan.md) for the sequence and [Phase 0 results](phase-0-results.md) for implemented test coverage/seams. None of the suggested SQLite/repository/service redesign has been applied yet.
+See [backend improvement plan](backend-improvement-plan.md) for the sequence and [Phase 3 service results](phase-3-service-results.md) for the implemented intermediate repository/service migration. SQLite and final Phase 3 cleanup have not been applied yet.

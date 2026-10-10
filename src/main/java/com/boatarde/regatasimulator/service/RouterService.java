@@ -23,7 +23,6 @@ import java.util.Optional;
 import com.boatarde.regatasimulator.application.TelegramGateway;
 import org.springframework.beans.factory.annotation.Autowired;
 
-@Service
 @Slf4j
 public class RouterService {
     private static final int MAX_TRANSITIONS = 64;

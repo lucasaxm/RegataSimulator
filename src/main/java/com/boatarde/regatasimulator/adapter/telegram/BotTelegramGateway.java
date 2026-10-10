@@ -11,6 +11,7 @@ import org.telegram.telegrambots.meta.api.methods.send.SendDocument;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageReplyMarkup;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
@@ -80,6 +81,22 @@ public class BotTelegramGateway implements TelegramGateway {
     private InlineKeyboardButton button(PreviewButtons buttons, String action, String text) {
         return InlineKeyboardButton.builder().text(text)
             .callbackData("%s:%s:%s".formatted(buttons.itemId(), buttons.type(), action)).build();
+    }
+
+    @Override
+    public void forwardPreview(long chatId, String fileId, String caption) {
+        try {
+            bots.getObject().execute(SendPhoto.builder().chatId(chatId).photo(new InputFile(fileId))
+                .caption(caption).parseMode("HTML").build());
+        } catch (TelegramApiException e) { throw failed(e); }
+    }
+
+    @Override
+    public void clearKeyboard(long chatId, int messageId) {
+        try {
+            bots.getObject().execute(EditMessageReplyMarkup.builder().chatId(chatId).messageId(messageId)
+                .replyMarkup(null).build());
+        } catch (TelegramApiException e) { throw failed(e); }
     }
 
     private Delivery delivery(Message message) {

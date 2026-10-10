@@ -21,4 +21,6 @@ public interface TelegramGateway {
     Path download(String fileId, Path directory, String fileName);
     void deleteMessage(long chatId, int messageId);
     void acknowledge(String callbackId, String text);
+    void forwardPreview(long chatId, String fileId, String caption);
+    void clearKeyboard(long chatId, int messageId);
 }

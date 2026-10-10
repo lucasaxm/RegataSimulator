@@ -43,4 +43,14 @@ Slice 1 validation: focused repository/service/workflow/callback/context tests p
 
 ## Remaining Phase 3 work (after slice 4)
 
-Typed callback service and final thin Telegram router; media boundary consumption throughout existing gallery/import services; distinguish administrator/scheduled publish origins; central application failures outside `flows`; remove production runner/actions/bag/registration/steps and adapt remaining tests to direct service contracts. Phases 4–5 and durable recovery/cross-adapter transactions remain pending. **Phase 3 remains incomplete.**
+## Slice 5 — Direct Telegram router and callbacks
+
+- Bot now calls `adapter.telegram.TelegramRouter`, which parses commands/uploads/callbacks and dispatches typed services directly. Creator-only private-chat administration, exact callback format/canonical UUID/type/action, accessible envelope/actor/photo checks and generic acknowledgment remain enforced.
+- `ReviewCallbackService` validates stored original submitter, REVIEW, original chat and exact stored preview binding. Confirmation forwards to existing `telegram.creator.id`, consumes binding and clears keyboard without approving; cancellation deletes only the authorized item. Same-item process-local stripes serialize confirm/confirm and confirm/cancel. Forwarding failure preserves binding; acknowledgment failure stays safe.
+- Old `RouterService`, `WorkflowManager` and annotation-driven steps are no longer Spring-registered. Isolated context asserts no runner/step beans and one direct Telegram router. **Obsolete workflow sources still exist for pending test migration/removal; this is not final Phase 3 acceptance.**
+- Direct callback tests use real temporary repositories/media and cover invalid ownership/state/origin/chat/binding, missing records/photo, confirmation persistence/replay, cancellation, concurrent races, failed forwarding and acknowledgment. Router tests cover command dispatch/creator checks, malformed/valid callbacks, missing envelopes and redacted failure reporting. Original callback regressions also remain green during migration.
+- Focused callback/router/context regressions, clean build **829 cases / 38 suites** (zero failures/errors/skips), Node **5/5** and whitespace check passed. Generic test lookup/fixture issues and reported complexity findings were corrected. No new runtime property, live call or data access was introduced.
+
+## Remaining Phase 3 work (after slice 5)
+
+Media boundary consumption throughout existing gallery/import services; distinguish administrator/scheduled publish origins; central application failures outside `flows`; remove obsolete runner/actions/bag/registration/steps/routes and adapt remaining tests to direct service contracts. Phases 4–5 and durable recovery/cross-adapter transactions remain pending. **Phase 3 remains incomplete.**

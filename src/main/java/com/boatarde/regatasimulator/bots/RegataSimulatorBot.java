@@ -1,6 +1,6 @@
 package com.boatarde.regatasimulator.bots;
 
-import com.boatarde.regatasimulator.service.RouterService;
+import com.boatarde.regatasimulator.adapter.telegram.TelegramRouter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -12,11 +12,11 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 public class RegataSimulatorBot extends TelegramLongPollingBot {
 
     private final String username;
-    private final RouterService routerService;
+    private final TelegramRouter routerService;
 
     public RegataSimulatorBot(@Value("${telegram.bots.regata-simulator.token}") String token,
                               @Value("${telegram.bots.regata-simulator.username}") String username,
-                              RouterService routerService) {
+                              TelegramRouter routerService) {
         super(token);
         this.username = username;
         this.routerService = routerService;
@@ -29,6 +29,6 @@ public class RegataSimulatorBot extends TelegramLongPollingBot {
 
     @Override
     public void onUpdateReceived(Update update) {
-        routerService.route(update, this);
+        routerService.route(update, username);
     }
 }

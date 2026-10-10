@@ -1,6 +1,6 @@
 # Backend improvement plan
 
-Date: 2026-10-06. Updated: 2026-10-09. Status: **Phases 0, 1 and 2 implemented for their scoped acceptance items**; Phases 3–5 remain proposed. [Phase 0 results](phase-0-results.md), [callback-safety results](phase-1-callback-safety-results.md), [Phase 1 reliability results](phase-1-reliability-results.md), and [Phase 2 web security results](phase-2-web-security-results.md) record implementation, verification, and recovery limits.
+Date: 2026-10-06. Updated: 2026-10-09. Status: **Phases 0, 1 and 2 implemented for their scoped acceptance items**; Phase 3 is in progress and Phases 4–5 remain proposed. [Phase 0 results](phase-0-results.md), [callback-safety results](phase-1-callback-safety-results.md), [Phase 1 reliability results](phase-1-reliability-results.md), [Phase 2 web security results](phase-2-web-security-results.md), and [Phase 3 service results](phase-3-service-results.md) record implementation, verification, and recovery limits.
 
 Read [backend review](backend-review.md) for evidence/tradeoffs and [project map](project-map.md) for the current structure. The goal is a simpler, reliable modular monolith, not a rewrite or a distributed system.
 
@@ -74,6 +74,8 @@ Tests: full-chain MockMvc preflight for allowed/disallowed/lookalike origins; no
 Acceptance: configuration varies without recompiling Java; preflight does not bypass actual authentication; cookie-based mutations require CSRF; existing supported login/embed flows still work.
 
 ## Phase 3 — Typed application services, with JsonDB retained
+
+In progress: repository isolation and direct service orchestration/production adapters are implemented. Latest clean-build checkpoint: 829 cases / 38 suites plus 5 Node cases. Old workflow classes are unregistered but still await removal and remaining regression migration; do not mark acceptance complete from a disabled bean graph alone. See [service results](phase-3-service-results.md).
 
 1. Introduce domain-specific repository interfaces backed by the current JsonDB implementation. Start with operations needed by the use cases, not a generic CRUD abstraction.
 2. Extract `MediaStorage`, `ImageRenderer`, and `TelegramGateway` boundaries. Share these components across previews and publication.

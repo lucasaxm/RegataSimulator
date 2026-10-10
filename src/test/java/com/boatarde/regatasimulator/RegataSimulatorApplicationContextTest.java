@@ -71,6 +71,10 @@ class RegataSimulatorApplicationContextTest {
         }
         assertThat(context.containsBean("org.springframework.context.annotation.internalScheduledAnnotationProcessor"))
             .isFalse();
+        assertThat(context.getBeansOfType(com.boatarde.regatasimulator.flows.WorkflowManager.class)).isEmpty();
+        assertThat(context.getBeansOfType(com.boatarde.regatasimulator.flows.WorkflowStep.class)).isEmpty();
+        assertThat(context.getBeansOfType(com.boatarde.regatasimulator.service.RouterService.class)).isEmpty();
+        assertThat(context.getBeansOfType(com.boatarde.regatasimulator.adapter.telegram.TelegramRouter.class)).hasSize(1);
         assertThat(context.getEnvironment().getProperty("regata-simulator.database.path"))
             .startsWith(storage.toString());
         verifyNoInteractions(registration, bot);
