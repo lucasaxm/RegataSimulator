@@ -4,7 +4,7 @@ Reviewed: 2026-10-06. Status: recommendations, **not implemented or approved arc
 
 Subsequent development-only smoke testing is recorded in [live test results](live-test-results.md). It confirms several error paths and refines the CORS assessment below; production was not tested.
 
-This is a historical review, not a current open-issue inventory. [Phase 0 results](phase-0-results.md) and [Phase 1 callback results](phase-1-callback-safety-results.md) record subsequent implemented changes; the service/SQLite redesign remains proposed.
+This is a historical review, not a current open-issue inventory. [The implementation plan](backend-improvement-plan.md) and [Phase 5 results](phase-5-operations-results.md) record completed local/offline Phases 0–5 and separate live-adoption prerequisites. Removed workflow classes below are historical evidence: inspect them in the parent of local cleanup commit `aab05e2` with `git show aab05e2^:<source path>`, or consult the [removal manifest](phase-3-cleanup-removal-manifest.md). They are intentionally absent from current source.
 
 ## Executive decision
 
@@ -47,7 +47,7 @@ The application-context test in `BilubotApplicationTests.java` is entirely comme
 
 ### This is a small state-machine runner, not classic chain of responsibility
 
-In [RouterService](../src/main/java/com/boatarde/regatasimulator/service/RouterService.java), every matching `Route` starts a flow. `startFlow` creates a fresh `WorkflowDataBag`, repeatedly resolves an enum through `WorkflowManager`, and runs the associated step. Each step returns the next action.
+In the former `service/RouterService.java`, every matching `Route` started a flow. `startFlow` created a fresh `WorkflowDataBag`, repeatedly resolved an enum through `WorkflowManager`, and ran the associated step. Each step returned the next action.
 
 Classic chain of responsibility usually lets successive handlers decide who will handle a request. Here, steps explicitly select the next state. That distinction matters: the application is paying for a workflow engine, not merely using a set of command handlers.
 
@@ -76,11 +76,11 @@ None of these benefits requires enum transitions, annotation registration, or an
 
 ### Costs and failure modes in the actual implementation
 
-1. **Data contracts are implicit.** [WorkflowDataBag](../src/main/java/com/boatarde/regatasimulator/flows/WorkflowDataBag.java) stores `Object` values keyed by enum. `getGeneric` checks raw type and generic arity, not the types of list elements. Missing entries return null. Required inputs are discoverable only by reading each step.
-2. **Business behavior depends on incidental transport state.** [GetRandomTemplateStep](../src/main/java/com/boatarde/regatasimulator/flows/simulator/GetRandomTemplateStep.java) and [SendMemeStep](../src/main/java/com/boatarde/regatasimulator/flows/simulator/SendMemeStep.java) detect preview mode by the presence of progress messages. Publishing uses a null `Update` to mean channel delivery. A typed preview/publish request would express intent directly.
+1. **Data contracts are implicit.** The former `flows/WorkflowDataBag.java` stored `Object` values keyed by enum. `getGeneric` checked raw type and generic arity, not the types of list elements. Missing entries returned null. Required inputs were discoverable only by reading each step.
+2. **Business behavior depends on incidental transport state.** The former `flows/simulator/GetRandomTemplateStep.java` and `SendMemeStep.java` detected preview mode by the presence of progress messages. Publishing used a null `Update` to mean channel delivery. A typed preview/publish request would express intent directly.
 3. **HTTP code knows workflow internals.** Source/template controllers synthesize `Update` objects; rejection puts a reason in `channelPost`, although no channel post occurred. Domain operations should accept an ID, decision, reason, and actor instead.
 4. **Normal completion and failure look alike.** Several selection/creation/rendering steps log failures and return `NONE`. `RouterService` does not swallow thrown exceptions, but it cannot distinguish those logged failures from success. An absent registration also ends the loop silently. Exceptions can instead escape all the way through the Telegram or HTTP entry point.
-5. **Registration has a concrete defect.** [WorkflowManager.getStepEnum](../src/main/java/com/boatarde/regatasimulator/flows/WorkflowManager.java) dereferences `annotation.value()` before checking whether the annotation exists. An unannotated step causes a null dereference instead of the intended warning. There is also no transition-count guard against a cycle.
+5. **Registration has a concrete defect.** The former `flows/WorkflowManager.java` method `getStepEnum` dereferenced `annotation.value()` before checking whether the annotation existed. An unannotated step caused a null dereference instead of the intended warning. There was also no transition-count guard against a cycle.
 6. **Routing policy is unspecified.** `routes.forEach` executes every match, not first-match dispatch. Existing predicates may be disjoint, but future overlap can trigger duplicate work. Choose and test first-match, exclusive-match, or deliberate multi-handler behavior.
 7. **The abstraction does not supply the difficult guarantees.** No durable execution state, transactional grouping, centralized cleanup, bounded subprocess execution, retry policy, or idempotency is provided by the runner.
 

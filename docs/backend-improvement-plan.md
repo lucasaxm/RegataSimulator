@@ -1,14 +1,24 @@
 # Backend improvement plan
 
-Date: 2026-10-06. Updated: 2026-10-09. Status: **Phases 0–3 and Phase 4's explicitly scoped SQLite implementation/offline rehearsal are implemented**; production cutover is not performed and Phase 5 remains proposed. [Phase 0 results](phase-0-results.md), [callback-safety results](phase-1-callback-safety-results.md), [Phase 1 reliability results](phase-1-reliability-results.md), [Phase 2 web security results](phase-2-web-security-results.md), [Phase 3 service results](phase-3-service-results.md), and [Phase 4 SQLite results](phase-4-sqlite-results.md) record implementation, verification, and recovery limits.
+Date: 2026-10-06. Updated: **2026-10-10**. Status: **Phases 0–5 are implemented for their explicitly scoped local/offline acceptance**, including the SQLite implementation/migration rehearsal and Phase 5 recovery/security-maintenance candidate. Production cutover, live deployment and whole-host recovery approval are not performed. [Phase 0 results](phase-0-results.md), [callback-safety results](phase-1-callback-safety-results.md), [Phase 1 reliability results](phase-1-reliability-results.md), [Phase 2 web security results](phase-2-web-security-results.md), [Phase 3 service results](phase-3-service-results.md), [Phase 4 SQLite results](phase-4-sqlite-results.md), and [Phase 5 operations/runbook](phase-5-operations-results.md) record implementation, verification, and limits.
 
 Read [backend review](backend-review.md) for evidence/tradeoffs and [project map](project-map.md) for the current structure. The goal is a simpler, reliable modular monolith, not a rewrite or a distributed system.
 
-## Progress checkpoint — 2026-10-09
+## Highest progress checkpoint — Phase 5 complete locally/offline, 2026-10-10
+
+- **Recovery:** cooperative single-JVM media boundary, committed-WAL-aware `VACUUM INTO`, five-collection JsonDB export, copied media, bounded multipart manifests/checksums, complete local retention and validated fresh-target restore. Stopped-copy reconciliation reports recommendations without restoring/purging. JsonDB remains default; SQLite is opt-in, with schema-3 moderation audit and no automatic cutover.
+- **Operations:** storage-before-registration, configurable bot/schedules/zone/shutdown, local lifecycle probes and protected bounded external health; redacted operation IDs/duration/outcome metrics, bounded process-local login throttling and audit preservation. Checked-in Linux supervision/deployment scripts validate artifacts, stop writers and test readiness/schema-compatible artifact-only rollback.
+- **Separate security-maintenance slice:** Boot **4.1.1**, Framework **7.0.9**, Security **7.1.1**, Session **4.1.1**, Tomcat **11.0.26**, Jackson 2 **2.21.7** / 3 **3.1.7**, springdoc **3.1.1**; SQLite **3.53.4** / Xerial **3.53.4.0**, Liquibase **4.33.0** retained. Gradle **8.14.6** has official distribution checksum validation. The native PBE bridge removes the flagged starter, retains synthetic legacy ENC compatibility and fails closed; this is not a service rewrite or new KDF recommendation.
+- **Final verification:** full clean build **828 JUnit cases / 42 suites**, zero failures/errors/skips; **18 Node tests** across web-security/deployment/dependency-scan. Patched Temurin **21.0.12.1+1** passed `verifyMaintenanceJava clean build --info` with explicit-only toolchain paths and autodetect/autodownload disabled; compiler **and Gradle Test Executor** used the isolated JDK. The earlier OpenJDK 21.0.2 build also passed, but is not release-gate evidence.
+- **Actual OSV rerun:** **COMPLETE / 138 coordinates / 0 findings**, timestamp **2026-10-10T05:30:52.749Z**, saved in `build/dependency-security/osv-report.json`. Prior 23- then 7-finding scans are historical and resolved for this Maven graph; no advisory suppression. See [dependency assessment](phase-5-dependency-assessment.md) for hashes, limits and licenses.
+- **Local history:** seven original Phase 5 slices plus `54d9ad0` reconciliation and `4ea9544` quality follow-up. Runtime upgrade locally committed as `679884e` (`build: migrate supported Spring runtime and preserve legacy encrypted properties`); all commits are local, with no push or deployment.
+- **Scope boundaries:** temporary stores, synthetic ciphertext/ImageIO and fake Telegram/renderer/host commands only; no production data, app/bot startup, actual ImageMagick render, deployment or global JDK/env change. Single-host/cooperative boundaries, manual crash reconciliation, non-atomic JsonDB, native/CDN review, legal clearance and real Linux unit/runtime provisioning remain separate operator checks, not incomplete local acceptance.
+
+## Phase 4 progress checkpoint — 2026-10-09 (historical)
 
 - **Phase 4 offline completion:** patched Xerial JDBC with measured SQLite 3.53.4, Liquibase 4.33.0 versioned schema, four JDBC adapters, literal normalized filters/deterministic SQL paging, per-connection WAL/FK/FULL/busy bounds, coordinated publication/submission metadata transactions, conditional REVIEW writes, immutable ordered history identities and reversible media deletion staging. JsonDB remains the explicit compatibility default; SQLite is opt-in.
 - **Migration/rollback:** standalone no-Spring raw-JSON audit/import into a new file, all-record anomaly reports and hashes, full-field/integrity reconciliation, then read-only SQLite export of post-migration writes into new JsonDB/media bundles. Synthetic ImageIO/TempDir rehearsal reopens actual JsonDB; no user data or deployment settings were touched. See [operator procedure and policies](phase-4-sqlite-results.md).
-- **Current Phase 4 verification:** focused tests, clean build and independently counted XML **725 cases / 32 suites**, zero failures/errors/skips, plus **5 Node cases**. Single-host/local-disk deployment suitability and live cutover remain operator prerequisites, not verified facts. Phase 5 consistent live snapshots/automatic recovery/maintenance is next; SQLite legacy backup fails closed until then.
+- **Historical Phase 4 verification:** focused tests, clean build and independently counted XML **725 cases / 32 suites**, zero failures/errors/skips, plus **5 Node cases**. At that checkpoint SQLite legacy backup failed closed. Configured Phase 5 capture now supersedes that block; automatic crash recovery is not claimed. Single-host/local-disk deployment suitability and live cutover remain operator prerequisites.
 
 ### Phase 3 checkpoint (historical)
 
@@ -35,7 +45,7 @@ Read [backend review](backend-review.md) for evidence/tradeoffs and [project map
 - **Compatibility:** original submission messages and publication weights/history are preserved; binding writes update fields rather than stale full entities. Legacy JSON still loads, but legacy preview buttons without trust metadata are intentionally rejected. No live data was changed.
 - **Next:** isolated rendering scratch directories and bounded subprocess execution. Capacity-aware selection, wider failure recovery, web security, typed services, and SQLite remain pending. This is not completion of all Phase 1 acceptance criteria.
 
-## Progress checkpoint — 2026-10-07
+## Earlier progress checkpoint — 2026-10-07 (historical)
 
 - **Complete:** backend review/project guidance, isolated live development smoke tests, Phase 0 characterization and test seams, and the documented Sonar-driven cleanup. See [live test results](live-test-results.md) and [Phase 0 results](phase-0-results.md) for evidence and limits.
 - **Fresh verification:** `./gradlew clean build` passed on Java 21.0.2; test XML reports **300 executed cases across 23 suites**, zero failures/errors/skips. Current editor diagnostics report no errors. This does not establish a project-wide SonarQube scan or server quality-gate result.
@@ -45,7 +55,7 @@ Read [backend review](backend-review.md) for evidence/tradeoffs and [project map
 
 ## Phase 0 — Protect existing behavior
 
-Completed: isolated startup/context, submission/preview/publication, callback/moderation, import/backup, and deterministic edge-case tests. Known failures remain characterized, not fixed. See [Phase 0 results](phase-0-results.md).
+Completed: isolated startup/context, submission/preview/publication, callback/moderation, import/backup, and deterministic edge-case tests. Known failures were characterized at Phase 0, not fixed by that phase; later phases update expectations with fixes. See [Phase 0 results](phase-0-results.md) for historical evidence.
 
 Work against temporary storage and mocked Telegram, never the production paths/tokens. Preserve the Portuguese user-facing messages unless a product change is intentional.
 
@@ -77,7 +87,7 @@ Items 1–6 are implemented as scoped in [web security results](phase-2-web-secu
 1. Establish actual hosting topology. Remove cross-origin API grants if unnecessary, or introduce validated web/CORS properties with explicit per-environment origins and one security-integrated CORS source.
 2. Configure Spring Session cookies through `CookieSerializer`; prefer host-only scope and explicitly test Secure/SameSite requirements for local development and supported Telegram clients.
 3. Convert admin publish/backup GET endpoints to POST. Update any clients with the same change; do not retain a mutating GET compatibility alias.
-4. Enable CSRF, supply a compatible token acquisition mechanism, and update login/logout/API request code. These small frontend integration changes are necessary for backend security, not a frontend redesign. Check APIs against the chosen Spring Security version; newer documentation shortcuts may not exist in 6.2.
+4. Enable CSRF, supply a compatible token acquisition mechanism, and update login/logout/API request code. These small frontend integration changes are necessary for backend security, not a frontend redesign. Phase 2 used Security 6.2; Phase 5 retests these contracts on 7.1.1.
 5. Add Jakarta validation and centralized `ProblemDetail` responses; return 401/403 JSON for API auth failures while preserving browser page redirects where appropriate.
 6. Minimize API response DTOs and serve correct image MIME types. Record any response-contract changes before changing gallery clients.
 
@@ -130,18 +140,31 @@ Rollback caveat: before new writes, restore the old configuration/store. After n
 
 ## Phase 5 — Recovery, dependency, and deployment maintenance
 
+**Completed for the local/offline candidate scope.** The six steps below are retained acceptance scope, not a pending queue. See [operations results/runbook](phase-5-operations-results.md) for exact commands, tests, failure policies and operator boundaries.
+
 1. Produce a SQLite-consistent snapshot using the backup API or verified VACUUM INTO; coordinate media snapshot/manifest, archive-size checks, exception-safe cleanup, retention, and an independent backup destination where appropriate.
 2. Exercise restoration into fresh directories with production-like permissions; verify database integrity, file availability, and sample rendering.
 3. Make bot/scheduler startup configurable, initialize storage before registering the bot, and separate local liveness from bounded external readiness. Make cron zone and relevant scheduling/policy values configurable.
 4. Upgrade old dependencies in a dedicated tested change; use Boot dependency management for compatible Spring libraries, patch Java 21, add wrapper integrity verification and dependency vulnerability checks. Do not combine a major Boot upgrade with the database cutover.
-5. Verify/document the server's `subprocess` command. Prefer systemd process supervision, graceful shutdown, readiness smoke checks, pinned/trusted host keys, and failed-deployment rollback rather than an undocumented restart script.
+5. Replace the historical undocumented `subprocess` wrapper with checked-in systemd supervision/artifact deployment, graceful shutdown, readiness smoke checks, pinned/trusted host keys and failed-deployment rollback fixtures. Actual server provisioning/verification remains an operator prerequisite.
 6. Add operation IDs, duration/outcome metrics, redacted logs, and moderation actor/time auditing. Keep operational complexity proportional to this small app.
 
-Acceptance: a backup can actually restore the app; failed deployments are detectable and recoverable; all jobs can be run safely in development/tests without real Telegram effects.
+Acceptance mapping (all six local implementation steps complete):
+
+| Step | Completed local/offline evidence | Separate live/operator check |
+| --- | --- | --- |
+| 1 — Consistent backup | WAL-aware snapshot plus copied media under cooperative barrier; hashes, size bounds, cleanup, count retention | Provision private independent destination/failure domain; stop noncooperating writers |
+| 2 — Restore | Fresh SQLite/JsonDB reopen, integrity/FK/count/hash checks, 700/600 permissions, decoded images/geometry and fake rendering | Actual intended ImageMagick/runtime and whole-host restore drill |
+| 3 — Safe startup | Storage first; explicit switches, minimal local probes, bounded protected external health, configurable cron/zone/graceful shutdown | Real Telegram/network/host shutdown; switches do not disable manual writes |
+| 4 — Maintenance | Separate Boot 4/native-PBE slice; patched JDK compile/test proof, wrapper integrity, runtime lock, complete zero-finding OSV | Native/JDK/CDN advisory review, upstream support and legal obligations; future CI/host gate |
+| 5 — Failed deployment | Checked artifact/checksum, confirmed stop, bounded readiness, schema-compatible artifact rollback fixtures; `subprocess` removed | Provision/test actual Linux unit/env/root/Java/SSH trust; never undo database writes via binary rollback |
+| 6 — Visibility/audit | Redacted IDs/duration/outcomes, low-cardinality metrics, limiter, atomic SQLite REVIEW/audit and recovery preservation | JsonDB non-atomic audit reconciliation, monitoring/alerts and manual crash recovery |
+
+Acceptance is a source-complete, tested recovery/maintenance candidate, **not production approval**. No exactly-once delivery, crash-proof distributed transaction, real server rollout or native ImageMagick verification is claimed.
 
 ## First implementation slice
 
-**Completed on 2026-10-09:** source/template preview callback authorization and status checks. The acceptance criteria below describe that completed slice; see [results](phase-1-callback-safety-results.md) for verification and limits. Rendering changes stay in a separate PR.
+**Completed on 2026-10-09:** source/template preview callback authorization and status checks. The acceptance criteria below describe that historical slice; see [results](phase-1-callback-safety-results.md) for verification and limits. Its `SendMemeStep`/route/workflow names describe the original implementation, physically removed in Phase 3; current typed services/adapters preserve the tested contracts. Rendering was a separate slice.
 
 Acceptance for that first slice:
 
@@ -151,6 +174,6 @@ Acceptance for that first slice:
 4. Add adversarial/replay cases alongside existing valid-owner cases in `ReviewCallbackStepsTest` and route/workflow tests. Update known-failure expectations with their fixes, preserving callback formats and Portuguese messages where compatible.
 5. Pass targeted tests and `./gradlew clean build`; explicitly reanalyze changed Java files for Sonar findings. Do not suppress rules, include production data, migrate storage, or redesign the workflow framework in this slice.
 
-The subsequent rendering, selection, failure-reporting, validation, and recovery slices are implemented; see [reliability results](phase-1-reliability-results.md). Phase 2 CORS/cookie/CSRF/API boundaries, Phase 3 typed services/repository isolation/obsolete-workflow removal and the explicitly scoped Phase 4 SQLite/offline rehearsal are complete; see [web security results](phase-2-web-security-results.md), [service results](phase-3-service-results.md) and [SQLite results](phase-4-sqlite-results.md). Phase 5 is next; confirm live prerequisites separately and never infer an automatic production cutover.
+The subsequent rendering, selection, failure-reporting, validation, and recovery slices are implemented; see [reliability results](phase-1-reliability-results.md). Phase 2 CORS/cookie/CSRF/API boundaries, Phase 3 typed services/repository isolation/obsolete-workflow removal, Phase 4 SQLite/offline rehearsal and **Phase 5 local/offline recovery/maintenance** are complete; see [web security results](phase-2-web-security-results.md), [service results](phase-3-service-results.md), [SQLite results](phase-4-sqlite-results.md) and [operations results](phase-5-operations-results.md). Confirm live prerequisites separately; never infer an automatic production cutover.
 
 Each phase is a sequence of small PRs, not one giant PR. Estimates should follow the data audit and required test work; the existing green suite does not justify calling a whole migration low-risk or a two-day task.
