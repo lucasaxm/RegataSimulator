@@ -74,6 +74,10 @@ class SubmissionServiceTest {
         }
         if (mode.equals("progress")) doThrow(failure).when(telegram).sendText(any());
         if (mode.equals("author")) doThrow(failure).when(authors).recordSubmitter(any());
+        stubPersistenceOrPreviewFailure(sourceType, mode, failure);
+    }
+
+    private void stubPersistenceOrPreviewFailure(boolean sourceType, String mode, RuntimeException failure) {
         if (mode.equals("insert")) {
             if (sourceType) doThrow(failure).when(sources).insertSubmission(any());
             else doThrow(failure).when(templates).insertSubmission(any());
