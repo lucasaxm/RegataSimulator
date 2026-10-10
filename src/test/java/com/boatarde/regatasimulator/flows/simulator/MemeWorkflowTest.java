@@ -15,6 +15,7 @@ import com.boatarde.regatasimulator.models.TemplateArea;
 import com.boatarde.regatasimulator.service.RouterService;
 import com.boatarde.regatasimulator.service.SourceService;
 import com.boatarde.regatasimulator.util.TelegramUtils;
+import com.boatarde.regatasimulator.factory.ImageTestFactory;
 import io.jsondb.JsonDBTemplate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -177,7 +178,7 @@ class MemeWorkflowTest {
     private MockedStatic<TelegramUtils> externalTelegram() {
         MockedStatic<TelegramUtils> telegram = mockStatic(TelegramUtils.class);
         telegram.when(() -> TelegramUtils.downloadTelegramFile(eq(bot), eq("synthetic-file"), any(Path.class), anyString()))
-            .thenAnswer(invocation -> Files.writeString(((Path) invocation.getArgument(2)).resolve((String) invocation.getArgument(3)), "fake upload"));
+            .thenAnswer(invocation -> ImageTestFactory.image(((Path) invocation.getArgument(2)).resolve((String) invocation.getArgument(3))));
         telegram.when(() -> TelegramUtils.executeSendMediaBotMethod(eq(bot), any(SendPhoto.class)))
             .thenAnswer(invocation -> {
                 SendPhoto photo = invocation.getArgument(1);

@@ -122,6 +122,9 @@ public class JsonDBUtils {
     }
 
     public static List<TemplateArea> parseTemplateCsv(String csv) throws IOException {
+        if (csv == null || csv.length() > 64 * 1024) {
+            throw new IOException("CSV content exceeds limits or is absent");
+        }
         List<TemplateArea> areas = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(new StringReader(csv))) {
             String line = reader.readLine(); // header
@@ -129,9 +132,16 @@ public class JsonDBUtils {
                 throw new IOException("Invalid CSV header");
             }
             while ((line = reader.readLine()) != null) {
-                String[] fields = line.split(",");
-                if (fields.length != 11) {
+                if (areas.size() >= MediaValidation.MAX_AREAS) {
+                    throw new IOException("Too many template areas");
+                }
+                String[] fields = line.split(",", -1);
+                if (fields.length != 11 || java.util.Arrays.stream(fields).anyMatch(String::isBlank)) {
                     throw new IOException("Invalid CSV format");
+                }
+                int background = Integer.parseInt(fields[10]);
+                if (background != 0 && background != 1) {
+                    throw new IOException("Background must be 0 or 1");
                 }
 
                 areas.add(TemplateArea.builder()
@@ -153,10 +163,13 @@ public class JsonDBUtils {
                         .x(Integer.parseInt(fields[8]))
                         .y(Integer.parseInt(fields[9]))
                         .build())
-                    .background(Integer.parseInt(fields[10]) == 1)
+                    .background(background == 1)
                     .build());
             }
+        } catch (NumberFormatException e) {
+            throw new IOException("Invalid CSV number", e);
         }
+        MediaValidation.geometry(areas, null);
         return areas;
     }
 

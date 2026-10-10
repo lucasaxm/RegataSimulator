@@ -26,6 +26,14 @@ public class SendPhotoStep implements WorkflowStep {
             log.info("Response: {}", TelegramUtils.toJson(response, false));
         } catch (TelegramApiException e) {
             throw new ApplicationFailure(ApplicationFailure.Kind.EXECUTION, "Photo delivery failed", e);
+        } finally {
+            if (photo != null && photo.getPhoto() != null && photo.getPhoto().getNewMediaStream() != null) {
+                try {
+                    photo.getPhoto().getNewMediaStream().close();
+                } catch (java.io.IOException e) {
+                    log.warn("Could not close photo stream");
+                }
+            }
         }
         return WorkflowAction.NONE;
     }

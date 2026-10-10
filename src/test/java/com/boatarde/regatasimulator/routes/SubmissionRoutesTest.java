@@ -166,13 +166,12 @@ class SubmissionRoutesTest {
 
     @ParameterizedTest
     @ValueSource(ints = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
-    void currentlyMalformedCsvNumberEscapesTemplateRouteInsteadOfReturningEmpty(int fieldIndex) {
-        // Phase1: normalize numeric parse failures into validation results rather than aborting routing.
+    void malformedCsvNumberIsRejectedWithoutEscapingRoute(int fieldIndex) {
         String[] fields = "1,1,0,0,20,0,20,30,0,30,0".split(",");
         fields[fieldIndex] = "not-a-number";
         Update update = document("image/png", HEADER + "\n" + String.join(",", fields));
 
-        assertThrows(NumberFormatException.class, () -> templateRoute.test(update, bot));
+        assertTrue(templateRoute.test(update, bot).isEmpty());
         assertTrue(sourceRoute.test(update, bot).isEmpty());
         verifyNoInteractions(bot);
     }

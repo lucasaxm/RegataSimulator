@@ -3,6 +3,8 @@ package com.boatarde.regatasimulator.flows.simulator;
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.factory.TelegramTestFactory;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import com.boatarde.regatasimulator.factory.ImageTestFactory;
 import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.models.Author;
@@ -41,7 +43,7 @@ class CreateTemplateStepTest {
 
     private static final String CSV = """
         Area,Source,TLx,TLy,TRx,TRy,BRx,BRy,BLx,BLy,Background
-        1,2,0,1,20,1,20,30,0,30,1""";
+        1,1,0,1,20,1,20,30,0,30,1""";
 
     @TempDir
     private Path templatesRoot;
@@ -70,7 +72,7 @@ class CreateTemplateStepTest {
         assertEquals(1, template.getAreas().size());
         TemplateArea area = template.getAreas().getFirst();
         assertEquals(1, area.getIndex());
-        assertEquals(2, area.getSource());
+        assertEquals(1, area.getSource());
         assertEquals(0, area.getTopLeft().getX());
         assertEquals(1, area.getTopLeft().getY());
         assertEquals(20, area.getTopRight().getX());
@@ -157,7 +159,7 @@ class CreateTemplateStepTest {
                     throw new TelegramApiException("download unavailable");
                 });
 
-            assertEquals(WorkflowAction.NONE, step.run(bag));
+            assertThrows(ApplicationFailure.class, () -> step.run(bag));
             assertNotNull(directory.get());
             assertFalse(Files.exists(directory.get()));
             assertNoCreatedTemplate(bag);
@@ -183,9 +185,9 @@ class CreateTemplateStepTest {
                     throw new IOException("interrupted copy");
                 });
 
-            assertEquals(WorkflowAction.NONE, step.run(bag));
-            assertEquals("partial", Files.readString(partialFile.get()));
-            assertTrue(Files.isDirectory(partialFile.get().getParent()));
+            assertThrows(ApplicationFailure.class, () -> step.run(bag));
+            assertFalse(Files.exists(partialFile.get()));
+            assertFalse(Files.exists(partialFile.get().getParent()));
             assertNoCreatedTemplate(bag);
             verifyNoInteractions(database, bot);
         }
@@ -197,13 +199,12 @@ class CreateTemplateStepTest {
         WorkflowDataBag bag = bag(submission("invalid header"));
 
         try (MockedStatic<TelegramUtils> telegram = mockStatic(TelegramUtils.class)) {
-            stubDownload(telegram);
-
-            assertEquals(WorkflowAction.NONE, step.run(bag));
+            assertThrows(ApplicationFailure.class, () -> step.run(bag));
             assertNoCreatedTemplate(bag);
             assertNull(bag.get(WorkflowDataKey.SEND_MESSAGE, SendMessage.class));
             verifyNoInteractions(database, bot);
-            assertDownloadedFileRemains();
+            telegram.verifyNoInteractions();
+            assertRootEmpty();
         }
     }
 
@@ -216,10 +217,27 @@ class CreateTemplateStepTest {
         try (MockedStatic<TelegramUtils> telegram = mockStatic(TelegramUtils.class)) {
             stubDownload(telegram);
 
-            assertEquals(WorkflowAction.NONE, step.run(bag));
+            assertThrows(ApplicationFailure.class, () -> step.run(bag));
             assertNoCreatedTemplate(bag);
             verifyNoInteractions(database);
-            assertDownloadedFileRemains();
+            assertRootEmpty();
+        }
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"bounds", "author", "insert"})
+    void boundsAndPersistenceFailuresCleanUncommittedTemplate(String failure) throws Exception {
+        if (!failure.equals("bounds")) when(bot.execute(any(SendMessage.class)))
+            .thenReturn(TelegramTestFactory.buildTextMessage("progress"));
+        if (failure.equals("author")) doThrow(new IllegalStateException("author failure")).when(database).upsert(any(Author.class));
+        if (failure.equals("insert")) doThrow(new IllegalStateException("insert failure")).when(database).insert(any(Template.class));
+        try (MockedStatic<TelegramUtils> telegram = mockStatic(TelegramUtils.class)) {
+            stubDownload(telegram);
+            WorkflowDataBag bag = bag(submission(failure.equals("bounds") ? CSV.replace("20", "500") : CSV));
+            assertThrows(ApplicationFailure.class, () -> step.run(bag));
+            assertNoCreatedTemplate(bag);
+            assertRootEmpty();
+            if (!failure.equals("insert")) verify(database, never()).insert(any(Template.class));
         }
     }
 
@@ -228,7 +246,7 @@ class CreateTemplateStepTest {
             any(Path.class), eq("template.png"))).thenAnswer(invocation -> {
                 Path directory = invocation.getArgument(2);
                 assertTrue(Files.isDirectory(directory));
-                return Files.writeString(directory.resolve("template.png"), "isolated fixture");
+                return ImageTestFactory.image(directory.resolve("template.png"));
             });
     }
 
@@ -265,11 +283,10 @@ class CreateTemplateStepTest {
         assertNull(bag.get(WorkflowDataKey.CREATING_TEMPLATE_MESSAGE, Message.class));
     }
 
-    private void assertDownloadedFileRemains() throws IOException {
+    private void assertRootEmpty() throws IOException {
         try (var directories = Files.list(templatesRoot)) {
             List<Path> remaining = directories.toList();
-            assertEquals(1, remaining.size());
-            assertTrue(Files.exists(remaining.getFirst().resolve("template.png")));
+            assertTrue(remaining.isEmpty());
         }
     }
 }

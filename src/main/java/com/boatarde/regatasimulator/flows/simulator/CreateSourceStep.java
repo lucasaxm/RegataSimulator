@@ -2,6 +2,9 @@ package com.boatarde.regatasimulator.flows.simulator;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import com.boatarde.regatasimulator.util.MediaValidation;
+import java.util.Locale;
 import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.flows.WorkflowStep;
@@ -89,25 +92,24 @@ public class CreateSourceStep implements WorkflowStep {
                 bag.put(WorkflowDataKey.SEND_PHOTO, sendPhoto);
                 return WorkflowAction.SEND_PHOTO_STEP;
             } catch (Exception e) {
-                log.error(String.format("Exception when sending duplicated source: %s", e.getMessage()), e);
-                return WorkflowAction.NONE;
+                throw new ApplicationFailure(ApplicationFailure.Kind.EXECUTION, "Duplicate source image unavailable", e);
             }
 
         }
 
         Path sourcesDir = Paths.get(sourcesPathString);
 
-        String fileExtension = FileUtils.getFileExtension(update.getMessage().getDocument().getFileName());
-        String fileName = "source" + fileExtension.toLowerCase();
-
         UUID uuid = UUID.randomUUID();
         Path newDir = sourcesDir.resolve(uuid.toString());
+        boolean saved = false;
 
         try {
+            String fileName = "source" + MediaValidation.extension(update.getMessage().getDocument().getFileName());
             log.info("Creating new source dir: {}", uuid);
             Files.createDirectories(newDir);
             String fileId = update.getMessage().getDocument().getFileId();
             Path sourceFile = TelegramUtils.downloadTelegramFile(bot, fileId, newDir, fileName);
+            MediaValidation.image(sourceFile);
 
             Source source = new Source();
             source.setId(uuid);
@@ -125,8 +127,6 @@ public class CreateSourceStep implements WorkflowStep {
                 .text("Criando source...")
                 .build());
 
-            saveSource(source);
-
             Author author = Author.builder()
                 .id(update.getMessage().getFrom().getId())
                 .userName(update.getMessage().getFrom().getUserName())
@@ -135,18 +135,18 @@ public class CreateSourceStep implements WorkflowStep {
                 .build();
 
             saveAuthor(author);
+            saveSource(source);
+            saved = true;
 
             bag.put(WorkflowDataKey.SOURCE_FILES, List.of(sourceFile));
             bag.put(WorkflowDataKey.SOURCES, List.of(source));
             bag.put(WorkflowDataKey.CREATING_SOURCE_MESSAGE, response);
         } catch (Exception e) {
-            log.error(String.format("Exception when creating source: %s", e.getMessage()), e);
-            try {
-                Files.deleteIfExists(newDir);
-            } catch (IOException ex) {
-                log.error(String.format("Exception when deleting new source dir: %s", e.getMessage()), e);
+            if (!saved) {
+                FileUtils.deleteTree(newDir);
             }
-            return WorkflowAction.NONE;
+            throw new ApplicationFailure(e instanceof IOException ? ApplicationFailure.Kind.INVALID_INPUT
+                : ApplicationFailure.Kind.EXECUTION, "Source creation failed", e);
         }
         return WorkflowAction.GET_RANDOM_TEMPLATE;
     }
@@ -177,12 +177,12 @@ public class CreateSourceStep implements WorkflowStep {
             return null;
         }
 
-        String lowerCaseDescription = description.toLowerCase();
+        String lowerCaseDescription = description.toLowerCase(Locale.ROOT);
         List<Source> existingSources = jsonDBTemplate.findAll(Source.class);
 
         return existingSources.stream()
             .filter(s -> s.getDescription() != null &&
-                s.getDescription().toLowerCase().equals(lowerCaseDescription))
+                s.getDescription().toLowerCase(Locale.ROOT).equals(lowerCaseDescription))
             .findFirst()
             .orElse(null);
     }

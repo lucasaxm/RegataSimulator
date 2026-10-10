@@ -71,6 +71,15 @@ public class RouterService {
             throw failure;
         } finally {
             FileUtils.deleteTree(workflowDataBag.get(WorkflowDataKey.RENDER_JOB_DIRECTORY, Path.class));
+            var photo = workflowDataBag.get(WorkflowDataKey.SEND_PHOTO,
+                org.telegram.telegrambots.meta.api.methods.send.SendPhoto.class);
+            if (photo != null && photo.getPhoto() != null && photo.getPhoto().getNewMediaStream() != null) {
+                try {
+                    photo.getPhoto().getNewMediaStream().close();
+                } catch (java.io.IOException e) {
+                    log.warn("Could not close workflow photo stream");
+                }
+            }
         }
     }
 

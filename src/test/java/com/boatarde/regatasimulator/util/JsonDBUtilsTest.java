@@ -33,7 +33,7 @@ import static org.mockito.Mockito.when;
 
 class JsonDBUtilsTest {
     private static final String HEADER = "Area,Source,TLx,TLy,TRx,TRy,BRx,BRy,BLx,BLy,Background";
-    private static final String VALID_ROW = "1,2,-10,20,30,40,50,60,70,-80,1";
+    private static final String VALID_ROW = "1,1,10,20,30,20,30,60,10,60,1";
 
     @Test
     void parsesExactElevenFieldHeaderIntegerCornersAndBackground() throws IOException {
@@ -41,17 +41,17 @@ class JsonDBUtilsTest {
 
         assertEquals(List.of(TemplateArea.builder()
             .index(1)
-            .source(2)
-            .topLeft(new AreaCorner(-10, 20))
-            .topRight(new AreaCorner(30, 40))
-            .bottomRight(new AreaCorner(50, 60))
-            .bottomLeft(new AreaCorner(70, -80))
+            .source(1)
+            .topLeft(new AreaCorner(10, 20))
+            .topRight(new AreaCorner(30, 20))
+            .bottomRight(new AreaCorner(30, 60))
+            .bottomLeft(new AreaCorner(10, 60))
             .background(true)
             .build()), areas);
     }
 
     @ParameterizedTest
-    @CsvSource({"1, true", "0, false", "2, false", "-1, false"})
+    @CsvSource({"1, true", "0, false"})
     void backgroundIsTrueOnlyForIntegerOne(int background, boolean expected) throws IOException {
         String row = "1,1,0,0,100,0,100,100,0,100," + background;
 
@@ -93,14 +93,13 @@ class JsonDBUtilsTest {
 
     @ParameterizedTest
     @ValueSource(ints = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
-    void malformedNumberInAnyFieldCurrentlyPropagatesNumberFormatException(int fieldIndex) {
+    void malformedNumberInAnyFieldIsReportedAsInvalidCsv(int fieldIndex) {
         String[] fields = VALID_ROW.split(",");
         fields[fieldIndex] = "not-an-integer";
         String csv = HEADER + "\n" + String.join(",", fields);
 
-        // Phase 0 characterization: numeric parse errors are not wrapped in IOException.
-        assertThrows(NumberFormatException.class,
-            () -> JsonDBUtils.parseTemplateCsv(csv));
+        assertEquals("Invalid CSV number", assertThrows(IOException.class,
+            () -> JsonDBUtils.parseTemplateCsv(csv)).getMessage());
     }
 
     @Test
@@ -111,18 +110,12 @@ class JsonDBUtilsTest {
             99,42,0,0,10,0,10,10,0,10,0
             """;
 
-        // Known validation gap, not desired behavior: Phase 1 must validate indices before rendering.
-        List<TemplateArea> areas = JsonDBUtils.parseTemplateCsv(csv);
-
-        assertEquals(List.of(3, 3, 99), areas.stream().map(TemplateArea::getIndex).toList());
-        assertEquals(List.of(7, 7, 42), areas.stream().map(TemplateArea::getSource).toList());
-        assertEquals(new AreaCorner(1, 2), areas.get(1).getTopLeft());
+        assertThrows(IOException.class, () -> JsonDBUtils.parseTemplateCsv(csv));
     }
 
     @Test
     void headerOnlyCsvCurrentlyProducesNoAreas() throws IOException {
-        // Known validation gap: accepting empty geometry is not a recommendation for Phase 1.
-        assertEquals(List.of(), JsonDBUtils.parseTemplateCsv(HEADER));
+        assertThrows(IOException.class, () -> JsonDBUtils.parseTemplateCsv(HEADER));
     }
 
     @ParameterizedTest

@@ -3,6 +3,8 @@ package com.boatarde.regatasimulator.flows.simulator;
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.factory.TelegramTestFactory;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import com.boatarde.regatasimulator.factory.ImageTestFactory;
 import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.models.Author;
@@ -177,7 +179,7 @@ class CreateSourceStepTest {
         WorkflowDataBag bag = bag(submission("source: barco"));
 
         try (MockedStatic<TelegramUtils> telegram = mockStatic(TelegramUtils.class)) {
-            assertEquals(WorkflowAction.NONE, step.run(bag));
+            assertThrows(ApplicationFailure.class, () -> step.run(bag));
             assertNull(bag.get(WorkflowDataKey.SEND_MESSAGE, SendMessage.class));
             assertNull(bag.get(WorkflowDataKey.SEND_PHOTO, SendPhoto.class));
             assertNoCreatedSource(bag);
@@ -203,7 +205,7 @@ class CreateSourceStepTest {
                     throw new TelegramApiException("download unavailable");
                 });
 
-            assertEquals(WorkflowAction.NONE, step.run(bag));
+            assertThrows(ApplicationFailure.class, () -> step.run(bag));
             assertNotNull(directory.get());
             assertFalse(Files.exists(directory.get()));
             assertNoCreatedSource(bag);
@@ -230,9 +232,9 @@ class CreateSourceStepTest {
                     throw new IOException("interrupted copy");
                 });
 
-            assertEquals(WorkflowAction.NONE, step.run(bag));
-            assertEquals("partial", Files.readString(partialFile.get()));
-            assertTrue(Files.isDirectory(partialFile.get().getParent()));
+            assertThrows(ApplicationFailure.class, () -> step.run(bag));
+            assertFalse(Files.exists(partialFile.get()));
+            assertFalse(Files.exists(partialFile.get().getParent()));
             assertNoCreatedSource(bag);
             verify(database).findAll(Source.class);
             verifyNoMoreInteractions(database);
@@ -250,15 +252,36 @@ class CreateSourceStepTest {
         try (MockedStatic<TelegramUtils> telegram = mockStatic(TelegramUtils.class)) {
             stubDownload(telegram);
 
-            assertEquals(WorkflowAction.NONE, step.run(bag));
+            assertThrows(ApplicationFailure.class, () -> step.run(bag));
             assertNoCreatedSource(bag);
             verify(database).findAll(Source.class);
             verifyNoMoreInteractions(database);
             try (var directories = Files.list(sourcesRoot)) {
                 List<Path> remaining = directories.toList();
-                assertEquals(1, remaining.size());
-                assertTrue(Files.exists(remaining.getFirst().resolve("source.jpeg")));
+                assertTrue(remaining.isEmpty());
             }
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"invalidImage", "author", "insert"})
+    void invalidImageAndPersistenceFailuresCleanUncommittedMedia(String failure) throws Exception {
+        when(database.findAll(Source.class)).thenReturn(List.of());
+        if (!failure.equals("invalidImage")) {
+            when(bot.execute(any(SendMessage.class))).thenReturn(TelegramTestFactory.buildTextMessage("progress"));
+        }
+        if (failure.equals("author")) doThrow(new IllegalStateException("author failure")).when(database).upsert(any(Author.class));
+        if (failure.equals("insert")) doThrow(new IllegalStateException("insert failure")).when(database).insert(any(Source.class));
+        try (MockedStatic<TelegramUtils> telegram = mockStatic(TelegramUtils.class)) {
+            if (failure.equals("invalidImage")) {
+                telegram.when(() -> TelegramUtils.downloadTelegramFile(eq(bot), anyString(), any(Path.class), anyString()))
+                    .thenAnswer(invocation -> Files.writeString(((Path) invocation.getArgument(2)).resolve("source.jpeg"), "fake"));
+            } else stubDownload(telegram);
+            WorkflowDataBag bag = bag(submission("source: valid name"));
+            assertThrows(ApplicationFailure.class, () -> step.run(bag));
+            assertNoCreatedSource(bag);
+            assertRootEmpty();
+            if (!failure.equals("insert")) verify(database, never()).insert(any(Source.class));
         }
     }
 
@@ -267,7 +290,7 @@ class CreateSourceStepTest {
             any(Path.class), eq("source.jpeg"))).thenAnswer(invocation -> {
                 Path directory = invocation.getArgument(2);
                 assertTrue(Files.isDirectory(directory));
-                return Files.writeString(directory.resolve("source.jpeg"), "isolated fixture");
+                return ImageTestFactory.image(directory.resolve("source.jpeg"));
             });
     }
 

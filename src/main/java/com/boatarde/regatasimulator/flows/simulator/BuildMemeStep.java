@@ -18,6 +18,7 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import java.io.IOException;
 import com.boatarde.regatasimulator.util.FileUtils;
 import com.boatarde.regatasimulator.util.ProcessRunner;
+import com.boatarde.regatasimulator.util.MediaValidation;
 import java.time.Duration;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -50,6 +51,7 @@ public class BuildMemeStep implements WorkflowStep {
         Path jobDirectory = null;
         boolean handedOff = false;
         try {
+            MediaValidation.geometry(template.getAreas(), null);
             jobDirectory = Files.createTempDirectory("regata-render-",
                 java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
                     java.nio.file.attribute.PosixFilePermissions.fromString("rwx------")));
@@ -135,6 +137,12 @@ public class BuildMemeStep implements WorkflowStep {
             int height = Integer.parseInt(dimensions[1]);
             if (width <= 0 || height <= 0 || (long) width * height > 40_000_000) {
                 throw new IOException("Image dimensions exceed render limits");
+            }
+            for (var corner : List.of(templateArea.getTopLeft(), templateArea.getTopRight(),
+                templateArea.getBottomRight(), templateArea.getBottomLeft())) {
+                if (corner.getX() > width || corner.getY() > height) {
+                    throw new IOException("Template corner exceeds image dimensions");
+                }
             }
 
             // Resize source image

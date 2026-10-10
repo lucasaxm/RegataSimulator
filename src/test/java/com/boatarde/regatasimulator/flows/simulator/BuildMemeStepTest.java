@@ -101,14 +101,12 @@ class BuildMemeStepTest {
     }
 
     @Test
-    void duplicateAreaIndicesCurrentlyReuseTheSameScratchPath() throws Exception {
-        // Documents current collision-prone behavior; isolation/validation belongs to Phase 1.
+    void duplicateAreaIndicesAreRejectedBeforeExternalWork() throws Exception {
         FakeRenderer renderer = new FakeRenderer();
         WorkflowDataBag bag = bag(List.of(area(1, 1, true), area(1, 2, false)));
 
-        assertThat(renderer.run(bag)).isEqualTo(WorkflowAction.SEND_MEME_STEP);
-        assertThat(renderer.commands.getLast()).filteredOn(value -> value.endsWith("distorted_source_1.png"))
-            .hasSize(2);
+        assertThrows(ApplicationFailure.class, () -> renderer.run(bag));
+        assertThat(renderer.commands).isEmpty();
     }
 
     @Test

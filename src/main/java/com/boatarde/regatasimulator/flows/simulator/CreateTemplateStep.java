@@ -2,6 +2,8 @@ package com.boatarde.regatasimulator.flows.simulator;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import com.boatarde.regatasimulator.util.MediaValidation;
 import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.flows.WorkflowStep;
@@ -47,26 +49,25 @@ public class CreateTemplateStep implements WorkflowStep {
         RegataSimulatorBot bot = bag.get(WorkflowDataKey.REGATA_SIMULATOR_BOT, RegataSimulatorBot.class);
         Path templatesDir = Paths.get(templatesPathString);
 
-        String fileExtension = FileUtils.getFileExtension(update.getMessage().getDocument().getFileName());
-        String fileName = "template" + fileExtension.toLowerCase();
-
         UUID uuid = UUID.randomUUID();
         Path newDir = templatesDir.resolve(uuid.toString());
+        boolean saved = false;
 
         try {
+            var areas = JsonDBUtils.parseTemplateCsv(update.getMessage().getCaption());
+            String fileName = "template" + MediaValidation.extension(update.getMessage().getDocument().getFileName());
             log.info("Creating new template dir: {}", uuid);
             Files.createDirectories(newDir);
             String fileId = update.getMessage().getDocument().getFileId();
             Path templateFile = TelegramUtils.downloadTelegramFile(bot, fileId, newDir, fileName);
-
-            String csvContent = update.getMessage().getCaption();
+            MediaValidation.geometry(areas, MediaValidation.image(templateFile));
 
             Template template = new Template();
             template.setId(uuid);
             template.setStatus(Status.REVIEW);
             template.setWeight(initialWeight);
             template.setMessage(update.getMessage());
-            template.setAreas(JsonDBUtils.parseTemplateCsv(csvContent));
+            template.setAreas(areas);
 
             Message response = bot.execute(SendMessage.builder()
                 .chatId(update.getMessage().getChatId().toString())
@@ -74,8 +75,6 @@ public class CreateTemplateStep implements WorkflowStep {
                 .allowSendingWithoutReply(true)
                 .text("Criando template...")
                 .build());
-
-            saveTemplate(template);
 
             Author author = Author.builder()
                 .id(update.getMessage().getFrom().getId())
@@ -85,18 +84,18 @@ public class CreateTemplateStep implements WorkflowStep {
                 .build();
 
             saveAuthor(author);
+            saveTemplate(template);
+            saved = true;
 
             bag.put(WorkflowDataKey.TEMPLATE_FILE, templateFile);
             bag.put(WorkflowDataKey.TEMPLATE, template);
             bag.put(WorkflowDataKey.CREATING_TEMPLATE_MESSAGE, response);
         } catch (Exception e) {
-            log.error(String.format("Exception when creating template: %s", e.getMessage()), e);
-            try {
-                Files.deleteIfExists(newDir);
-            } catch (IOException ex) {
-                log.error(String.format("Exception when deleting new template dir: %s", e.getMessage()), e);
+            if (!saved) {
+                FileUtils.deleteTree(newDir);
             }
-            return WorkflowAction.NONE;
+            throw new ApplicationFailure(e instanceof IOException ? ApplicationFailure.Kind.INVALID_INPUT
+                : ApplicationFailure.Kind.EXECUTION, "Template creation failed", e);
         }
         return WorkflowAction.GET_RANDOM_SOURCE;
     }
