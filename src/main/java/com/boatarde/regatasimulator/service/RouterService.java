@@ -20,6 +20,8 @@ import org.telegram.telegrambots.meta.generics.TelegramBot;
 
 import java.util.List;
 import java.util.Optional;
+import com.boatarde.regatasimulator.application.TelegramGateway;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 @Slf4j
@@ -28,10 +30,20 @@ public class RouterService {
     private static final String FAILURE_MESSAGE = "Não foi possível concluir a operação. Tente novamente mais tarde.";
     private final WorkflowManager workflowManager;
     private final List<Route> routes;
+    private PingService ping;
+    private ReportService reports;
+    private BackupService backups;
 
     public RouterService(WorkflowManager workflowManager, List<Route> routes) {
         this.workflowManager = workflowManager;
         this.routes = routes;
+    }
+
+    @Autowired
+    public RouterService(WorkflowManager workflowManager, List<Route> routes, PingService ping,
+                         ReportService reports, BackupService backups) {
+        this(workflowManager, routes);
+        this.ping = ping; this.reports = reports; this.backups = backups;
     }
 
     public void route(Update update, TelegramBot bot) {
@@ -42,7 +54,30 @@ public class RouterService {
             throw new ApplicationFailure(ApplicationFailure.Kind.EXECUTION, "Ambiguous route match");
         }
         if (!matches.isEmpty()) {
-            startFlow(update, bot, matches.getFirst());
+            WorkflowAction action = matches.getFirst();
+            if (ping != null && action == WorkflowAction.BUILD_PONG_MESSAGE) {
+                runDirect(update, bot, () -> ping.pong(destination(update), update.getMessage().getDate()));
+            } else if (reports != null && action == WorkflowAction.SEND_REPORT_STEP) {
+                runDirect(update, bot, () -> reports.send(destination(update)));
+            } else if (backups != null && action == WorkflowAction.BACKUP_JSON_DB_STEP) {
+                runDirect(update, bot, () -> backups.create(destination(update)));
+            } else {
+                startFlow(update, bot, action);
+            }
+        }
+    }
+
+    private TelegramGateway.Destination destination(Update update) {
+        var message = update.getMessage();
+        return new TelegramGateway.Destination(message.getChatId(), message.getMessageId(), message.getMessageThreadId());
+    }
+
+    private void runDirect(Update update, TelegramBot bot, Runnable operation) {
+        try { operation.run(); }
+        catch (RuntimeException e) {
+            reportFailure(update, bot);
+            throw e instanceof ApplicationFailure known ? known
+                : new ApplicationFailure(ApplicationFailure.Kind.EXECUTION, "Application operation failed", e);
         }
     }
 

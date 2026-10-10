@@ -16,4 +16,15 @@ Slice 1 validation: focused repository/service/workflow/callback/context tests p
 
 ## Remaining Phase 3 work
 
-Extract shared media/render/Telegram boundaries; direct ping/report/backup orchestration; explicit publication/preview/submission/moderation services; thin Telegram parsing/router and HTTP/scheduler adapters; central application failures outside `flows`; remove production runner/actions/bag/registration/steps and adapt tests to direct service contracts. Phases 4–5 and durable recovery/cross-adapter transactions remain pending.
+## Slice 2 — Direct operations and Telegram boundary
+
+- Added typed Telegram destination/text/photo/document/delivery requests behind `TelegramGateway`; bot-method construction is in `BotTelegramGateway`. Bot lookup is lazy to avoid the bot/router/service dependency cycle; isolated context startup performs no external calls.
+- Production ping/report/backup commands now invoke application services directly after the existing exclusive/creator-authorized route checks. Scheduled/admin backup calls `BackupService.create()` without fabricating Telegram updates. Meme generation still uses the runner temporarily.
+- Backup explicitly sequences JsonDB, templates, sources, then report. Archives retain the 40 MiB bound and batch-owned cleanup. Command report destinations preserve reply identity; scheduled report uses the configured backup chat. A missing synthetic origin is no longer needed. This is not a coherent snapshot/restore implementation.
+- `ReportService` uses repositories and handles nullable/incomplete legacy author origins. `PingService` uses the injected Clock.
+- Temporary legacy backup overloads and workflow tests remain until all workflows migrate. The runner/actions are still present; **Phase 3 remains incomplete**.
+- Validation: focused direct/backup/router/context suites passed after correcting command fixtures; clean build **754 cases / 35 suites**, zero failures/errors/skips; Node **5/5**; whitespace check passed. XML totals were independently checked after rejecting an incorrect zero-count aggregation. Timezone diagnostic fixed; workspace-import warnings remain.
+
+## Remaining Phase 3 work (after slice 2)
+
+Extract shared media/render boundaries; explicit publication/preview/submission/moderation services; thin Telegram parsing/router and HTTP/scheduler adapters; central application failures outside `flows`; remove production runner/actions/bag/registration/steps and adapt tests to direct service contracts. Phases 4–5 and durable recovery/cross-adapter transactions remain pending.
