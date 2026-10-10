@@ -137,12 +137,21 @@ class SubmissionServiceTest {
         verify(sources, never()).insertSubmission(any());
     }
 
-    @Test void outOfBoundsTemplateFailsBeforeMetadataAndCleansDownload() {
-        var invalid = List.of(TemplateArea.builder().index(1).source(1).topLeft(new AreaCorner(0, 0))
-            .topRight(new AreaCorner(500, 0)).bottomRight(new AreaCorner(500, 500)).bottomLeft(new AreaCorner(0, 500)).build());
+    @Test void completelyOffCanvasTemplateFailsBeforeMetadataAndCleansDownload() {
+        var invalid = List.of(TemplateArea.builder().index(1).source(1).topLeft(new AreaCorner(400, 0))
+            .topRight(new AreaCorner(500, 0)).bottomRight(new AreaCorner(500, 500)).bottomLeft(new AreaCorner(400, 500)).build());
         assertThrows(ApplicationFailure.class, () -> service.submitTemplate(new SubmissionService.TemplateSubmission(invalid, upload())));
         assertFalse(Files.exists(downloaded.getParent())); verifyNoInteractions(authors, memes);
         verify(templates, never()).insertSubmission(any());
+    }
+
+    @Test void partiallyOffCanvasTemplatePreservesIntentionalCoordinates() {
+        var areas = List.of(TemplateArea.builder().index(1).source(1).topLeft(new AreaCorner(-50, -50))
+            .topRight(new AreaCorner(500, -50)).bottomRight(new AreaCorner(500, 500)).bottomLeft(new AreaCorner(-50, 500)).build());
+        assertEquals(SubmissionService.Outcome.PREVIEWED,
+            service.submitTemplate(new SubmissionService.TemplateSubmission(areas, upload())).outcome());
+        verify(templates).insertSubmission(argThat(template -> template.getAreas().equals(areas)));
+        assertTrue(Files.exists(downloaded));
     }
 
     private SubmissionService.Result submit(boolean source) {

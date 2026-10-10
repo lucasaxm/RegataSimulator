@@ -85,9 +85,8 @@ public class ImageMagickRenderer implements ImageRenderer {
             if (width <= 0 || height <= 0 || (long) width * height > 40_000_000) {
                 throw new IOException("Image dimensions exceed render limits");
             }
-            for (var corner : List.of(area.getTopLeft(), area.getTopRight(), area.getBottomRight(), area.getBottomLeft())) {
-                if (corner.getX() > width || corner.getY() > height) throw new IOException("Template corner exceeds image dimensions");
-            }
+            MediaValidation.geometry(List.of(new TemplateArea(1, 1, area.getTopLeft(), area.getTopRight(),
+                area.getBottomRight(), area.getBottomLeft(), area.isBackground())), new MediaValidation.Dimensions(width, height));
             pb = new ProcessBuilder(magickPath, sourceFile.toString(), "-resize", width + "x" + height + "!", resizedSource.toString());
             execute(pb, templateDir);
             String coordinates = String.format("0,0 %d,%d 0,%d %d,%d %d,0 %d,%d %d,%d %d,%d",

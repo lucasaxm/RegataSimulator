@@ -78,23 +78,62 @@ public final class MediaValidation {
                 throw new IOException("Area indices must be ordered, unique and contiguous");
             }
             AreaCorner[] corners = {area.getTopLeft(), area.getTopRight(), area.getBottomRight(), area.getBottomLeft()};
-            long direction = 0;
-            for (int j = 0; j < 4; j++) {
-                AreaCorner a = corners[j];
-                AreaCorner b = corners[(j + 1) % 4];
-                AreaCorner c = corners[(j + 2) % 4];
-                if (a == null || b == null || c == null || a.getX() < 0 || a.getY() < 0
-                    || a.getX() > 10_000 || a.getY() > 10_000
-                    || (dimensions != null && (a.getX() > dimensions.width() || a.getY() > dimensions.height()))) {
-                    throw new IOException("Template corner is absent or out of bounds");
-                }
-                long cross = ((long) b.getX() - a.getX()) * (c.getY() - b.getY())
-                    - ((long) b.getY() - a.getY()) * (c.getX() - b.getX());
-                if (cross == 0 || (direction != 0 && Long.signum(cross) != direction)) {
-                    throw new IOException("Template area must be a nondegenerate convex quadrilateral");
-                }
-                direction = Long.signum(cross);
+            validateCorners(corners);
+            if (dimensions != null && !overlapsCanvas(corners, dimensions)) {
+                throw new IOException("Template area must overlap the image with positive area");
             }
         }
+    }
+
+    private static void validateCorners(AreaCorner[] corners) throws IOException {
+        for (AreaCorner corner : corners) {
+            if (corner == null || Math.abs((long) corner.getX()) > 10_000 || Math.abs((long) corner.getY()) > 10_000) {
+                throw new IOException("Template corner is absent or exceeds coordinate limits");
+            }
+        }
+        long direction = 0;
+        for (int j = 0; j < corners.length; j++) {
+            AreaCorner a = corners[j];
+            AreaCorner b = corners[(j + 1) % corners.length];
+            AreaCorner c = corners[(j + 2) % corners.length];
+            long cross = ((long) b.getX() - a.getX()) * (c.getY() - b.getY())
+                - ((long) b.getY() - a.getY()) * (c.getX() - b.getX());
+            if (cross == 0 || (direction != 0 && Long.signum(cross) != direction)) {
+                throw new IOException("Template area must be a nondegenerate convex quadrilateral");
+            }
+            direction = Long.signum(cross);
+        }
+    }
+
+    private static boolean overlapsCanvas(AreaCorner[] corners, Dimensions dimensions) {
+        if (dimensions.width() <= 0 || dimensions.height() <= 0) return false;
+        AreaCorner[] canvas = {new AreaCorner(0, 0), new AreaCorner(dimensions.width(), 0),
+            new AreaCorner(dimensions.width(), dimensions.height()), new AreaCorner(0, dimensions.height())};
+        if (separated(corners, canvas, 1, 0) || separated(corners, canvas, 0, 1)) return false;
+        // Separating-axis theorem for two convex polygons; touching alone is not visible area.
+        for (int i = 0; i < corners.length; i++) {
+            AreaCorner a = corners[i];
+            AreaCorner b = corners[(i + 1) % corners.length];
+            if (separated(corners, canvas, (long) a.getY() - b.getY(), (long) b.getX() - a.getX())) return false;
+        }
+        return true;
+    }
+
+    private static boolean separated(AreaCorner[] polygon, AreaCorner[] canvas, long x, long y) {
+        long polygonMin = Long.MAX_VALUE;
+        long polygonMax = Long.MIN_VALUE;
+        long canvasMin = Long.MAX_VALUE;
+        long canvasMax = Long.MIN_VALUE;
+        for (AreaCorner corner : polygon) {
+            long projection = x * corner.getX() + y * corner.getY();
+            polygonMin = Math.min(polygonMin, projection);
+            polygonMax = Math.max(polygonMax, projection);
+        }
+        for (AreaCorner corner : canvas) {
+            long projection = x * corner.getX() + y * corner.getY();
+            canvasMin = Math.min(canvasMin, projection);
+            canvasMax = Math.max(canvasMax, projection);
+        }
+        return polygonMax <= canvasMin || canvasMax <= polygonMin;
     }
 }

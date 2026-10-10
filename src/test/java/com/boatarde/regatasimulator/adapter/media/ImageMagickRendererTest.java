@@ -92,6 +92,31 @@ class ImageMagickRendererTest {
         }
     }
 
+    @Test
+    void partiallyOffCanvasAreaPreservesPerspectiveCoordinates() throws Exception {
+        FakeRenderer renderer = new FakeRenderer();
+        var area = new TemplateArea(1, 1, new AreaCorner(-50, -40), new AreaCorner(450, -40),
+            new AreaCorner(450, 340), new AreaCorner(-50, 340), false);
+        try (var image = renderer.render(request(List.of(area)))) {
+            assertThat(image.file()).exists();
+            assertThat(renderer.commands).anySatisfy(command -> {
+                assertThat(command).contains("Perspective");
+                assertThat(command.get(command.indexOf("Perspective") + 1)).contains("-50,-40", "450,340");
+            });
+        }
+    }
+
+    @Test
+    void whollyOffCanvasAreaFailsBeforeResizeAndCleansScratch() throws IOException {
+        FakeRenderer renderer = new FakeRenderer();
+        var area = new TemplateArea(1, 1, new AreaCorner(400, 0), new AreaCorner(450, 0),
+            new AreaCorner(450, 300), new AreaCorner(400, 300), false);
+        assertThrows(ApplicationFailure.class, () -> renderer.render(request(List.of(area))));
+        assertThat(renderer.commands).hasSize(1);
+        assertThat(renderer.commands.getFirst()).contains("identify").doesNotContain("-resize");
+        assertThat(renderer.jobs).allSatisfy(path -> assertThat(path).doesNotExist());
+    }
+
     private ImageRenderer.Request request(List<TemplateArea> areas) throws IOException {
         return new ImageRenderer.Request(Files.writeString(directory.resolve("template with spaces.png"), "fixture"), areas,
             List.of(Files.writeString(directory.resolve("source one.png"), "fixture"),

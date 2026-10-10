@@ -53,7 +53,8 @@ class MediaValidationTest {
     @ValueSource(strings = {
         "0,1,0,0,20,0,20,20,0,20,1", "2,1,0,0,20,0,20,20,0,20,1",
         "1,0,0,0,20,0,20,20,0,20,1", "1,2,0,0,20,0,20,20,0,20,1",
-        "1,1,-1,0,20,0,20,20,0,20,1", "1,1,0,0,0,0,20,20,0,20,1",
+        "1,1,-10001,0,20,0,20,20,0,20,1", "1,1,0,0,0,0,20,20,0,20,1",
+        "1,1,-2147483648,0,20,0,20,20,0,20,1", "1,1,0,0,10001,0,10001,20,0,20,1",
         "1,1,0,0,20,20,20,0,0,20,1", "1,1,0,0,20,0,20,20,0,20,2"
     })
     void rejectsInvalidSemanticGeometry(String row) {
@@ -61,14 +62,51 @@ class MediaValidationTest {
     }
 
     @Test
-    void rejectsOutOfImageBoundsAndAreaLimitButAllowsSharedContiguousSlots() throws IOException {
+    void allowsPartialCanvasOverlapButRejectsAreaLimitAndAllowsSharedContiguousSlots() throws IOException {
         String row = "1,1,0,0,20,0,20,20,0,20,1";
         var areas = JsonDBUtils.parseTemplateCsv(HEADER + row);
-        assertThatThrownBy(() -> MediaValidation.geometry(areas, new MediaValidation.Dimensions(10, 10)))
-            .isInstanceOf(IOException.class);
+        assertThatCode(() -> MediaValidation.geometry(areas, new MediaValidation.Dimensions(10, 10)))
+            .doesNotThrowAnyException();
         assertThatThrownBy(() -> JsonDBUtils.parseTemplateCsv(HEADER + (row + "\n").repeat(129)))
             .isInstanceOf(IOException.class).hasMessageContaining("Too many");
         assertThat(JsonDBUtils.parseTemplateCsv(HEADER + row + "\n2,1,20,0,40,0,40,20,20,20,0"))
             .hasSize(2);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "1,1,-5,-5,5,-5,5,5,-5,5,1",
+        "1,1,-5,-5,15,-5,15,15,-5,15,1",
+        "1,1,-5,4,15,4,15,6,-5,6,1",
+        "1,1,-5,5,5,15,15,5,5,-5,1",
+        "1,1,9,9,20,9,20,20,9,20,1"
+    })
+    void acceptsVisibleOffCanvasPolygonsInEitherWinding(String row) throws IOException {
+        var areas = JsonDBUtils.parseTemplateCsv(HEADER + row);
+        assertThatCode(() -> MediaValidation.geometry(areas, new MediaValidation.Dimensions(10, 10)))
+            .doesNotThrowAnyException();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "1,1,-20,0,-10,0,-10,10,-20,10,1",
+        "1,1,10,0,20,0,20,10,10,10,1",
+        "1,1,10,10,20,10,20,20,10,20,1",
+        "1,1,0,-20,10,-20,10,-10,0,-10,1",
+        "1,1,0,10,10,10,10,20,0,20,1",
+        "1,1,8,14,14,8,18,12,12,18,1"
+    })
+    void rejectsInvisiblePolygonsIncludingTouchingAndDiagonalSeparation(String row) throws IOException {
+        var areas = JsonDBUtils.parseTemplateCsv(HEADER + row);
+        assertThatThrownBy(() -> MediaValidation.geometry(areas, new MediaValidation.Dimensions(10, 10)))
+            .isInstanceOf(IOException.class).hasMessageContaining("positive area");
+    }
+
+    @Test
+    void oneInvisibleAreaRejectsAnOtherwiseVisibleMultiAreaTemplate() throws IOException {
+        var areas = JsonDBUtils.parseTemplateCsv(HEADER
+            + "1,1,0,0,5,0,5,5,0,5,1\n2,1,20,20,30,20,30,30,20,30,1");
+        assertThatThrownBy(() -> MediaValidation.geometry(areas, new MediaValidation.Dimensions(10, 10)))
+            .isInstanceOf(IOException.class).hasMessageContaining("positive area");
     }
 }
