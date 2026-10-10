@@ -17,6 +17,9 @@ public interface SourceRepository {
     }
 
     List<Source> find(Criteria criteria);
+    default com.boatarde.regatasimulator.models.GalleryResponse<Source> page(Criteria criteria, int page, int perPage) {
+        return RepositoryPages.of(find(criteria), page, perPage);
+    }
     Optional<Source> findById(UUID id);
     void insertSubmission(Source source);
     void insertImported(List<Source> sources);

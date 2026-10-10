@@ -13,6 +13,9 @@ public interface TemplateRepository {
     }
 
     List<Template> find(Criteria criteria);
+    default com.boatarde.regatasimulator.models.GalleryResponse<Template> page(Criteria criteria, int page, int perPage) {
+        return RepositoryPages.of(find(criteria), page, perPage);
+    }
     Optional<Template> findById(UUID id);
     void insertSubmission(Template template);
     boolean remove(Template template);
