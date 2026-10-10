@@ -48,3 +48,13 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
+tasks.register('offlineStore', JavaExec) {
+    description = 'Explicit offline migration/export; never starts the Spring application'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.boatarde.regatasimulator.migration.OfflineStoreCli'
+}
+
+springBoot {
+    mainClass = 'com.boatarde.regatasimulator.RegataSimulatorApplication'
+}

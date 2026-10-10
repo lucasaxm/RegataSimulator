@@ -40,4 +40,24 @@ class SqliteStoreTest {
         assertThrows(IllegalArgumentException.class, () -> new SqliteStore(temp, 100));
         assertThrows(IllegalArgumentException.class, () -> new SqliteStore(Path.of("candidate.db"), 100));
     }
+
+    @Test void upgradesFirstSchemaVersionWithoutLosingExistingRows() throws Exception {
+        Path file=temp.resolve("earlier.db");
+        try(var connection=java.sql.DriverManager.getConnection("jdbc:sqlite:"+file);
+            var resources=new liquibase.resource.ClassLoaderResourceAccessor()) {
+            var database=new liquibase.database.core.SQLiteDatabase();
+            database.setConnection(new liquibase.database.jvm.JdbcConnection(connection));
+            try(var migration=new liquibase.Liquibase("db/changelog/sqlite.sql",resources,database)) {
+                migration.update(1,new liquibase.Contexts(),new liquibase.LabelExpression());
+            }
+        }
+        try(var connection=java.sql.DriverManager.getConnection("jdbc:sqlite:"+file);var statement=connection.prepareStatement("INSERT INTO sources(id,weight,status) VALUES(?,7,'REVIEW')")) {
+            statement.setString(1,"00000000-0000-0000-0000-000000000001"); statement.executeUpdate();
+        }
+        try(var store=new SqliteStore(file,100)) {
+            assertEquals(2,store.jdbc().queryForObject("SELECT count(*) FROM DATABASECHANGELOG",Integer.class));
+            assertEquals(7,store.jdbc().queryForObject("SELECT weight FROM sources",Integer.class));
+            assertEquals(1,store.jdbc().queryForObject("SELECT count(*) FROM sqlite_master WHERE name='sources_gallery'",Integer.class));
+        }
+    }
 }

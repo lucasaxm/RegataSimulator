@@ -24,6 +24,10 @@ public final class SqliteStore implements AutoCloseable {
     private final TransactionTemplate transactions;
 
     public SqliteStore(Path file, int busyTimeoutMillis) {
+        this(file,busyTimeoutMillis,false);
+    }
+
+    public SqliteStore(Path file, int busyTimeoutMillis, boolean readOnly) {
         if (!file.isAbsolute() || Files.isDirectory(file) || file.toString().contains("?")
             || file.toString().contains("#") || !Files.isDirectory(file.getParent())
             || busyTimeoutMillis < 1 || busyTimeoutMillis > 10_000) {
@@ -32,13 +36,20 @@ public final class SqliteStore implements AutoCloseable {
         SQLiteConfig sqlite = new SQLiteConfig();
         sqlite.enforceForeignKeys(true);
         sqlite.setBusyTimeout(busyTimeoutMillis);
-        sqlite.setSynchronous(SQLiteConfig.SynchronousMode.FULL);
-        sqlite.setJournalMode(SQLiteConfig.JournalMode.WAL);
-        sqlite.setTransactionMode(SQLiteConfig.TransactionMode.IMMEDIATE);
+        if (readOnly) {
+            if (!Files.isRegularFile(file)) throw new IllegalArgumentException("Existing SQLite file required");
+            sqlite.setReadOnly(true);
+            sqlite.setTransactionMode(SQLiteConfig.TransactionMode.DEFERRED);
+        } else {
+            sqlite.setSynchronous(SQLiteConfig.SynchronousMode.FULL);
+            sqlite.setJournalMode(SQLiteConfig.JournalMode.WAL);
+            sqlite.setTransactionMode(SQLiteConfig.TransactionMode.IMMEDIATE);
+        }
         SQLiteDataSource nativeSource = new SQLiteDataSource(sqlite);
         nativeSource.setUrl("jdbc:sqlite:" + file);
         HikariConfig pool = new HikariConfig();
         pool.setDataSource(nativeSource);
+        pool.setReadOnly(readOnly);
         pool.setMaximumPoolSize(2);
         pool.setMinimumIdle(0);
         pool.setConnectionTimeout(5_000);
@@ -51,7 +62,11 @@ public final class SqliteStore implements AutoCloseable {
             if (!"wal".equalsIgnoreCase(jdbc.queryForObject("PRAGMA journal_mode", String.class))) {
                 throw new IllegalStateException("WAL unavailable");
             }
-            migrate();
+            if (readOnly) {
+                if (jdbc.queryForObject("SELECT count(*) FROM DATABASECHANGELOG",Integer.class) != 2) {
+                    throw new IllegalStateException("Unsupported schema for offline export");
+                }
+            } else migrate();
         } catch (RuntimeException e) {
             dataSource.close();
             throw e;
