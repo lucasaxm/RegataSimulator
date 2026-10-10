@@ -8,7 +8,7 @@ import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.util.TelegramFileDownloader;
 import com.opencsv.CSVReaderBuilder;
-import io.jsondb.JsonDBTemplate;
+import com.boatarde.regatasimulator.repository.SourceRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -31,16 +31,16 @@ import java.util.UUID;
 @Slf4j
 public class SourceImporterService {
 
-    private final JsonDBTemplate jsonDBTemplate;
+    private final SourceRepository repository;
     private final TelegramFileDownloader fileDownloader;
     private final String sourcesPathString;
     private final int initialWeight;
 
-    public SourceImporterService(JsonDBTemplate jsonDBTemplate,
+    public SourceImporterService(SourceRepository repository,
                                  TelegramFileDownloader fileDownloader,
                                  @Value("${regata-simulator.sources.path}") String sourcesPathString,
                                  @Value("${regata-simulator.sources.initial-weight}") int initialWeight) {
-        this.jsonDBTemplate = jsonDBTemplate;
+        this.repository = repository;
         this.fileDownloader = fileDownloader;
         this.sourcesPathString = sourcesPathString;
         this.initialWeight = initialWeight;
@@ -65,7 +65,7 @@ public class SourceImporterService {
         List<RowResult> results = new ArrayList<>();
         List<Source> created = new ArrayList<>();
         Set<String> names = new HashSet<>();
-        jsonDBTemplate.<Source>findAll(Source.class).stream().map(Source::getDescription)
+        repository.find(SourceRepository.Criteria.all()).stream().map(Source::getDescription)
             .filter(java.util.Objects::nonNull).map(SourceImporterService::normalize).forEach(names::add);
         for (CsvRow row : records) {
             results.add(prepareRow(row, names, created));
@@ -106,13 +106,13 @@ public class SourceImporterService {
             return true;
         }
         try {
-            jsonDBTemplate.insert(created, Source.class);
+            repository.insertImported(created);
             return true;
         } catch (RuntimeException e) {
             // Compensate metadata before files; retain media if removal cannot be confirmed.
             for (Source source : created) {
-                Source stored = jsonDBTemplate.findById(source.getId(), Source.class);
-                if (stored != null && jsonDBTemplate.remove(stored, Source.class) == null) {
+                Source stored = repository.findById(source.getId()).orElse(null);
+                if (stored != null && !repository.remove(stored)) {
                     throw new ApplicationFailure(ApplicationFailure.Kind.EXECUTION,
                         "Import compensation failed; retained media requires reconciliation", e);
                 }

@@ -1,18 +1,16 @@
 package com.boatarde.regatasimulator.controller;
 
-import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.dto.SearchCriteria;
 import com.boatarde.regatasimulator.dto.GalleryDtos;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Max;
-import com.boatarde.regatasimulator.flows.WorkflowAction;
 import com.boatarde.regatasimulator.flows.ApplicationFailure;
 import com.boatarde.regatasimulator.models.GalleryResponse;
 import com.boatarde.regatasimulator.models.ReviewSourceBody;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;
-import com.boatarde.regatasimulator.service.RouterService;
+import com.boatarde.regatasimulator.service.ModerationService;
 import com.boatarde.regatasimulator.service.SourceImporterService;
 import com.boatarde.regatasimulator.service.SourceService;
 import lombok.extern.slf4j.Slf4j;
@@ -27,8 +25,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.telegram.telegrambots.meta.api.objects.Message;
-import org.telegram.telegrambots.meta.api.objects.Update;
 
 import java.util.List;
 import java.util.UUID;
@@ -40,15 +36,13 @@ public class SourceController {
 
     private final SourceService sourceService;
     private final SourceImporterService sourceImporterService;
-    private final RegataSimulatorBot bot;
-    private final RouterService routerService;
+    private final ModerationService moderation;
 
     public SourceController(SourceService sourceService, SourceImporterService sourceImporterService,
-                            RegataSimulatorBot bot, RouterService routerService) {
+                            ModerationService moderation) {
         this.sourceService = sourceService;
         this.sourceImporterService = sourceImporterService;
-        this.bot = bot;
-        this.routerService = routerService;
+        this.moderation = moderation;
     }
 
     @GetMapping
@@ -82,45 +76,13 @@ public class SourceController {
 
     @PostMapping("/review")
     public ResponseEntity<Void> reviewSource(@Valid @RequestBody ReviewSourceBody reviewSourceBody) {
-        Source source = getSource(reviewSourceBody.getSourceId());
-
-        if (source.getStatus() != Status.REVIEW) {
-            throw new ApplicationFailure(ApplicationFailure.Kind.CONFLICT, "Source no longer in review");
-        }
-
-        // Build an Update object from the source's message for workflow steps
-        Update update = new Update();
-        update.setMessage(source.getMessage());
-        boolean notificationFailed = false;
-
-        if (reviewSourceBody.isApproved()) {
-            sourceService.approveSource(source);
-            if (source.getMessage() != null) {
-                notificationFailed = !notifyDecision(update, WorkflowAction.SEND_SOURCE_APPROVED_MESSAGE_STEP);
-            }
-        } else {
-            sourceService.rejectSource(source);
-
-            if (source.getMessage() != null) {
-                Message reasonMessage = new Message();
-                reasonMessage.setText(reviewSourceBody.getReason());
-                update.setChannelPost(reasonMessage);
-                notificationFailed = !notifyDecision(update, WorkflowAction.SEND_SOURCE_REJECTED_MESSAGE);
-            }
-
-        }
-        return notificationFailed ? ResponseEntity.noContent().header("X-Notification-Status", "failed").build()
+        var result = moderation.decide(new ModerationService.Decision(ModerationService.ItemType.SOURCE,
+            reviewSourceBody.getSourceId(), reviewSourceBody.isApproved() ? Status.APPROVED : Status.REJECTED,
+            reviewSourceBody.getReason(), new ModerationService.Actor(
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName())));
+        return result.notification() == ModerationService.Notification.FAILED
+            ? ResponseEntity.noContent().header("X-Notification-Status", "failed").build()
             : ResponseEntity.noContent().build();
-    }
-
-    private boolean notifyDecision(Update update, WorkflowAction action) {
-        try {
-            routerService.startFlow(update, bot, action);
-            return true;
-        } catch (RuntimeException e) {
-            log.warn("Source decision applied, but notification failed");
-            return false;
-        }
     }
 
     @PostMapping("/import")

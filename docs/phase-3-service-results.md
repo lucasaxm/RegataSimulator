@@ -23,8 +23,6 @@ Slice 1 validation: focused repository/service/workflow/callback/context tests p
 - Temporary legacy backup overloads and workflow tests remain until all workflows migrate. The runner/actions are still present; **Phase 3 remains incomplete**.
 - Validation: focused direct/backup/router/context suites passed after correcting command fixtures; clean build **754 cases / 35 suites**, zero failures/errors/skips; Node **5/5**; whitespace check passed. XML totals were independently checked after rejecting an incorrect zero-count aggregation. Timezone diagnostic fixed; workspace-import warnings remain.
 
-## Remaining Phase 3 work (after slice 2)
-
 ## Slice 3 — Shared rendering and explicit meme service
 
 - `MediaStorage`/`FileMediaStorage` and `ImageRenderer`/`ImageMagickRenderer` provide reusable boundaries. The shared renderer retains isolated owner-only scratch, argument-array process execution, memory/map/disk/thread/time limits, bounded process/output handling, geometry/dimension/output validation, interruption preservation and intermediate cleanup.
@@ -34,6 +32,15 @@ Slice 1 validation: focused repository/service/workflow/callback/context tests p
 - Real temporary repository/media tests cover minimal pools/history, all birthday fallback dates, explicit previews with no progress message, original origin preservation, conditional binding versus concurrent moderation, failure cleanup and publication-only weights/history. Existing process/render/concurrent-job regressions exercise the shared renderer through the temporary step seam.
 - Focused suites, clean build **771 cases / 36 suites** (zero failures/errors/skips) and separate Node **5/5** passed after correcting Mockito restubbing in failure fixtures; no actual Telegram/ImageMagick or runtime dataset was used. Counts were independently read from all XML suite headers.
 
-## Remaining Phase 3 work (after slice 3)
+## Slice 4 — Typed submissions and HTTP moderation
 
-Explicit submission/moderation services; import/media boundary consumption throughout existing services; thin Telegram parsing/router and HTTP adapters; central application failures outside `flows`; remove production runner/actions/bag/registration/steps and adapt tests to direct service contracts. Phases 4–5 and durable recovery/cross-adapter transactions remain pending. **Phase 3 remains incomplete.**
+- `SubmissionService` accepts typed source/template submissions, upload identity/author and an explicit origin projection. Telegram adapter parsing supplies descriptions/areas rather than passing `Update` into business logic. Download, decoded image/geometry validation, author-before-entity persistence, preview delivery and uncommitted-media cleanup are explicit method calls.
+- Original full nullable Telegram Message remains unchanged at the JsonDB persistence boundary; destination fields are projected separately. Successful persistence retains uploaded media if later preview fails. Cleanup avoids deleting known persisted submission media; uncertain storage failures still require reconciliation rather than a claimed transaction.
+- Production Telegram uploads now call this service directly. Old upload steps remain temporarily for regression migration; callback dispatch still uses the runner.
+- `ModerationService` accepts typed item/status/reason/administrator identity. HTTP controllers only map existing body fields to the decision and result header; no synthetic Update/channel-post is constructed. Review transition occurs before notification, null origins skip notifications, applied status survives transport failure and repeated decisions remain 409.
+- `SourceImporterService` now uses `SourceRepository` for names/batch persistence/compensation. Existing ordered reports, byte bounds and metadata-before-media compensation remain covered with real temporary JsonDB.
+- Existing direct moderation tests now exercise the real service through a fake gateway; full-chain API tests retain real auth/CSRF and real moderation with mocked persistence/transport. Additional temporary-repository tests cover complete submissions, invalid-image cleanup and committed decision/notification failure. Focused suites and clean build passed: **777 cases / 36 suites**, zero failures/errors/skips; Node **5/5** and whitespace check passed.
+
+## Remaining Phase 3 work (after slice 4)
+
+Typed callback service and final thin Telegram router; media boundary consumption throughout existing gallery/import services; distinguish administrator/scheduled publish origins; central application failures outside `flows`; remove production runner/actions/bag/registration/steps and adapt remaining tests to direct service contracts. Phases 4–5 and durable recovery/cross-adapter transactions remain pending. **Phase 3 remains incomplete.**

@@ -15,6 +15,8 @@ import com.boatarde.regatasimulator.service.RouterService;
 import com.boatarde.regatasimulator.service.SourceImporterService;
 import com.boatarde.regatasimulator.service.SourceService;
 import com.boatarde.regatasimulator.service.TemplateService;
+import com.boatarde.regatasimulator.service.ModerationService;
+import com.boatarde.regatasimulator.application.TelegramGateway;
 import com.opencsv.exceptions.CsvException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -59,7 +61,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest({SourceController.class, TemplateController.class})
 @ContextConfiguration(classes = {SourceController.class, TemplateController.class, ApiExceptionHandler.class,
-    SecurityConfig.class, CorsConfig.class, SessionConfig.class})
+    SecurityConfig.class, CorsConfig.class, SessionConfig.class, ModerationService.class})
 @ActiveProfiles("test")
 class ApiControllerTest {
     @Autowired private MockMvc mvc;
@@ -68,6 +70,7 @@ class ApiControllerTest {
     @MockBean private SourceImporterService importer;
     @MockBean private RouterService router;
     @MockBean private RegataSimulatorBot bot;
+    @MockBean private TelegramGateway telegram;
     @TempDir private Path storage;
 
     @ParameterizedTest

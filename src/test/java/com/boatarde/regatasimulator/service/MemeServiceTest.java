@@ -4,6 +4,7 @@ import com.boatarde.regatasimulator.adapter.media.FileMediaStorage;
 import com.boatarde.regatasimulator.application.ImageRenderer;
 import com.boatarde.regatasimulator.application.MediaStorage;
 import com.boatarde.regatasimulator.application.TelegramGateway;
+import com.boatarde.regatasimulator.application.SubmissionOrigin;
 import com.boatarde.regatasimulator.factory.ImageTestFactory;
 import com.boatarde.regatasimulator.flows.ApplicationFailure;
 import com.boatarde.regatasimulator.models.*;
@@ -46,7 +47,7 @@ class MemeServiceTest {
     @BeforeEach
     void setUp() throws Exception {
         JsonDBTemplate db = new JsonDBTemplate(Files.createDirectories(root.resolve("db")).toString(), "com.boatarde.regatasimulator.models");
-        db.createCollection(Source.class); db.createCollection(Template.class); db.createCollection(Meme.class);
+        db.createCollection(Source.class); db.createCollection(Template.class); db.createCollection(Meme.class); db.createCollection(Author.class);
         sources = new JsonDbSourceRepository(db); templates = new JsonDbTemplateRepository(db); history = new JsonDbMemeHistoryRepository(db);
         media = new FileMediaStorage(root.resolve("sources").toString(), root.resolve("templates").toString());
         telegram = mock(TelegramGateway.class); renderer = mock(ImageRenderer.class);
@@ -171,6 +172,71 @@ class MemeServiceTest {
     private MemeService service(String instant) {
         return new MemeService(sources, templates, history, media, renderer, telegram,
             Clock.fixed(Instant.parse(instant), ZoneOffset.UTC));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void typedSubmissionPersistsAuthorOriginalUploadAndBoundPreview(boolean sourceType) throws Exception {
+        if (sourceType) template(Status.APPROVED, 1); else source(Status.APPROVED);
+        when(telegram.download(eq("fixture-file"), any(), anyString())).thenAnswer(call ->
+            ImageTestFactory.image(((Path) call.getArgument(1)).resolve((String) call.getArgument(2))));
+        when(telegram.sendText(any())).thenReturn(new TelegramGateway.Delivery(123, 222, origin(222)));
+        var submitter = Author.builder().id(42L).firstName("Fixture author").build();
+        var upload = new SubmissionService.Upload("fixture-file", "upload.png", submitter,
+            new SubmissionOrigin(destination, origin(111)));
+        SubmissionService submissions = new SubmissionService(sources, templates, new JsonDbAuthorRepository(
+            new JsonDBTemplate(root.resolve("db").toString(), "com.boatarde.regatasimulator.models")),
+            media, telegram, service, 10, 10);
+        SubmissionService.Result result = sourceType ? submissions.submitSource(new SubmissionService.SourceSubmission("submitted", upload))
+            : submissions.submitTemplate(new SubmissionService.TemplateSubmission(List.of(TemplateArea.builder().index(1).source(1)
+                .topLeft(new AreaCorner(0, 0)).topRight(new AreaCorner(1, 0)).bottomRight(new AreaCorner(1, 1))
+                .bottomLeft(new AreaCorner(0, 1)).build()), upload));
+        assertEquals(SubmissionService.Outcome.PREVIEWED, result.outcome());
+        CommonEntity stored = sourceType ? sources.findById(result.id()).orElseThrow() : templates.findById(result.id()).orElseThrow();
+        assertEquals(Status.REVIEW, stored.getStatus()); assertEquals(111, stored.getMessage().getMessageId());
+        assertEquals(42L, stored.getMessage().getFrom().getId()); assertEquals(333, stored.getPreviewMessageId());
+        assertTrue(history.newestFirst().isEmpty()); assertFalse(Files.exists(job));
+        assertTrue(Files.exists(media.image(sourceType ? MediaStorage.Kind.SOURCE : MediaStorage.Kind.TEMPLATE, result.id())));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void invalidUploadedImageIsCleanedBeforeAnyMetadataOrPreview(boolean sourceType) throws Exception {
+        when(telegram.download(eq("fixture-file"), any(), anyString())).thenAnswer(call ->
+            Files.writeString(((Path) call.getArgument(1)).resolve((String) call.getArgument(2)), "not an image"));
+        JsonDBTemplate db = new JsonDBTemplate(root.resolve("db").toString(), "com.boatarde.regatasimulator.models");
+        var submissions = new SubmissionService(sources, templates, new JsonDbAuthorRepository(db), media, telegram, service, 10, 10);
+        var upload = new SubmissionService.Upload("fixture-file", "upload.png", Author.builder().id(42L).build(),
+            new SubmissionOrigin(destination, origin(111)));
+        assertThrows(ApplicationFailure.class, () -> {
+            if (sourceType) submissions.submitSource(new SubmissionService.SourceSubmission("submitted", upload));
+            else submissions.submitTemplate(new SubmissionService.TemplateSubmission(List.of(TemplateArea.builder().index(1).source(1)
+                .topLeft(new AreaCorner(0, 0)).topRight(new AreaCorner(1, 0)).bottomRight(new AreaCorner(1, 1))
+                .bottomLeft(new AreaCorner(0, 1)).build()), upload));
+        });
+        assertTrue(db.findAll(Author.class).isEmpty());
+        assertTrue(sources.find(com.boatarde.regatasimulator.repository.SourceRepository.Criteria.all()).isEmpty());
+        assertTrue(templates.find(com.boatarde.regatasimulator.repository.TemplateRepository.Criteria.all()).isEmpty());
+        try (var files = Files.list(root.resolve(sourceType ? "sources" : "templates"))) { assertEquals(0, files.count()); }
+        verifyNoInteractions(renderer);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void realModerationCommitsBeforeNotificationAndPreservesDecisionOnFailure(boolean approved) throws Exception {
+        Source source = source(Status.REVIEW);
+        SourceService sourceService = new SourceService(sources);
+        TemplateService templateService = new TemplateService(root.resolve("templates").toString(), templates);
+        var moderation = new ModerationService(sourceService, templateService, telegram);
+        doAnswer(call -> {
+            assertEquals(approved ? Status.APPROVED : Status.REJECTED, sources.findById(source.getId()).orElseThrow().getStatus());
+            throw new IllegalStateException("controlled notification failure");
+        }).when(telegram).sendText(any());
+        var decision = new ModerationService.Decision(ModerationService.ItemType.SOURCE, source.getId(),
+            approved ? Status.APPROVED : Status.REJECTED, "reason", new ModerationService.Actor("test-admin"));
+        assertEquals(ModerationService.Notification.FAILED, moderation.decide(decision).notification());
+        assertThrows(ApplicationFailure.class, () -> moderation.decide(decision));
+        assertEquals(10, sources.findById(source.getId()).orElseThrow().getWeight());
     }
 
     private Source source(Status status) throws Exception {

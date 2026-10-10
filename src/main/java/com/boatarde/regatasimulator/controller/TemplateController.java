@@ -1,18 +1,16 @@
 package com.boatarde.regatasimulator.controller;
 
-import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.dto.GalleryDtos;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Max;
-import com.boatarde.regatasimulator.flows.WorkflowAction;
 import com.boatarde.regatasimulator.flows.ApplicationFailure;
 import lombok.extern.slf4j.Slf4j;
 import com.boatarde.regatasimulator.models.GalleryResponse;
 import com.boatarde.regatasimulator.models.ReviewTemplateBody;
 import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.models.Template;
-import com.boatarde.regatasimulator.service.RouterService;
+import com.boatarde.regatasimulator.service.ModerationService;
 import com.boatarde.regatasimulator.service.TemplateService;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
@@ -25,8 +23,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.telegram.telegrambots.meta.api.objects.Message;
-import org.telegram.telegrambots.meta.api.objects.Update;
 
 import java.util.UUID;
 
@@ -36,13 +32,11 @@ import java.util.UUID;
 public class TemplateController {
 
     private final TemplateService templateService;
-    private final RegataSimulatorBot bot;
-    private final RouterService routerService;
+    private final ModerationService moderation;
 
-    public TemplateController(TemplateService templateService, RegataSimulatorBot bot, RouterService routerService) {
+    public TemplateController(TemplateService templateService, ModerationService moderation) {
         this.templateService = templateService;
-        this.bot = bot;
-        this.routerService = routerService;
+        this.moderation = moderation;
     }
 
     @GetMapping
@@ -76,42 +70,13 @@ public class TemplateController {
 
     @PostMapping("/review")
     public ResponseEntity<Void> reviewTemplate(@Valid @RequestBody ReviewTemplateBody reviewTemplateBody) {
-        Template template = getTemplate(reviewTemplateBody.getTemplateId());
-        if (template.getStatus() != Status.REVIEW) {
-            throw new ApplicationFailure(ApplicationFailure.Kind.CONFLICT, "Template no longer in review");
-        }
-
-        Update update = new Update();
-        update.setMessage(template.getMessage());
-        boolean notificationFailed = false;
-
-        if (reviewTemplateBody.isApproved()) {
-            templateService.approveTemplate(template);
-            if (template.getMessage() != null) {
-                notificationFailed = !notifyDecision(update, WorkflowAction.SEND_TEMPLATE_APPROVED_MESSAGE_STEP);
-            }
-        } else {
-            templateService.rejectTemplate(template);
-
-            if (template.getMessage() != null) {
-                Message reasonMessage = new Message();
-                reasonMessage.setText(reviewTemplateBody.getReason());
-                update.setChannelPost(reasonMessage);
-                notificationFailed = !notifyDecision(update, WorkflowAction.SEND_TEMPLATE_REJECTED_MESSAGE);
-            }
-        }
-        return notificationFailed ? ResponseEntity.noContent().header("X-Notification-Status", "failed").build()
+        var result = moderation.decide(new ModerationService.Decision(ModerationService.ItemType.TEMPLATE,
+            reviewTemplateBody.getTemplateId(), reviewTemplateBody.isApproved() ? Status.APPROVED : Status.REJECTED,
+            reviewTemplateBody.getReason(), new ModerationService.Actor(
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName())));
+        return result.notification() == ModerationService.Notification.FAILED
+            ? ResponseEntity.noContent().header("X-Notification-Status", "failed").build()
             : ResponseEntity.noContent().build();
-    }
-
-    private boolean notifyDecision(Update update, WorkflowAction action) {
-        try {
-            routerService.startFlow(update, bot, action);
-            return true;
-        } catch (RuntimeException e) {
-            log.warn("Template decision applied, but notification failed");
-            return false;
-        }
     }
 
     @PostMapping("/reset_weights")

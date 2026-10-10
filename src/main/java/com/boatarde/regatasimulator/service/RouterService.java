@@ -34,6 +34,7 @@ public class RouterService {
     private ReportService reports;
     private BackupService backups;
     private MemeService memes;
+    private SubmissionService submissions;
 
     public RouterService(WorkflowManager workflowManager, List<Route> routes) {
         this.workflowManager = workflowManager;
@@ -46,11 +47,17 @@ public class RouterService {
         this.ping = ping; this.reports = reports; this.backups = backups;
     }
 
-    @Autowired
     public RouterService(WorkflowManager workflowManager, List<Route> routes, PingService ping,
                          ReportService reports, BackupService backups, MemeService memes) {
         this(workflowManager, routes, ping, reports, backups);
         this.memes = memes;
+    }
+
+    @Autowired
+    public RouterService(WorkflowManager workflowManager, List<Route> routes, PingService ping,
+                         ReportService reports, BackupService backups, MemeService memes, SubmissionService submissions) {
+        this(workflowManager, routes, ping, reports, backups, memes);
+        this.submissions = submissions;
     }
 
     public void route(Update update, TelegramBot bot) {
@@ -71,6 +78,18 @@ public class RouterService {
             } else if (memes != null && action == WorkflowAction.GET_RANDOM_TEMPLATE) {
                 runDirect(update, bot, () -> memes.publish(new MemeService.Publish(MemeService.Origin.TELEGRAM_COMMAND,
                     destination(update))));
+            } else if (submissions != null && action == WorkflowAction.CREATE_SOURCE) {
+                runDirect(update, bot, () -> submissions.submitSource(new SubmissionService.SourceSubmission(
+                    update.getMessage().getCaption().substring(update.getMessage().getCaption().indexOf(':') + 1), upload(update))));
+            } else if (submissions != null && action == WorkflowAction.CREATE_TEMPLATE) {
+                runDirect(update, bot, () -> {
+                    try {
+                        submissions.submitTemplate(new SubmissionService.TemplateSubmission(
+                            com.boatarde.regatasimulator.util.JsonDBUtils.parseTemplateCsv(update.getMessage().getCaption()), upload(update)));
+                    } catch (java.io.IOException e) {
+                        throw new ApplicationFailure(ApplicationFailure.Kind.INVALID_INPUT, "Invalid template CSV", e);
+                    }
+                });
             } else {
                 startFlow(update, bot, action);
             }
@@ -80,6 +99,15 @@ public class RouterService {
     private TelegramGateway.Destination destination(Update update) {
         var message = update.getMessage();
         return new TelegramGateway.Destination(message.getChatId(), message.getMessageId(), message.getMessageThreadId());
+    }
+
+    private SubmissionService.Upload upload(Update update) {
+        var message = update.getMessage();
+        var author = message.getFrom();
+        return new SubmissionService.Upload(message.getDocument().getFileId(), message.getDocument().getFileName(),
+            com.boatarde.regatasimulator.models.Author.builder().id(author.getId()).firstName(author.getFirstName())
+                .lastName(author.getLastName()).userName(author.getUserName()).build(),
+            com.boatarde.regatasimulator.application.SubmissionOrigin.from(message));
     }
 
     private void runDirect(Update update, TelegramBot bot, Runnable operation) {

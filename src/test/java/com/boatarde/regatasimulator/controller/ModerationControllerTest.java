@@ -1,19 +1,20 @@
 package com.boatarde.regatasimulator.controller;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
-import com.boatarde.regatasimulator.flows.WorkflowAction;
 import com.boatarde.regatasimulator.flows.ApplicationFailure;
-import com.boatarde.regatasimulator.flows.WorkflowManager;
-import com.boatarde.regatasimulator.flows.simulator.SendTemplateRejectedMessageStep;
 import com.boatarde.regatasimulator.models.ReviewSourceBody;
 import com.boatarde.regatasimulator.models.ReviewTemplateBody;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.models.Template;
-import com.boatarde.regatasimulator.service.RouterService;
 import com.boatarde.regatasimulator.service.SourceImporterService;
 import com.boatarde.regatasimulator.service.SourceService;
 import com.boatarde.regatasimulator.service.TemplateService;
+import com.boatarde.regatasimulator.service.ModerationService;
+import com.boatarde.regatasimulator.application.TelegramGateway;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,7 +25,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.telegram.telegrambots.meta.api.objects.Chat;
 import org.telegram.telegrambots.meta.api.objects.Message;
-import org.telegram.telegrambots.meta.api.objects.Update;
 
 import java.util.Arrays;
 import java.util.List;
@@ -59,28 +59,33 @@ class ModerationControllerTest {
     @Mock
     private RegataSimulatorBot bot;
     @Mock
-    private RouterService router;
+    private TelegramGateway router;
 
     private SourceController sources;
     private TemplateController templates;
 
     @BeforeEach
     void setUp() {
-        sources = new SourceController(sourceService, importer, bot, router);
-        templates = new TemplateController(templateService, bot, router);
+        SecurityContextHolder.getContext().setAuthentication(
+            new UsernamePasswordAuthenticationToken("test-admin", "unused", List.of()));
+        ModerationService moderation = new ModerationService(sourceService, templateService, router);
+        sources = new SourceController(sourceService, importer, moderation);
+        templates = new TemplateController(templateService, moderation);
     }
+
+    @AfterEach
+    void clearSecurityContext() { SecurityContextHolder.clearContext(); }
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     void sourceStatusIsCommittedBeforeNotification(boolean approved) {
         Source source = source(origin());
         AtomicReference<Status> persisted = trackSourceCommit(source, approved);
-        WorkflowAction action = sourceAction(approved);
         doAnswer(invocation -> {
             assertEquals(decision(approved), persisted.get());
             assertNotificationUpdate(invocation.getArgument(0), source.getMessage(), approved);
             return null;
-        }).when(router).startFlow(any(Update.class), eq(bot), eq(action));
+        }).when(router).sendText(any(TelegramGateway.Text.class));
 
         assertEquals(204, sources.reviewSource(sourceReview(source.getId(), approved)).getStatusCode().value());
 
@@ -94,12 +99,11 @@ class ModerationControllerTest {
     void templateStatusIsCommittedBeforeNotification(boolean approved) {
         Template template = template(origin());
         AtomicReference<Status> persisted = trackTemplateCommit(template, approved);
-        WorkflowAction action = templateAction(approved);
         doAnswer(invocation -> {
             assertEquals(decision(approved), persisted.get());
             assertNotificationUpdate(invocation.getArgument(0), template.getMessage(), approved);
             return null;
-        }).when(router).startFlow(any(Update.class), eq(bot), eq(action));
+        }).when(router).sendText(any(TelegramGateway.Text.class));
 
         assertEquals(204, templates.reviewTemplate(templateReview(template.getId(), approved)).getStatusCode().value());
 
@@ -114,7 +118,7 @@ class ModerationControllerTest {
         Source source = source(origin());
         AtomicReference<Status> persisted = trackSourceCommit(source, approved);
         IllegalStateException failure = new IllegalStateException("notification failed");
-        doThrow(failure).when(router).startFlow(any(Update.class), eq(bot), eq(sourceAction(approved)));
+        doThrow(failure).when(router).sendText(any(TelegramGateway.Text.class));
 
         ReviewSourceBody review = sourceReview(source.getId(), approved);
         var response = sources.reviewSource(review);
@@ -133,7 +137,7 @@ class ModerationControllerTest {
         Template template = template(origin());
         AtomicReference<Status> persisted = trackTemplateCommit(template, approved);
         IllegalStateException failure = new IllegalStateException("notification failed");
-        doThrow(failure).when(router).startFlow(any(Update.class), eq(bot), eq(templateAction(approved)));
+        doThrow(failure).when(router).sendText(any(TelegramGateway.Text.class));
 
         ReviewTemplateBody review = templateReview(template.getId(), approved);
         var response = templates.reviewTemplate(review);
@@ -211,16 +215,15 @@ class ModerationControllerTest {
     void nullOriginTemplateRejectionCommitsWithoutStartingNotification() {
         Template template = template(null);
         AtomicReference<Status> persisted = trackTemplateCommit(template, false);
-        RouterService realRouter = spy(new RouterService(
-            new WorkflowManager(List.of(new SendTemplateRejectedMessageStep())), List.of()));
-        TemplateController controller = new TemplateController(templateService, bot, realRouter);
+        TemplateController controller = new TemplateController(templateService,
+            new ModerationService(sourceService, templateService, router));
 
         ReviewTemplateBody review = templateReview(template.getId(), false);
         assertEquals(204, controller.reviewTemplate(review).getStatusCode().value());
 
         assertEquals(Status.REJECTED, persisted.get());
         assertEquals(Status.REJECTED, template.getStatus());
-        verifyNoInteractions(realRouter);
+        verifyNoInteractions(router);
         verifyNoInteractions(bot);
     }
 
@@ -309,7 +312,7 @@ class ModerationControllerTest {
         return persisted;
     }
 
-    private void verifySourceOrder(Source source, boolean approved, RouterService targetRouter) {
+    private void verifySourceOrder(Source source, boolean approved, TelegramGateway targetRouter) {
         InOrder order = inOrder(sourceService, targetRouter);
         order.verify(sourceService).getSource(source.getId());
         if (approved) {
@@ -317,10 +320,10 @@ class ModerationControllerTest {
         } else {
             order.verify(sourceService).rejectSource(source);
         }
-        order.verify(targetRouter).startFlow(any(Update.class), eq(bot), eq(sourceAction(approved)));
+        order.verify(targetRouter).sendText(any(TelegramGateway.Text.class));
     }
 
-    private void verifyTemplateOrder(Template template, boolean approved, RouterService targetRouter) {
+    private void verifyTemplateOrder(Template template, boolean approved, TelegramGateway targetRouter) {
         InOrder order = inOrder(templateService, targetRouter);
         order.verify(templateService).getTemplate(template.getId());
         if (approved) {
@@ -328,28 +331,19 @@ class ModerationControllerTest {
         } else {
             order.verify(templateService).rejectTemplate(template);
         }
-        order.verify(targetRouter).startFlow(any(Update.class), eq(bot), eq(templateAction(approved)));
+        order.verify(targetRouter).sendText(any(TelegramGateway.Text.class));
     }
 
-    private void assertNotificationUpdate(Update update, Message message, boolean approved) {
-        assertSame(message, update.getMessage());
+    private void assertNotificationUpdate(TelegramGateway.Text update, Message message, boolean approved) {
+        assertEquals(message.getChatId(), update.destination().chatId());
+        assertEquals(message.getMessageId(), update.destination().replyToMessageId());
         if (!approved) {
-            assertEquals("test rejection reason", update.getChannelPost().getText());
+            assertTrue(update.text().endsWith("Motivo: test rejection reason"));
         }
     }
 
     private Status decision(boolean approved) {
         return approved ? Status.APPROVED : Status.REJECTED;
-    }
-
-    private WorkflowAction sourceAction(boolean approved) {
-        return approved ? WorkflowAction.SEND_SOURCE_APPROVED_MESSAGE_STEP
-            : WorkflowAction.SEND_SOURCE_REJECTED_MESSAGE;
-    }
-
-    private WorkflowAction templateAction(boolean approved) {
-        return approved ? WorkflowAction.SEND_TEMPLATE_APPROVED_MESSAGE_STEP
-            : WorkflowAction.SEND_TEMPLATE_REJECTED_MESSAGE;
     }
 
     private Source source(Message message) {
