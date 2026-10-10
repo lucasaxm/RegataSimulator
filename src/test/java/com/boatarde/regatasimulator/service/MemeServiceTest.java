@@ -6,7 +6,7 @@ import com.boatarde.regatasimulator.application.MediaStorage;
 import com.boatarde.regatasimulator.application.TelegramGateway;
 import com.boatarde.regatasimulator.application.SubmissionOrigin;
 import com.boatarde.regatasimulator.factory.ImageTestFactory;
-import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import com.boatarde.regatasimulator.application.ApplicationFailure;
 import com.boatarde.regatasimulator.models.*;
 import com.boatarde.regatasimulator.repository.jsondb.*;
 import io.jsondb.JsonDBTemplate;

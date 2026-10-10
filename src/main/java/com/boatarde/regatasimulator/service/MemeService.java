@@ -3,7 +3,7 @@ package com.boatarde.regatasimulator.service;
 import com.boatarde.regatasimulator.application.ImageRenderer;
 import com.boatarde.regatasimulator.application.MediaStorage;
 import com.boatarde.regatasimulator.application.TelegramGateway;
-import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import com.boatarde.regatasimulator.application.ApplicationFailure;
 import com.boatarde.regatasimulator.models.*;
 import com.boatarde.regatasimulator.repository.*;
 import com.boatarde.regatasimulator.util.JsonDBUtils;

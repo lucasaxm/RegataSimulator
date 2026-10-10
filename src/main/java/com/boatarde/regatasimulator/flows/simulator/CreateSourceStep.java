@@ -2,7 +2,7 @@ package com.boatarde.regatasimulator.flows.simulator;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
-import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import com.boatarde.regatasimulator.application.ApplicationFailure;
 import com.boatarde.regatasimulator.util.MediaValidation;
 import java.util.Locale;
 import com.boatarde.regatasimulator.flows.WorkflowDataBag;

@@ -1,7 +1,7 @@
 package com.boatarde.regatasimulator.service;
 
 import com.boatarde.regatasimulator.application.TelegramGateway;
-import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import com.boatarde.regatasimulator.application.ApplicationFailure;
 import com.boatarde.regatasimulator.flows.WorkflowManager;
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.factory.TelegramTestFactory;

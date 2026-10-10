@@ -75,7 +75,7 @@ Acceptance: configuration varies without recompiling Java; preflight does not by
 
 ## Phase 3 — Typed application services, with JsonDB retained
 
-In progress: repository isolation and direct service orchestration/production adapters are implemented. Latest clean-build checkpoint: 829 cases / 38 suites plus 5 Node cases. Old workflow classes are unregistered but still await removal and remaining regression migration; do not mark acceptance complete from a disabled bean graph alone. See [service results](phase-3-service-results.md).
+In progress: repository isolation, shared media/render/Telegram boundaries, central application failures and direct service orchestration/production adapters are implemented. Latest clean-build checkpoint: 830 cases / 38 suites plus 5 Node cases. Old workflow classes are unregistered but still await removal and remaining regression migration; editor Delete operations are currently leaving files on disk. Do not mark acceptance complete from a disabled bean graph alone. See [service results](phase-3-service-results.md).
 
 1. Introduce domain-specific repository interfaces backed by the current JsonDB implementation. Start with operations needed by the use cases, not a generic CRUD abstraction.
 2. Extract `MediaStorage`, `ImageRenderer`, and `TelegramGateway` boundaries. Share these components across previews and publication.

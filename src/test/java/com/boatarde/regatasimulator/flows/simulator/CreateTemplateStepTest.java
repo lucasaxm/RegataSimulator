@@ -3,7 +3,7 @@ package com.boatarde.regatasimulator.flows.simulator;
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.factory.TelegramTestFactory;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
-import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import com.boatarde.regatasimulator.application.ApplicationFailure;
 import com.boatarde.regatasimulator.factory.ImageTestFactory;
 import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;

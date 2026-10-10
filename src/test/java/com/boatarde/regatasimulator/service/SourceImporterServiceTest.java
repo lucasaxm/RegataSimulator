@@ -5,7 +5,7 @@ import com.boatarde.regatasimulator.repository.jsondb.JsonDbSourceRepository;
 import com.boatarde.regatasimulator.adapter.media.FileMediaStorage;
 import com.boatarde.regatasimulator.factory.ImageTestFactory;
 import com.boatarde.regatasimulator.util.MediaValidation;
-import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import com.boatarde.regatasimulator.application.ApplicationFailure;
 import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.util.TelegramFileDownloader;
 import com.opencsv.exceptions.CsvMalformedLineException;

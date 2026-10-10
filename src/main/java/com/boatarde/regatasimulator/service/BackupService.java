@@ -2,7 +2,7 @@ package com.boatarde.regatasimulator.service;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.application.TelegramGateway;
-import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import com.boatarde.regatasimulator.application.ApplicationFailure;
 import org.springframework.beans.factory.annotation.Autowired;
 import com.boatarde.regatasimulator.util.FileUtils;
 import lombok.extern.slf4j.Slf4j;

@@ -3,6 +3,7 @@ package com.boatarde.regatasimulator.flows.simulator;
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.factory.TelegramTestFactory;
 import com.boatarde.regatasimulator.flows.*;
+import com.boatarde.regatasimulator.application.ApplicationFailure;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;

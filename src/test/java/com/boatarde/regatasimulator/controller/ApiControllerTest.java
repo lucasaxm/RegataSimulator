@@ -5,7 +5,7 @@ import com.boatarde.regatasimulator.configuration.CorsConfig;
 import com.boatarde.regatasimulator.configuration.SecurityConfig;
 import com.boatarde.regatasimulator.configuration.SessionConfig;
 import com.boatarde.regatasimulator.factory.ImageTestFactory;
-import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import com.boatarde.regatasimulator.application.ApplicationFailure;
 import com.boatarde.regatasimulator.models.GalleryResponse;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;

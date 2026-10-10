@@ -2,6 +2,19 @@
 
 Baseline: `6275028`, Java 21.0.2 / Gradle 8.6. JsonDB is retained. No SQLite, dependency upgrade, UI redesign, runtime data access or live integrations are part of this phase.
 
+## Verified local commits
+
+| Hash | Subject |
+| --- | --- |
+| `1efcd33` | refactor: isolate domain repositories behind JsonDB adapters |
+| `60421d7` | refactor: dispatch ping report and backup through typed services |
+| `424d503` | refactor: share owned rendering and explicit meme use cases |
+| `99ece2d` | refactor: orchestrate typed submissions and moderation directly |
+| `d353cf1` | refactor: route Telegram commands and review callbacks directly |
+| `5c46c67` | refactor: isolate gallery import media and publication origins |
+
+The failure-relocation commit hash is reported in the handoff rather than embedded in its own commit. All commits are local; every slice passed focused tests, clean build and Node checks before commit.
+
 ## Slice 1 — Domain repositories
 
 - Added `SourceRepository`, `TemplateRepository`, `AuthorRepository`, and `MemeHistoryRepository` with JsonDB adapters. Operations name submission/import, typed filtering, conditional REVIEW decisions/bindings, preview consumption, weight updates and delivered-history retention rather than generic CRUD.
@@ -55,6 +68,16 @@ Slice 1 validation: focused repository/service/workflow/callback/context tests p
 - Administrator publication and scheduled publication use distinct ADMIN/SCHEDULED origins on the same MemeService. HTTP paths/statuses, ROLE_ADMIN and CSRF are unchanged. Full-chain tests verify the administrator adapter; a direct test verifies both origin requests.
 - Focused gallery/import/callback/meme/API/security/context regressions, clean build **830 cases / 38 suites** (zero failures/errors/skips), Node **5/5** and whitespace check passed. The sequential stateful import loop is intentionally retained; no parallelization or rule suppression was introduced.
 
-## Remaining Phase 3 work (after slice 6)
+## Slice 7 — Central application failures
 
-Central application failures outside `flows`; remove obsolete runner/actions/bag/registration/steps/routes and adapt remaining tests to direct service contracts. Phases 4–5 and durable recovery/cross-adapter transactions remain pending. **Phase 3 remains incomplete.**
+- Central classification now lives in `application.ApplicationFailure`; active services, media/Telegram adapters and HTTP advice depend on it, not the workflow package. Existing status mapping and generic ProblemDetail behavior are unchanged.
+- Legacy regression imports were migrated as well, including the wildcard-import decision-notification cases. Focused tests and clean build **830 cases / 38 suites** (zero failures/errors/skips), Node **5/5** and whitespace check passed after adapting the remaining old exception assertions.
+- The old compatibility exception is unreferenced but **still physically exists**. Two editor patch Delete operations reported success; independent disk/Git checks showed the file still exists and is marked modified, not deleted. An earlier rendering-file Delete behaved the same way and was repaired with an in-place delegate. No terminal file deletion was used because the task requires editor-only source edits.
+
+## Blocked final cleanup / remaining Phase 3 work
+
+The permitted editor Delete operation is not removing files in this session. Final removal therefore needs working editor deletion support, or explicit permission for narrowly scoped terminal/Git deletion after corresponding test migration. Do not mark Phase 3 complete from a disabled bean graph or green tests.
+
+Remove obsolete runner/actions/bag/registration/steps/routes (including the unreferenced old exception), remove temporary legacy BackupService/RouterService delegates, and adapt the remaining old workflow tests to direct use-case contracts. Existing old regressions have not been discarded merely to make the suite compile. Additional coherent submission→preview→callback→moderation integration should replace the legacy integration harnesses before removing them. Phases 4–5 and durable recovery/cross-adapter transactions remain pending. **Phase 3 remains incomplete and blocked on final obsolete-file removal.**
+
+Dedicated Sonar analysis was not invoked because its deferred loading interface was unavailable; editor diagnostics were checked and actionable findings corrected. Retained compatibility-class naming and Java workspace-import/non-project warnings remain; no zero-warning/project-wide quality-gate claim is made. No environment/secrets/userdata, live app/Telegram/ImageMagick, push or deployment was used.

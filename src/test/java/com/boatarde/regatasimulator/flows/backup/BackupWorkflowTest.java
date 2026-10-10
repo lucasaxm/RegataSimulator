@@ -2,7 +2,7 @@ package com.boatarde.regatasimulator.flows.backup;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
-import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import com.boatarde.regatasimulator.application.ApplicationFailure;
 import static org.mockito.Mockito.verify;
 import com.boatarde.regatasimulator.flows.WorkflowManager;
 import com.boatarde.regatasimulator.flows.common.SendMessageStep;

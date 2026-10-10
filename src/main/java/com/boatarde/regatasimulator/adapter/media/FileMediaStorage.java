@@ -1,7 +1,7 @@
 package com.boatarde.regatasimulator.adapter.media;
 
 import com.boatarde.regatasimulator.application.MediaStorage;
-import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import com.boatarde.regatasimulator.application.ApplicationFailure;
 import com.boatarde.regatasimulator.util.FileUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;

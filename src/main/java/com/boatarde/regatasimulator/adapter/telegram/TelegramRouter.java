@@ -2,7 +2,7 @@ package com.boatarde.regatasimulator.adapter.telegram;
 
 import com.boatarde.regatasimulator.application.SubmissionOrigin;
 import com.boatarde.regatasimulator.application.TelegramGateway;
-import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import com.boatarde.regatasimulator.application.ApplicationFailure;
 import com.boatarde.regatasimulator.models.Author;
 import com.boatarde.regatasimulator.service.*;
 import com.boatarde.regatasimulator.util.JsonDBUtils;

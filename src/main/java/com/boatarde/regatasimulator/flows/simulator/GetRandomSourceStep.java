@@ -1,8 +1,8 @@
 package com.boatarde.regatasimulator.flows.simulator;
 
 import com.boatarde.regatasimulator.flows.WorkflowAction;
-import com.boatarde.regatasimulator.flows.ApplicationFailure;
-import static com.boatarde.regatasimulator.flows.ApplicationFailure.Kind.UNAVAILABLE;
+import com.boatarde.regatasimulator.application.ApplicationFailure;
+import static com.boatarde.regatasimulator.application.ApplicationFailure.Kind.UNAVAILABLE;
 import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.flows.WorkflowStep;

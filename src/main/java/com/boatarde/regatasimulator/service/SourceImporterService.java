@@ -1,7 +1,7 @@
 package com.boatarde.regatasimulator.service;
 
 import com.boatarde.regatasimulator.dto.SourceCsvRecord;
-import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import com.boatarde.regatasimulator.application.ApplicationFailure;
 import com.boatarde.regatasimulator.application.MediaStorage;
 import com.boatarde.regatasimulator.util.MediaValidation;
 import com.boatarde.regatasimulator.models.Source;

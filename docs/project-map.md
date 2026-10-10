@@ -6,7 +6,7 @@ Verified: 2026-10-09. This describes the **current** application, not the propos
 
 Typed repositories with JsonDB adapters, Telegram/media/render boundaries, and direct ping/report/backup/meme/submission/moderation/callback services are implemented in sequential local slices. Bot dispatch now uses `adapter.telegram.TelegramRouter`; scheduler publication/backup and HTTP moderation use typed services. There is no registered production workflow runner/step graph. Persisted nullable Telegram messages and Phase 2 DTO/security contracts remain compatible. See [Phase 3 service results](phase-3-service-results.md).
 
-The workflow package map/count below describes retained **obsolete intermediate sources**, not current production dispatch; final source removal/test migration, wider media-boundary consumption, failure-package relocation and administrator-origin cleanup remain pending. Phase 3 is **not complete**, and SQLite/Phases 4–5 remain unimplemented. Latest verified clean build: **829 cases / 38 suites**, zero failures/errors/skips, plus **5 Node cases**.
+The workflow package map/count below describes retained **obsolete intermediate sources**, not current production dispatch. Media-boundary consumption, central application failures and administrator/scheduled origin separation are implemented. Final obsolete-source removal/test migration remains blocked by editor Delete operations leaving files on disk; see the service report. Phase 3 is **not complete**, and SQLite/Phases 4–5 remain unimplemented. Latest verified clean build: **830 cases / 38 suites**, zero failures/errors/skips, plus **5 Node cases**.
 
 ## Stack and repository layout
 

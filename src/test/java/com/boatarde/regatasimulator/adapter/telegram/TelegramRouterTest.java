@@ -93,11 +93,11 @@ class TelegramRouterTest {
     @Test
     void directServiceFailureIsRedactedAndPreservedIfReportingFails() {
         var update = TelegramTestFactory.buildCommandTextMessageUpdate("/report");
-        var original = new com.boatarde.regatasimulator.flows.ApplicationFailure(
-            com.boatarde.regatasimulator.flows.ApplicationFailure.Kind.UNAVAILABLE, "private-error");
+        var original = new com.boatarde.regatasimulator.application.ApplicationFailure(
+            com.boatarde.regatasimulator.application.ApplicationFailure.Kind.UNAVAILABLE, "private-error");
         doThrow(original).when(reports).send(any());
         doThrow(new IllegalStateException("reporting failure")).when(telegram).sendText(any());
-        assertSame(original, assertThrows(com.boatarde.regatasimulator.flows.ApplicationFailure.class, () -> router.route(update, "fixture")));
+        assertSame(original, assertThrows(com.boatarde.regatasimulator.application.ApplicationFailure.class, () -> router.route(update, "fixture")));
         verify(telegram).sendText(argThat(request -> !request.text().contains("private-error")));
     }
 

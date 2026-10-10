@@ -1,22 +1,12 @@
 package com.boatarde.regatasimulator.flows;
 
-/** Safe classification for adapters; exception details are never sent to users. */
-public class ApplicationFailure extends RuntimeException {
-    public enum Kind { UNAVAILABLE, INVALID_INPUT, NOT_FOUND, CONFLICT, EXECUTION }
-
-    private final Kind kind;
-
+/** Temporary compatibility for obsolete workflow regressions, not production orchestration. */
+public class ApplicationFailure extends com.boatarde.regatasimulator.application.ApplicationFailure {
     public ApplicationFailure(Kind kind, String message) {
-        super(message);
-        this.kind = kind;
+        super(kind, message);
     }
 
     public ApplicationFailure(Kind kind, String message, Throwable cause) {
-        super(message, cause);
-        this.kind = kind;
-    }
-
-    public Kind getKind() {
-        return kind;
+        super(kind, message, cause);
     }
 }

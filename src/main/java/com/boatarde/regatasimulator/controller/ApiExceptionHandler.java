@@ -1,6 +1,6 @@
 package com.boatarde.regatasimulator.controller;
 
-import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import com.boatarde.regatasimulator.application.ApplicationFailure;
 import com.opencsv.exceptions.CsvException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;

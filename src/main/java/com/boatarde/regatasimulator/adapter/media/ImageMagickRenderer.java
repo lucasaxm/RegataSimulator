@@ -1,7 +1,7 @@
 package com.boatarde.regatasimulator.adapter.media;
 
 import com.boatarde.regatasimulator.application.ImageRenderer;
-import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import com.boatarde.regatasimulator.application.ApplicationFailure;
 import com.boatarde.regatasimulator.models.TemplateArea;
 import com.boatarde.regatasimulator.util.FileUtils;
 import com.boatarde.regatasimulator.util.MediaValidation;

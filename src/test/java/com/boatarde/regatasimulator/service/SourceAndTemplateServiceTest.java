@@ -6,7 +6,7 @@ import com.boatarde.regatasimulator.repository.jsondb.JsonDbTemplateRepository;
 import com.boatarde.regatasimulator.adapter.media.FileMediaStorage;
 import com.boatarde.regatasimulator.models.AreaCorner;
 import com.boatarde.regatasimulator.models.CommonEntity;
-import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import com.boatarde.regatasimulator.application.ApplicationFailure;
 import com.boatarde.regatasimulator.models.GalleryResponse;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;

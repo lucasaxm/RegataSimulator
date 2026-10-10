@@ -1,7 +1,7 @@
 package com.boatarde.regatasimulator.controller;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
-import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import com.boatarde.regatasimulator.application.ApplicationFailure;
 import com.boatarde.regatasimulator.models.ReviewSourceBody;
 import com.boatarde.regatasimulator.models.ReviewTemplateBody;
 import com.boatarde.regatasimulator.models.Source;
