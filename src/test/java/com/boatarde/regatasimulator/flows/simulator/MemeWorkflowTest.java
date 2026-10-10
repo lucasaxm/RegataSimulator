@@ -14,6 +14,7 @@ import com.boatarde.regatasimulator.models.Template;
 import com.boatarde.regatasimulator.models.TemplateArea;
 import com.boatarde.regatasimulator.service.RouterService;
 import com.boatarde.regatasimulator.service.SourceService;
+import com.boatarde.regatasimulator.repository.jsondb.JsonDbSourceRepository;
 import com.boatarde.regatasimulator.util.TelegramUtils;
 import com.boatarde.regatasimulator.factory.ImageTestFactory;
 import io.jsondb.JsonDBTemplate;
@@ -102,7 +103,7 @@ class MemeWorkflowTest {
         seedTemplate(List.of(area(1, 1), area(2, 2)));
         Clock clock = Clock.fixed(Instant.parse("2026-10-06T12:00:00Z"), ZoneOffset.UTC);
         WorkflowManager manager = new WorkflowManager(List.of(
-            new CreateSourceStep(sourcesRoot.toString(), database, 10, new SourceService(database)),
+            new CreateSourceStep(sourcesRoot.toString(), database, 10, new SourceService(new JsonDbSourceRepository(database))),
             new CreateTemplateStep(templatesRoot.toString(), database, 10),
             new GetRandomTemplateStep(templatesRoot.toString(), database),
             new GetRandomSourceStep(sourcesRoot.toString(), database, clock),

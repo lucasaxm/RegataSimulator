@@ -6,8 +6,7 @@ import com.boatarde.regatasimulator.models.GalleryResponse;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.util.JsonDBUtils;
-import io.jsondb.JsonDBTemplate;
-import io.jsondb.query.Update;
+import com.boatarde.regatasimulator.repository.SourceRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
@@ -30,24 +29,18 @@ import java.util.stream.Stream;
 @Slf4j
 public class SourceService {
 
-    private final JsonDBTemplate jsonDBTemplate;
+    private final SourceRepository repository;
     @Value("${regata-simulator.sources.path}")
     private String sourcesPathString;
     @Value("${regata-simulator.sources.initial-weight}")
     private int initialWeight;
 
-    public SourceService(JsonDBTemplate jsonDBTemplate) {
-        this.jsonDBTemplate = jsonDBTemplate;
+    public SourceService(SourceRepository repository) {
+        this.repository = repository;
     }
 
     public GalleryResponse<Source> getSources(int page, int perPage, Status status, Long userId) {
-        String jxQuery = JsonDBUtils.jxQuery()
-            .withStatus(status)
-            .withUserId(userId)
-            .build();
-
-        // Query to get the total number of items and the paginated result
-        List<Source> allMatchingSources = jsonDBTemplate.find(jxQuery, Source.class);
+        List<Source> allMatchingSources = repository.find(new SourceRepository.Criteria(status, userId, List.of()));
         int totalItems = allMatchingSources.size();
         List<Source> result = allMatchingSources.stream()
             .sorted(JsonDBUtils.getComparator().reversed())
@@ -86,7 +79,7 @@ public class SourceService {
                     throw new RuntimeException("Failed to delete source: " + source.getId());
                 }
             }
-            jsonDBTemplate.remove(source, Source.class);
+            repository.remove(source);
             log.info("Source {} deleted", source.getId());
         } catch (IOException e) {
             throw new RuntimeException("Failed to delete source: " + source.getId(), e);
@@ -94,13 +87,11 @@ public class SourceService {
     }
 
     public Optional<Source> getSource(UUID id) {
-        return Optional.ofNullable(jsonDBTemplate.findById(id, Source.class));
+        return repository.findById(id);
     }
 
     public void completePreviewReview(Source source) {
-        Source updated = jsonDBTemplate.findAndModify("/.[id='%s']".formatted(source.getId()),
-            Update.update("previewChatId", null).set("previewMessageId", null), Source.class);
-        if (updated == null) {
+        if (!repository.clearPreview(source.getId())) {
             throw new IllegalStateException("Source no longer exists: " + source.getId());
         }
         source.setPreviewChatId(null);
@@ -118,9 +109,7 @@ public class SourceService {
     }
 
     private void reviewSource(Source source, Status decision) {
-        Source stored = jsonDBTemplate.findAndModify("/.[id='%s' and status='REVIEW']".formatted(source.getId()),
-            Update.update("status", decision).set("previewChatId", null).set("previewMessageId", null), Source.class);
-        if (stored == null) {
+        if (!repository.decideReview(source.getId(), decision)) {
             throw new ApplicationFailure(ApplicationFailure.Kind.CONFLICT, "Source no longer in review");
         }
         source.setStatus(decision);
@@ -129,16 +118,12 @@ public class SourceService {
     }
 
     public void resetAllWeights() {
-        List<Source> allSources = jsonDBTemplate.findAll(Source.class);
-        for (Source source : allSources) {
-            source.setWeight(initialWeight);
-        }
-        jsonDBTemplate.upsert(allSources, Source.class);
+        repository.resetWeights(initialWeight);
         log.info("All sources weights have been reset to {}", initialWeight);
     }
 
     public GalleryResponse<Source> search(SearchCriteria criteria) {
-        List<Source> allSources = jsonDBTemplate.findAll(Source.class);
+        List<Source> allSources = repository.find(SourceRepository.Criteria.all());
 
         Stream<Source> stream = allSources.stream();
 

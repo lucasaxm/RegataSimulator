@@ -16,6 +16,8 @@ import com.boatarde.regatasimulator.routes.CreateTemplateRoute;
 import com.boatarde.regatasimulator.service.RouterService;
 import com.boatarde.regatasimulator.service.SourceService;
 import com.boatarde.regatasimulator.service.TemplateService;
+import com.boatarde.regatasimulator.repository.jsondb.JsonDbSourceRepository;
+import com.boatarde.regatasimulator.repository.jsondb.JsonDbTemplateRepository;
 import com.boatarde.regatasimulator.util.TelegramUtils;
 import io.jsondb.JsonDBTemplate;
 import org.junit.jupiter.api.BeforeEach;
@@ -63,9 +65,9 @@ class PreviewCallbackIntegrationTest {
         database.createCollection(Source.class);
         database.createCollection(Template.class);
         bot = mock(RegataSimulatorBot.class);
-        SourceService sources = new SourceService(database);
+        SourceService sources = new SourceService(new JsonDbSourceRepository(database));
         ReflectionTestUtils.setField(sources, "sourcesPathString", root.resolve("source").toString());
-        TemplateService templates = new TemplateService(root.resolve("template").toString(), database);
+        TemplateService templates = new TemplateService(root.resolve("template").toString(), new JsonDbTemplateRepository(database));
         WorkflowManager manager = new WorkflowManager(List.of(
             new ConfirmReviewSourceStep("-9000", sources), new DeleteReviewSourceStep(sources),
             new ConfirmReviewTemplateStep("-9000", templates), new DeleteReviewTemplateStep(templates)));

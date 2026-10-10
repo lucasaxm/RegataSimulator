@@ -5,8 +5,7 @@ import com.boatarde.regatasimulator.flows.ApplicationFailure;
 import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.models.Template;
 import com.boatarde.regatasimulator.util.JsonDBUtils;
-import io.jsondb.JsonDBTemplate;
-import io.jsondb.query.Update;
+import com.boatarde.regatasimulator.repository.TemplateRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
@@ -30,24 +29,19 @@ import java.util.stream.Stream;
 public class TemplateService {
 
     private final String templatesPathString;
-    private final JsonDBTemplate jsonDBTemplate;
+    private final TemplateRepository repository;
 
     @Value("${regata-simulator.templates.initial-weight}")
     private int initialWeight;
 
     public TemplateService(@Value("${regata-simulator.templates.path}") String templatesPathString,
-                           JsonDBTemplate jsonDBTemplate) {
+                           TemplateRepository repository) {
         this.templatesPathString = templatesPathString;
-        this.jsonDBTemplate = jsonDBTemplate;
+        this.repository = repository;
     }
 
     public GalleryResponse<Template> getTemplates(int page, int perPage, Status status, Long userId) {
-        String jxQuery = JsonDBUtils.jxQuery()
-            .withStatus(status)
-            .withUserId(userId)
-            .build();
-
-        List<Template> allMatchingTemplates = jsonDBTemplate.find(jxQuery, Template.class);
+        List<Template> allMatchingTemplates = repository.find(new TemplateRepository.Criteria(status, userId, false));
         int totalItems = allMatchingTemplates.size();
         List<Template> result = allMatchingTemplates.stream()
             .sorted(JsonDBUtils.getComparator().reversed())
@@ -86,7 +80,7 @@ public class TemplateService {
                     throw new RuntimeException("Failed to delete template: " + template.getId());
                 }
             }
-            jsonDBTemplate.remove(template, Template.class);
+            repository.remove(template);
             log.info("Template {} deleted", template.getId());
         } catch (IOException e) {
             throw new RuntimeException("Failed to delete template: " + template.getId(), e);
@@ -94,13 +88,11 @@ public class TemplateService {
     }
 
     public Optional<Template> getTemplate(UUID id) {
-        return Optional.ofNullable(jsonDBTemplate.findById(id, Template.class));
+        return repository.findById(id);
     }
 
     public void completePreviewReview(Template template) {
-        Template updated = jsonDBTemplate.findAndModify("/.[id='%s']".formatted(template.getId()),
-            Update.update("previewChatId", null).set("previewMessageId", null), Template.class);
-        if (updated == null) {
+        if (!repository.clearPreview(template.getId())) {
             throw new IllegalStateException("Template no longer exists: " + template.getId());
         }
         template.setPreviewChatId(null);
@@ -118,9 +110,7 @@ public class TemplateService {
     }
 
     private void reviewTemplate(Template template, Status decision) {
-        Template stored = jsonDBTemplate.findAndModify("/.[id='%s' and status='REVIEW']".formatted(template.getId()),
-            Update.update("status", decision).set("previewChatId", null).set("previewMessageId", null), Template.class);
-        if (stored == null) {
+        if (!repository.decideReview(template.getId(), decision)) {
             throw new ApplicationFailure(ApplicationFailure.Kind.CONFLICT, "Template no longer in review");
         }
         template.setStatus(decision);
@@ -129,20 +119,12 @@ public class TemplateService {
     }
 
     public void resetAllWeights() {
-        List<Template> allTemplates = jsonDBTemplate.findAll(Template.class);
-        for (Template template : allTemplates) {
-            template.setWeight(initialWeight);
-        }
-        jsonDBTemplate.upsert(allTemplates, Template.class);
+        repository.resetWeights(initialWeight);
         log.info("All templates weights have been reset to {}", initialWeight);
     }
 
     public void initializeSourceIds() {
-        List<Template> allTemplates = jsonDBTemplate.findAll(Template.class);
-        for (Template template : allTemplates) {
-            template.getAreas().forEach(area -> area.setSource(area.getIndex()));
-        }
-        jsonDBTemplate.upsert(allTemplates, Template.class);
+        repository.initializeSourceIds();
         log.info("All templates source ids have been reset");
     }
 }

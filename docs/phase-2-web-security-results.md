@@ -49,6 +49,7 @@ One actual Spring Session `CookieSerializer` applies JSESSIONID, Path=/, HttpOnl
 
 | Contract | Current behavior |
 | --- | --- |
+| Login request | POST `/api/login` accepts `application/x-www-form-urlencoded` parameters `username` and `password`, not a JSON credential body. Acquire and submit the session-bound CSRF token first. |
 | Pagination | GET lists and POST search require page >= 1 and perPage 1–100. Query is optional/null-compatible and limited to 200 characters. Invalid numbers/enums/JSON return safe 400 before service calls. |
 | Review body | Existing sourceId/templateId, approved, reason keys retained. UUID and Boolean approval are required/non-null; omission no longer silently means rejection. Reason is required/non-null and at most 1,000 characters (empty remains compatible with approval). |
 | Errors | Invalid requests/CSV 400; missing entity/media 404; repeat or concurrently lost REVIEW transition 409; unavailable workflow 503; execution/unexpected failure generic 500. Global ProblemDetail advice strips original exception messages, stack traces, filesystem paths, and arbitrary error bodies. No error-message substring classification. |
