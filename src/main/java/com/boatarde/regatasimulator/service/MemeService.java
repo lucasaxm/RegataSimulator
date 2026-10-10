@@ -32,11 +32,19 @@ public class MemeService {
     private final ImageRenderer renderer;
     private final TelegramGateway telegram;
     private final Clock clock;
+    private final MetadataUnitOfWork metadata;
 
     public MemeService(SourceRepository sources, TemplateRepository templates, MemeHistoryRepository history,
                        MediaStorage media, ImageRenderer renderer, TelegramGateway telegram, Clock clock) {
+        this(sources,templates,history,media,renderer,telegram,clock,Runnable::run);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MemeService(SourceRepository sources, TemplateRepository templates, MemeHistoryRepository history,
+                       MediaStorage media, ImageRenderer renderer, TelegramGateway telegram, Clock clock, MetadataUnitOfWork metadata) {
         this.sources = sources; this.templates = templates; this.history = history; this.media = media;
         this.renderer = renderer; this.telegram = telegram; this.clock = clock;
+        this.metadata = metadata;
     }
 
     public TelegramGateway.Delivery publish(Publish request) {
@@ -46,10 +54,12 @@ public class MemeService {
         List<Source> selected = selectSources(template, recent);
         try (var image = render(template, selected)) {
             var delivered = telegram.sendPhoto(new TelegramGateway.Photo(request.destination(), image.file(), null, null));
-            selected.forEach(source -> sources.decreaseWeight(source.getId()));
-            templates.decreaseWeight(template.getId());
-            history.recordDelivered(Meme.builder().id(UUID.randomUUID()).templateId(template.getId())
-                .sourceIds(selected.stream().map(Source::getId).toList()).message(delivered.legacyMessage()).build());
+            metadata.execute(() -> {
+                selected.forEach(source -> sources.decreaseWeight(source.getId()));
+                templates.decreaseWeight(template.getId());
+                history.recordDelivered(Meme.builder().id(UUID.randomUUID()).templateId(template.getId())
+                    .sourceIds(selected.stream().map(Source::getId).toList()).message(delivered.legacyMessage()).build());
+            });
             return delivered;
         }
     }

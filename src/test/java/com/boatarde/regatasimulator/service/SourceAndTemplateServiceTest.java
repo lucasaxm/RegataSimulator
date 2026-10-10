@@ -531,16 +531,13 @@ class SourceAndTemplateServiceTest {
     }
 
     @Test
-    void zeroPageSizeCurrentlyReturnsEmptyItemsWithUnchangedTotals() {
+    void zeroPageSizeIsRejectedByRepositoryPaginationBoundary() {
         db.insert(List.of(source("one", Status.REVIEW, null)), Source.class);
         db.insert(List.of(template(Status.REVIEW, null)), Template.class);
 
-        assertEquals(1, sources.getSources(1, 0, null, null).getTotalItems());
-        assertTrue(sources.getSources(1, 0, null, null).getItems().isEmpty());
-        assertEquals(1, templates.getTemplates(1, 0, null, null).getTotalItems());
-        assertTrue(templates.getTemplates(1, 0, null, null).getItems().isEmpty());
-        assertEquals(1, sources.search(criteria(1, 0)).getTotalItems());
-        assertTrue(sources.search(criteria(1, 0)).getItems().isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> sources.getSources(1, 0, null, null));
+        assertThrows(IllegalArgumentException.class, () -> templates.getTemplates(1, 0, null, null));
+        assertThrows(IllegalArgumentException.class, () -> sources.search(criteria(1, 0)));
     }
 
     @Test

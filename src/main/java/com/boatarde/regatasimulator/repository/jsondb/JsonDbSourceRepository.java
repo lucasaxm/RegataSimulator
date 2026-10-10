@@ -14,6 +14,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Repository
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name="regata-simulator.database.engine",havingValue="jsondb",matchIfMissing=true)
 public class JsonDbSourceRepository implements SourceRepository {
     private static final String BY_ID = "/.[id='%s']";
     private static final String PREVIEW_CHAT = "previewChatId";
@@ -28,7 +29,8 @@ public class JsonDbSourceRepository implements SourceRepository {
         List<Source> sources = db.find(query, Source.class);
         return sources.stream().filter(source -> criteria.descriptions().isEmpty()
             || source.getDescription() != null && criteria.descriptions().stream().anyMatch(description ->
-                source.getDescription().toLowerCase(Locale.ROOT).contains(description.toLowerCase(Locale.ROOT))))
+                com.boatarde.regatasimulator.repository.DescriptionKey.of(source.getDescription())
+                    .contains(com.boatarde.regatasimulator.repository.DescriptionKey.of(description))))
             .toList();
     }
 

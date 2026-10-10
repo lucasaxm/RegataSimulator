@@ -28,7 +28,7 @@ public class RegataSimulatorApplication {
     }
 
     @Autowired
-    public RegataSimulatorApplication(RegataSimulatorBot regataSimulatorBot, JsonDBTemplate jsonDBTemplate,
+    public RegataSimulatorApplication(RegataSimulatorBot regataSimulatorBot, @Autowired(required=false) JsonDBTemplate jsonDBTemplate,
                                      TelegramBotRegistration botRegistration,
                                      @Value("${telegram.bots.regata-simulator.registration-enabled:true}")
                                      boolean registrationEnabled) {
@@ -54,6 +54,7 @@ public class RegataSimulatorApplication {
     }
 
     private void createCollectionIfAbsent(String collectionName) {
+        if (jsonDBTemplate == null) return;
         if (jsonDBTemplate.collectionExists(collectionName)) {
             log.info("{} collection already exists", collectionName);
         } else {

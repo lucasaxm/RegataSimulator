@@ -34,15 +34,7 @@ public class TemplateService {
     }
 
     public GalleryResponse<Template> getTemplates(int page, int perPage, Status status, Long userId) {
-        List<Template> allMatchingTemplates = repository.find(new TemplateRepository.Criteria(status, userId, false));
-        int totalItems = allMatchingTemplates.size();
-        List<Template> result = allMatchingTemplates.stream()
-            .sorted(JsonDBUtils.getComparator().reversed())
-            .skip((long) (page - 1) * perPage)
-            .limit(perPage)
-            .toList();
-
-        return new GalleryResponse<>(result, totalItems);
+        return repository.page(new TemplateRepository.Criteria(status,userId,false),page,perPage);
     }
 
     public Resource loadTemplateAsResource(Template template) {

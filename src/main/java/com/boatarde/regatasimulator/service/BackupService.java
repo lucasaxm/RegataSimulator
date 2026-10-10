@@ -23,6 +23,8 @@ public class BackupService {
     private final String databasePath;
     private final String templatesPath;
     private final String sourcesPath;
+    @Value("${regata-simulator.database.engine:jsondb}")
+    private String databaseEngine = "jsondb";
 
     public BackupService(@Value("${telegram.bots.regata-simulator.backup-chat}") Long backupChatId,
                          TelegramGateway telegram, ReportService reports,
@@ -43,6 +45,9 @@ public class BackupService {
     }
 
     public void create(TelegramGateway.Destination reportDestination) {
+        if ("sqlite".equalsIgnoreCase(databaseEngine)) {
+            throw new ApplicationFailure(ApplicationFailure.Kind.UNAVAILABLE, "SQLite consistent backups require Phase 5");
+        }
         archive(databasePath, "jsondb");
         archive(templatesPath, "templates");
         archive(sourcesPath, "sources");

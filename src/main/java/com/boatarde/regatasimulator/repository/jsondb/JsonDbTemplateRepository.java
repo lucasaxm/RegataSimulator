@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Repository
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name="regata-simulator.database.engine",havingValue="jsondb",matchIfMissing=true)
 public class JsonDbTemplateRepository implements TemplateRepository {
     private static final String BY_ID = "/.[id='%s']";
     private static final String PREVIEW_CHAT = "previewChatId";

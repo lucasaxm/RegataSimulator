@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name="regata-simulator.database.engine",havingValue="jsondb",matchIfMissing=true)
 public class JsonDbAuthorRepository implements AuthorRepository {
     private final JsonDBTemplate db;
     public JsonDbAuthorRepository(JsonDBTemplate db) { this.db = db; }

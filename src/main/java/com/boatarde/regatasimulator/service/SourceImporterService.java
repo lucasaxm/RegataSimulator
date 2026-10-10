@@ -145,7 +145,7 @@ public class SourceImporterService {
     }
 
     private static String normalize(String name) {
-        return Normalizer.normalize(name.strip(), Normalizer.Form.NFKC).toLowerCase(Locale.ROOT);
+        return com.boatarde.regatasimulator.repository.DescriptionKey.of(name);
     }
 
     private List<CsvRow> parseCsv(String csvContent) throws Exception {

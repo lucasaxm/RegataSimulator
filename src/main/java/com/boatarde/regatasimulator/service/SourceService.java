@@ -36,15 +36,7 @@ public class SourceService {
     }
 
     public GalleryResponse<Source> getSources(int page, int perPage, Status status, Long userId) {
-        List<Source> allMatchingSources = repository.find(new SourceRepository.Criteria(status, userId, List.of()));
-        int totalItems = allMatchingSources.size();
-        List<Source> result = allMatchingSources.stream()
-            .sorted(JsonDBUtils.getComparator().reversed())
-            .skip((long) (page - 1) * perPage)
-            .limit(perPage)
-            .toList();
-
-        return new GalleryResponse<>(result, totalItems);
+        return repository.page(new SourceRepository.Criteria(status, userId, List.of()),page,perPage);
     }
 
     public Resource loadSourceAsResource(Source source) {
@@ -104,34 +96,8 @@ public class SourceService {
     }
 
     public GalleryResponse<Source> search(SearchCriteria criteria) {
-        List<Source> allSources = repository.find(SourceRepository.Criteria.all());
-
-        Stream<Source> stream = allSources.stream();
-
-        // Filter by query if present
-        if (criteria.getQuery() != null && !criteria.getQuery().isBlank()) {
-            String lowerQuery = criteria.getQuery().toLowerCase();
-            stream =
-                stream.filter(s -> s.getDescription() != null && s.getDescription().toLowerCase().contains(lowerQuery));
-        }
-
-        // Filter by status if present
-        if (criteria.getStatus() != null) {
-            stream = stream.filter(s -> s.getStatus() == criteria.getStatus());
-        }
-
-        List<Source> filtered = stream
-            .sorted(Comparator.comparing(s -> Optional.ofNullable(s.getDescription()).orElse("").toLowerCase()))
-            .toList();
-
-        int totalItems = filtered.size();
-        List<Source> result = filtered.stream()
-            .sorted(JsonDBUtils.getComparator().reversed())
-            .skip((long) (criteria.getPage() - 1) * criteria.getPerPage())
-            .limit(criteria.getPerPage())
-            .toList();
-
-        return new GalleryResponse<>(result, totalItems);
+        List<String> descriptions = criteria.getQuery() == null || criteria.getQuery().isBlank() ? List.of() : List.of(criteria.getQuery());
+        return repository.page(new SourceRepository.Criteria(criteria.getStatus(),null,descriptions),criteria.getPage(),criteria.getPerPage());
     }
 
 }

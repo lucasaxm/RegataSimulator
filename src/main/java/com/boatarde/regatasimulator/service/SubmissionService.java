@@ -35,13 +35,23 @@ public class SubmissionService {
     private final MemeService memes;
     private final int sourceWeight;
     private final int templateWeight;
+    private final MetadataUnitOfWork metadata;
 
     public SubmissionService(SourceRepository sources, TemplateRepository templates, AuthorRepository authors,
                              MediaStorage media, TelegramGateway telegram, MemeService memes,
                              @Value("${regata-simulator.sources.initial-weight}") int sourceWeight,
                              @Value("${regata-simulator.templates.initial-weight}") int templateWeight) {
+        this(sources,templates,authors,media,telegram,memes,sourceWeight,templateWeight,Runnable::run);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public SubmissionService(SourceRepository sources, TemplateRepository templates, AuthorRepository authors,
+                             MediaStorage media, TelegramGateway telegram, MemeService memes,
+                             @Value("${regata-simulator.sources.initial-weight}") int sourceWeight,
+                             @Value("${regata-simulator.templates.initial-weight}") int templateWeight, MetadataUnitOfWork metadata) {
         this.sources = sources; this.templates = templates; this.authors = authors; this.media = media;
         this.telegram = telegram; this.memes = memes; this.sourceWeight = sourceWeight; this.templateWeight = templateWeight;
+        this.metadata = metadata;
     }
 
     public Result submitSource(SourceSubmission request) {
@@ -52,7 +62,7 @@ public class SubmissionService {
             return new Result(null, Outcome.INVALID_DESCRIPTION);
         }
         var duplicate = sources.find(SourceRepository.Criteria.all()).stream().filter(source -> source.getDescription() != null
-            && source.getDescription().toLowerCase(Locale.ROOT).equals(description.toLowerCase(Locale.ROOT))).findFirst();
+            && DescriptionKey.of(source.getDescription()).equals(DescriptionKey.of(description))).findFirst();
         if (duplicate.isPresent()) {
             Source source = duplicate.get();
             telegram.sendPhoto(new TelegramGateway.Photo(destination, media.image(MediaStorage.Kind.SOURCE, source.getId()),
@@ -67,8 +77,10 @@ public class SubmissionService {
             Source source = new Source(); source.setId(id); source.setStatus(Status.REVIEW); source.setWeight(sourceWeight);
             source.setDescription(description); source.setMessage(request.upload().origin().legacyMessage());
             var progress = telegram.sendText(new TelegramGateway.Text(destination, "Criando source...", false));
-            authors.recordSubmitter(request.upload().author());
-            sources.insertSubmission(source);
+            metadata.execute(() -> {
+                authors.recordSubmitter(request.upload().author());
+                sources.insertSubmission(source);
+            });
             committed = true;
             memes.previewSource(new MemeService.Preview(id, destination, progress));
             return new Result(id, Outcome.PREVIEWED);
@@ -87,8 +99,10 @@ public class SubmissionService {
             template.setAreas(request.areas()); template.setMessage(request.upload().origin().legacyMessage());
             var destination = request.upload().origin().destination();
             var progress = telegram.sendText(new TelegramGateway.Text(destination, "Criando template...", false));
-            authors.recordSubmitter(request.upload().author());
-            templates.insertSubmission(template);
+            metadata.execute(() -> {
+                authors.recordSubmitter(request.upload().author());
+                templates.insertSubmission(template);
+            });
             committed = true;
             memes.previewTemplate(new MemeService.Preview(id, destination, progress));
             return new Result(id, Outcome.PREVIEWED);
