@@ -84,12 +84,12 @@ class RegataSimulatorApplicationContextTest {
     }
 
     @Test
-    void retainsObservedAllowedAndDisallowedPreflightBehavior() throws Exception {
+    void deniesCrossOriginPreflightByDefault() throws Exception {
         mvc.perform(options("/api/sources")
                 .header("Origin", "https://boatarde.dev")
                 .header("Access-Control-Request-Method", "POST"))
-            .andExpect(status().isOk())
-            .andExpect(header().string("Access-Control-Allow-Origin", "https://boatarde.dev"));
+            .andExpect(status().isForbidden())
+            .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
         mvc.perform(options("/api/sources")
                 .header("Origin", "https://untrusted.invalid")
                 .header("Access-Control-Request-Method", "POST"))

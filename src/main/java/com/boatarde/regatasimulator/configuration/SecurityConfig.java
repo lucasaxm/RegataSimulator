@@ -30,16 +30,19 @@ public class SecurityConfig {
 
     private final String username;
     private final String password;
+    private final WebSecurityProperties webProperties;
 
     public SecurityConfig(@Value("${web-admin.username}") String username,
-                          @Value("${web-admin.password}") String password) {
+                          @Value("${web-admin.password}") String password, WebSecurityProperties webProperties) {
         this.username = username;
         this.password = password;
+        this.webProperties = webProperties;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+            .cors(cors -> {})
             .authorizeHttpRequests((requests) -> requests
                 .requestMatchers("/api/login", "/login.html", "/create/**", "/*.js", "/*.css")
                 .permitAll()
@@ -48,7 +51,7 @@ public class SecurityConfig {
             .headers(headers -> headers
                 .frameOptions(HeadersConfigurer.FrameOptionsConfig::disable) // Disable X-Frame-Options
                 .contentSecurityPolicy(csp -> csp
-                    .policyDirectives("frame-ancestors https://*.telegram.org https://telegram.org 'self'")
+                    .policyDirectives("frame-ancestors " + String.join(" ", webProperties.getFrameAncestors()))
                 )
             )
             .formLogin((form) -> form
