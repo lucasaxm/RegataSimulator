@@ -54,6 +54,8 @@ public class SecurityConfig {
         http
             .cors(cors -> {})
             .authorizeHttpRequests((requests) -> requests
+                .requestMatchers("/actuator/health/liveness", "/actuator/health/readiness").permitAll()
+                .requestMatchers("/actuator/**").hasRole("ADMIN")
                 .requestMatchers("/api/login", "/api/csrf", "/login.html", "/create/**", "/*.js", "/*.css")
                 .permitAll()
                 .requestMatchers("/api/**").hasRole("ADMIN")

@@ -17,9 +17,17 @@ public class RegataSimulatorBot extends TelegramLongPollingBot {
     public RegataSimulatorBot(@Value("${telegram.bots.regata-simulator.token}") String token,
                               @Value("${telegram.bots.regata-simulator.username}") String username,
                               TelegramRouter routerService) {
-        super(token);
+        super(boundedOptions(), token);
         this.username = username;
         this.routerService = routerService;
+    }
+
+    public static org.telegram.telegrambots.bots.DefaultBotOptions boundedOptions() {
+        var options=new org.telegram.telegrambots.bots.DefaultBotOptions();
+        options.setRequestConfig(org.apache.http.client.config.RequestConfig.custom()
+            .setConnectTimeout(3_000).setSocketTimeout(10_000).setConnectionRequestTimeout(3_000).build());
+        options.setGetUpdatesTimeout(5);
+        return options;
     }
 
     @Override

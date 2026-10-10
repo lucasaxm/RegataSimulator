@@ -17,7 +17,7 @@ public class ScheduledTaskService {
         this.memes = memes; this.backups = backups; this.channelId = channelId;
     }
 
-    @Scheduled(cron = "0 0,30 * * * *")
+    @Scheduled(cron = "${regata-simulator.scheduling.publish-cron:0 0,30 * * * *}", zone = "${regata-simulator.scheduling.zone:America/Sao_Paulo}")
     public void generateMeme() {
         memes.publish(new MemeService.Publish(MemeService.Origin.SCHEDULED, TelegramGateway.Destination.chat(channelId)));
     }
@@ -26,7 +26,7 @@ public class ScheduledTaskService {
         memes.publish(new MemeService.Publish(MemeService.Origin.ADMIN, TelegramGateway.Destination.chat(channelId)));
     }
 
-    @Scheduled(cron = "0 15 12 * * SUN")
+    @Scheduled(cron = "${regata-simulator.scheduling.backup-cron:0 15 12 * * SUN}", zone = "${regata-simulator.scheduling.zone:America/Sao_Paulo}")
     public void createBackup() {
         backups.create();
     }

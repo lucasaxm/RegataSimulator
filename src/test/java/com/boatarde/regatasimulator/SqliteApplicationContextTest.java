@@ -73,6 +73,7 @@ class SqliteApplicationContextTest {
         store.jdbc().execute("CREATE TRIGGER fail_history BEFORE INSERT ON memes BEGIN SELECT RAISE(ABORT,'synthetic'); END");
         var request=new MemeService.Publish(MemeService.Origin.ADMIN,TelegramGateway.Destination.chat(123));
         assertThrows(ApplicationFailure.class,() -> memes.publish(request));
+        verify(telegram).sendPhoto(any()); // Delivery occurred before the rolled-back metadata transaction.
         assertEquals(10,sources.findById(source.getId()).orElseThrow().getWeight()); assertEquals(10,templates.findById(template.getId()).orElseThrow().getWeight()); assertTrue(history.newestFirst().isEmpty());
         store.jdbc().execute("DROP TRIGGER fail_history"); memes.publish(request);
         assertEquals(9,sources.findById(source.getId()).orElseThrow().getWeight()); assertEquals(9,templates.findById(template.getId()).orElseThrow().getWeight()); assertEquals(1,history.newestFirst().size());
@@ -82,6 +83,19 @@ class SqliteApplicationContextTest {
         }));
         assertInstanceOf(java.io.IOException.class,checked.getCause());
         assertEquals(9,sources.findById(source.getId()).orElseThrow().getWeight()); verifyNoInteractions(bot,registration);
+    }
+
+    @Test void localProbesAreAnonymousMinimalAndNeverCallTelegramWhileExternalHealthRequiresAdmin() throws Exception {
+        for(String probe:List.of("liveness","readiness")) {
+            mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/actuator/health/"+probe))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("status").value("UP"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("components").doesNotExist());
+        }
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/actuator/health/external")
+            .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user("viewer").roles("USER")))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isForbidden());
+        verifyNoInteractions(bot,registration);
     }
 
     @Test void submissionAuthorRollbackPreviewConfirmationAndHttpModerationUseSQLite() throws Exception {

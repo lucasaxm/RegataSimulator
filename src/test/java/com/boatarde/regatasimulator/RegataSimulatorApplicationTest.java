@@ -46,12 +46,15 @@ class RegataSimulatorApplicationTest {
     }
 
     @Test
-    void currentlyContinuesStorageInitializationAfterRegistrationFailure() throws Exception {
+    void initializesStorageBeforeRegistrationAndRefusesFailedStartupWithoutLeakingErrors() throws Exception {
         doThrow(new TelegramApiException("synthetic registration failure")).when(registration).register(bot);
-
-        new RegataSimulatorApplication(bot, database, registration, true).onStartUpInit();
-
-        verify(database).createCollection("sources");
-        verify(database).createCollection("memes");
+        var failure=org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+            () -> new RegataSimulatorApplication(bot, database, registration, true).onStartUpInit());
+        org.junit.jupiter.api.Assertions.assertNull(failure.getCause());
+        var order=org.mockito.Mockito.inOrder(database,registration);
+        for(String name:new String[]{"users","templates","sources","memes"}) {
+            order.verify(database).collectionExists(name); order.verify(database).createCollection(name);
+        }
+        order.verify(registration).register(bot);
     }
 }

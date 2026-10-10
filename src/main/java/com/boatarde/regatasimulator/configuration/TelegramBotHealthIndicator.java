@@ -4,43 +4,53 @@ import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthIndicator;
 import org.springframework.stereotype.Component;
-import org.telegram.telegrambots.meta.api.objects.User;
-
-import java.util.Optional;
+import java.util.concurrent.*;
+import java.time.Clock;
+import jakarta.annotation.PreDestroy;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Component
 public class TelegramBotHealthIndicator implements HealthIndicator {
 
     private final RegataSimulatorBot bot;
+    private final Clock clock;
+    private final int timeoutMillis;
+    private final int ttlMillis;
+    private final ThreadPoolExecutor worker = new ThreadPoolExecutor(1,1,0,TimeUnit.MILLISECONDS,
+        new SynchronousQueue<>(),r -> { Thread t=new Thread(r,"telegram-health"); t.setDaemon(true); return t; },
+        new ThreadPoolExecutor.AbortPolicy());
+    private long expires;
+    private Health cached;
 
     public TelegramBotHealthIndicator(RegataSimulatorBot bot) {
-        this.bot = bot;
+        this(bot,Clock.systemUTC(),2000,15000);
+    }
+
+    @Autowired
+    public TelegramBotHealthIndicator(RegataSimulatorBot bot, Clock clock,
+        @Value("${regata-simulator.health.telegram-timeout-millis:2000}") int timeoutMillis,
+        @Value("${regata-simulator.health.telegram-cache-millis:15000}") int ttlMillis) {
+        if (timeoutMillis<50 || timeoutMillis>5000 || ttlMillis<100 || ttlMillis>300000) throw new IllegalArgumentException("Health bounds invalid");
+        this.bot=bot; this.clock=clock; this.timeoutMillis=timeoutMillis; this.ttlMillis=ttlMillis;
     }
 
     @Override
-    public Health health() {
+    public synchronized Health health() {
+        if (cached!=null && clock.millis()<expires) return cached;
+        Future<Boolean> request=null;
         try {
-            User botUser = bot.getMe();
-            if (botUser != null) {
-                Health.Builder builder = Health.up();
-                builder = addDetailSafely(builder, "username", botUser.getUserName());
-                builder = addDetailSafely(builder, "firstName", botUser.getFirstName());
-                builder = addDetailSafely(builder, "lastName", botUser.getLastName());
-                builder = addDetailSafely(builder, "languageCode", botUser.getLanguageCode());
-                builder = addDetailSafely(builder, "canJoinGroups", botUser.getCanJoinGroups());
-                builder = addDetailSafely(builder, "canReadAllGroupMessages", botUser.getCanReadAllGroupMessages());
-                builder = addDetailSafely(builder, "isBot", botUser.getIsBot());
-                return builder.build();
-            } else {
-                return Health.down().withDetail("telegramBot", "Received null response from getMe").build();
-            }
-        } catch (Exception e) {
-            return Health.down(e).build();
+            request=worker.submit(() -> bot.getMe()!=null);
+            cached=Boolean.TRUE.equals(request.get(timeoutMillis,TimeUnit.MILLISECONDS)) ? Health.up().build() : Health.down().build();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); cached=Health.down().build();
+        } catch (ExecutionException | TimeoutException | RejectedExecutionException e) {
+            cached=Health.down().build();
+        } finally {
+            if (request!=null) request.cancel(true);
         }
+        expires=clock.millis()+ttlMillis;
+        return cached;
     }
-
-    private Health.Builder addDetailSafely(Health.Builder builder, String key, Object value) {
-        String detailValue = Optional.ofNullable(value).map(Object::toString).orElse("unknown");
-        return builder.withDetail(key, detailValue);
-    }
+    @PreDestroy public void close() { worker.shutdownNow(); }
 }

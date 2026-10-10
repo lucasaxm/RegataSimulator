@@ -44,13 +44,11 @@ public class RegataSimulatorApplication {
 
     @PostConstruct
     public void onStartUpInit() {
-        if (registrationEnabled) {
-            registerHelloBotAbilities();
-        }
         createCollectionIfAbsent("users");
         createCollectionIfAbsent("templates");
         createCollectionIfAbsent("sources");
         createCollectionIfAbsent("memes");
+        if (registrationEnabled) registerHelloBotAbilities();
     }
 
     private void createCollectionIfAbsent(String collectionName) {
@@ -67,7 +65,8 @@ public class RegataSimulatorApplication {
         try {
             botRegistration.register(regataSimulatorBot);
         } catch (TelegramApiException e) {
-            log.error(String.format("Error registering bots: %s", e.getMessage()), e);
+            log.error("Bot registration failed; startup refused");
+            throw new IllegalStateException("Bot registration failed");
         }
     }
 }
