@@ -31,7 +31,8 @@ public class TelegramFileDownloader {
         if (filePath == null) {
             throw new IOException("Failed to retrieve Telegram file path");
         }
-        if (!filePath.matches("[a-zA-Z0-9_./-]{1,1024}") || filePath.contains("..")) {
+        if (!filePath.matches("[a-zA-Z0-9_./-]{1,1024}") || filePath.startsWith("/")
+            || java.util.Arrays.stream(filePath.split("/",-1)).anyMatch(part -> part.isEmpty() || part.equals(".") || part.equals(".."))) {
             throw new IOException("Invalid Telegram file path");
         }
 

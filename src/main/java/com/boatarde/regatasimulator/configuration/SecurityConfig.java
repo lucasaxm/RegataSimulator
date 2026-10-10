@@ -47,11 +47,12 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,LoginAttemptLimiter limiter) throws Exception {
         AntPathRequestMatcher api = new AntPathRequestMatcher("/api/**");
         HttpSessionRequestCache requestCache = new HttpSessionRequestCache();
         requestCache.setRequestMatcher(request -> !api.matches(request));
         http
+            .addFilterBefore(new LoginThrottleFilter(limiter),org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class)
             .cors(cors -> {})
             .authorizeHttpRequests((requests) -> requests
                 .requestMatchers("/actuator/health/liveness", "/actuator/health/readiness").permitAll()
@@ -86,7 +87,7 @@ public class SecurityConfig {
             .formLogin((form) -> form
                 .loginPage("/login.html")
                 .loginProcessingUrl("/api/login")
-                .successHandler(customAuthenticationSuccessHandler())
+                .successHandler(customAuthenticationSuccessHandler(limiter))
                 .failureHandler((request, response, failure) -> authenticationFailure(request, response))
             )
             .logout((logout) -> logout
@@ -124,9 +125,10 @@ public class SecurityConfig {
     }
 
     @Bean
-    public AuthenticationSuccessHandler customAuthenticationSuccessHandler() {
+    public AuthenticationSuccessHandler customAuthenticationSuccessHandler(LoginAttemptLimiter limiter) {
         SavedRequestAwareAuthenticationSuccessHandler browser = new SavedRequestAwareAuthenticationSuccessHandler();
         return (request, response, authentication) -> {
+            limiter.succeeded(request.getRemoteAddr(),authentication.getName());
             if (isAjax(request)) {
                 new HttpSessionRequestCache().removeRequest(request, response);
                 response.setStatus(HttpServletResponse.SC_NO_CONTENT);
@@ -134,6 +136,14 @@ public class SecurityConfig {
                 browser.onAuthenticationSuccess(request, response, authentication);
             }
         };
+    }
+
+    @Bean
+    public LoginAttemptLimiter loginAttemptLimiter(
+        @Value("${regata-simulator.web.login.max-attempts:10}") int attempts,
+        @Value("${regata-simulator.web.login.window-millis:60000}") long windowMillis,
+        @Value("${regata-simulator.web.login.max-entries:10000}") int entries) {
+        return new LoginAttemptLimiter(java.time.Clock.systemUTC(),attempts,windowMillis,entries);
     }
 
     private boolean isAjax(HttpServletRequest request) {

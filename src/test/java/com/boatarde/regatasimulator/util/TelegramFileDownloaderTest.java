@@ -73,4 +73,14 @@ class TelegramFileDownloaderTest {
         verify(stream).close();
         verify(image).disconnect();
     }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"/absolute/file.jpg","photos/../file.jpg","photos/./file.jpg","photos//file.jpg","photos/file.jpg?token=hidden","photos/%2e%2e/file.jpg","photos/file.jpg#fragment"})
+    void rejectsUnsafeRemotePathsWithoutDownloadingOrCreatingFiles(String remote) throws Exception {
+        HttpURLConnection metadata=mock(HttpURLConnection.class),image=mock(HttpURLConnection.class);
+        when(metadata.getResponseCode()).thenReturn(200);
+        when(metadata.getInputStream()).thenReturn(new ByteArrayInputStream(("{\"ok\":true,\"result\":{\"file_path\":\""+remote+"\"}}").getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        assertThatThrownBy(()->downloader(metadata,image).downloadTelegramPhoto("synthetic-file",temporary)).isInstanceOf(IOException.class);
+        verifyNoInteractions(image); assertThat(temporary.resolve("source.jpg")).doesNotExist(); verify(metadata).disconnect();
+    }
 }
