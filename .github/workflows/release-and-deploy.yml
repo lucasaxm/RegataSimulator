@@ -2,215 +2,90 @@ name: Release and deploy
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
     inputs:
-      create_release:
-        description: 'Create a new release'
-        type: boolean
-        required: true
-        default: false
       environment:
-        description: 'Environment to deploy to'
+        description: Explicit operator-approved environment
         type: environment
         default: stage
         required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: regata-deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'stage' }}
+  cancel-in-progress: false
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
-          java-version-file: '.tool-versions'
-          distribution: 'oracle'
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
+          java-version: '21.0.12.1+1'
+          distribution: temurin
+      - uses: actions/setup-node@v4
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-      - name: Build and test with Gradle
-        run: ./gradlew clean build test
-      - name: Generate JAR artifact
-        run: ./gradlew bootJar
-      - name: Rename JAR with commit hash
-        run: mv -v build/libs/RegataSimulator-0.0.1.jar build/libs/RegataSimulator-${{ github.sha }}.jar
-      - name: Upload JAR to run artifacts
+          node-version: '22.23.1'
+      - uses: gradle/actions/wrapper-validation@v4
+      - name: Build, fixtures and dependency gate
+        run: |
+          ./gradlew verifyMaintenanceJava clean build
+          node --test src/test/js/*.test.cjs
+          bash -n scripts/deploy-release.sh
+          ./gradlew dependencyScan
+      - name: Retain dependency/security/license evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: RegataSimulator-${{ github.sha }}.jar
-          path: build/libs/RegataSimulator-${{ github.sha }}.jar
+          name: dependency-security
+          path: build/dependency-security/
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: regata-release
+          path: build/libs/RegataSimulator-0.0.1.jar
           if-no-files-found: error
-          overwrite: true
 
-  release-and-deploy:
+  deploy:
     needs: build-and-test
     runs-on: ubuntu-latest
     environment:
       name: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'stage' }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: regata-release
       - uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SERVER_SSH_KEY }}
-      - name: Download JAR artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: RegataSimulator-${{ github.sha }}.jar
-      - name: Check for RegataSimulator-${{ github.sha }}.jar
-        run: |
-          if [ ! -f "RegataSimulator-${{ github.sha }}.jar" ]; then
-            echo "Error: RegataSimulator-${{ github.sha }}.jar not found!"
-            exit 1
-          fi
-      - name: Add server to known_hosts
-        run: ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
-      - name: Stop running jar
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USERNAME }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            script_pid=$$
-            echo "Script PID: ${script_pid}"
-            if [ -f /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/app.pid ]; then
-              pid=$(cat /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/app.pid)
-              if ps -p $pid > /dev/null; then
-                echo "Stopping process $pid"
-                kill $pid
-                sleep 5
-                if ps -p $pid > /dev/null; then
-                  echo "Process didn't stop, force killing"
-                  kill -9 $pid
-                fi
-              else
-                echo "Process $pid not found"
-              fi
-              rm /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/app.pid
-            else
-              echo "PID file not found, checking for any running instances"
-              pids=$(pgrep -f "start_regata_simulator.sh" | grep -v "^$script_pid$")
-              if [ ! -z "$pids" ]; then
-                echo "Found process(es): $pids"
-                kill -9 $pids
-                if [ $? -eq 0 ]; then
-                  echo "Successfully killed PID $pid."
-                else
-                  echo "Failed to kill PID $pid."
-                fi
-              else
-                echo "No matching processes running."
-              fi
-            fi
-            
-            JAVA_PIDS=$(pgrep -f "java.*RegataSimulator.jar" | grep -v "^$script_pid$")
-            if [ ! -z "$JAVA_PIDS" ]; then
-              echo "Found Java process(es): $JAVA_PIDS"
-              for PID in $JAVA_PIDS; do
-                echo "Stopping Java process $PID"
-                kill $PID
-                sleep 2
-                if ps -p $PID > /dev/null; then
-                  echo "Java process $PID didn't stop, force killing"
-                  kill -9 $PID
-                fi
-              done
-            else
-              echo "No Java processes found for RegataSimulator"
-            fi
-            
-            # Backup the old JAR file
-            [ -f /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator.jar ] && mv /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator.jar /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator-backup.jar || exit 0
-      - name: Copy jar to server via scp
-        run: |
-          scp RegataSimulator-${{ github.sha }}.jar ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }}:/home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator.jar
-      - name: Create startup script
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Transfer immutable artifact and invoke checked-in release logic
         env:
-          SPRING_PROFILES_ACTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'stage' }}
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USERNAME }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          envs: SPRING_PROFILES_ACTIVE
-          script: |
-            cat << EOF > /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/start_regata_simulator.sh
-            #!/bin/bash
-
-            APP_DIR="/home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator"
-            JAR_FILE="\$APP_DIR/RegataSimulator.jar"
-            LOG_FILE="\$APP_DIR/RegataSimulator.log"
-            JAVA_PATH="/home/${{ secrets.SERVER_USERNAME }}/.asdf/installs/java/openjdk-21.0.2/bin/java"
-
-            while true; do
-                echo "Starting RegataSimulator..." >> \$LOG_FILE
-                subprocess 629145600 \$JAVA_PATH -Dspring.profiles.active=$SPRING_PROFILES_ACTIVE -jar \$JAR_FILE >> \$LOG_FILE 2>&1
-                echo "RegataSimulator exited with code \$?. Restarting in 5 seconds..." >> \$LOG_FILE
-                sleep 5
-            done
-            EOF
-            chmod +x /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/start_regata_simulator.sh
-      - name: Start the application
-        uses: appleboy/ssh-action@v1.0.3
-        env:
-          REGATA_SIMULATOR_ENC_PASSWORD: ${{ secrets.REGATA_SIMULATOR_ENC_PASSWORD }}
-          REGATA_SIMULATOR_SOURCES_PATH: ${{ secrets.REGATA_SIMULATOR_SOURCES_PATH }}
-          REGATA_SIMULATOR_TEMPLATES_PATH: ${{ secrets.REGATA_SIMULATOR_TEMPLATES_PATH }}
-          REGATA_SIMULATOR_DB_PATH: ${{ secrets.REGATA_SIMULATOR_DB_PATH }}
-          MAGICK_PATH: ${{ secrets.MAGICK_PATH }}
-          SPRING_PROFILES_ACTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'stage' }}
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USERNAME }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          envs: REGATA_SIMULATOR_ENC_PASSWORD,SPRING_PROFILES_ACTIVE,REGATA_SIMULATOR_SOURCES_PATH,REGATA_SIMULATOR_TEMPLATES_PATH,MAGICK_PATH,REGATA_SIMULATOR_DB_PATH
-          script: |
-            nohup /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/start_regata_simulator.sh >> start_regata_simulator.log 2>&1 &
-            echo $! > /home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/app.pid
-            echo "start script pid: $(cat app.pid)"
-      - name: Check application startup
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USERNAME }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            LOG_FILE="/home/${{ secrets.SERVER_USERNAME }}/bots/RegataSimulator/RegataSimulator.log"
-            
-            # Get the initial number of lines in the log file
-            initial_lines=$(wc -l < "$LOG_FILE")
-            
-            # Wait for 2 minutes for the application to start
-            for i in {1..120}; do
-              # Get the current number of lines
-              current_lines=$(wc -l < "$LOG_FILE")
-            
-              # Calculate new lines
-              new_lines=$((current_lines - initial_lines))
-            
-              if [ $new_lines -gt 0 ]; then
-                # Check only the new lines
-                if tail -n $new_lines "$LOG_FILE" | grep -q "Started RegataSimulatorApplication"; then
-                  echo "Application started successfully"
-                  exit 0
-                elif tail -n $new_lines "$LOG_FILE" | grep -q "Application run failed"; then
-                  echo "Application failed to start"
-                  tail -n $new_lines "$LOG_FILE"
-                  exit 1
-                fi
-              fi
-            
-              sleep 1
-            done
-            
-            echo "Application did not start within 2 minutes"
-            tail -n 50 "$LOG_FILE"  # Show the last 50 lines of the log for debugging
-            exit 1
+          SERVER_HOST: ${{ vars.SERVER_HOST }}
+          SERVER_USERNAME: ${{ vars.SERVER_USERNAME }}
+          SERVER_ROOT: ${{ vars.SERVER_ROOT }}
+          SERVER_KNOWN_HOSTS: ${{ vars.SERVER_KNOWN_HOSTS }}
+          RELEASE_ID: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$SERVER_HOST" =~ ^[a-zA-Z0-9.-]+$ && "$SERVER_USERNAME" =~ ^[a-zA-Z0-9_-]+$ ]]
+          [[ "$SERVER_ROOT" =~ ^/[a-zA-Z0-9_./-]+$ && "$SERVER_ROOT" != *'/../'* && "$SERVER_ROOT" != *'/./'* && "$SERVER_ROOT" != / ]]
+          [[ "$RELEASE_ID" =~ ^[a-f0-9]{40}$ && -n "$SERVER_KNOWN_HOSTS" ]]
+          hosts=$(mktemp)
+          trap 'rm -f "$hosts"' EXIT
+          printf '%s\n' "$SERVER_KNOWN_HOSTS" > "$hosts"
+          ssh-keygen -l -f "$hosts" >/dev/null
+          options=(-o "UserKnownHostsFile=$hosts" -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=2)
+          remote="$SERVER_USERNAME@$SERVER_HOST"
+          checksum=$(shasum -a 256 RegataSimulator-0.0.1.jar | cut -d ' ' -f 1)
+          schema=$(sed -n 's/^--changeset regata:\([0-9]*\).*/\1/p' src/main/resources/db/changelog/sqlite.sql | tail -n 1)
+          ssh "${options[@]}" "$remote" "umask 077; mkdir '$SERVER_ROOT/incoming/$RELEASE_ID'"
+          scp "${options[@]}" RegataSimulator-0.0.1.jar "$remote:$SERVER_ROOT/incoming/$RELEASE_ID/app.jar"
+          ssh "${options[@]}" "$remote" "bash -s -- '$SERVER_ROOT' '$RELEASE_ID' '$checksum' '$schema' artifact-only-schema-compatible" < scripts/deploy-release.sh
+          # systemd unit and runtime environment are provisioned separately by an operator.
+          # Never transmit/decrypt runtime secrets or tail application logs here.
