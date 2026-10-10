@@ -2,6 +2,8 @@ package com.boatarde.regatasimulator.controller;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import lombok.extern.slf4j.Slf4j;
 import com.boatarde.regatasimulator.models.GalleryResponse;
 import com.boatarde.regatasimulator.models.ReviewTemplateBody;
 import com.boatarde.regatasimulator.models.Status;
@@ -25,6 +27,7 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 import java.util.UUID;
 
 @RestController
+@Slf4j
 @RequestMapping("/api/templates")
 public class TemplateController {
 
@@ -71,17 +74,18 @@ public class TemplateController {
     public ResponseEntity<Void> reviewTemplate(@RequestBody ReviewTemplateBody reviewTemplateBody) {
         Template template = templateService.getTemplate(reviewTemplateBody.getTemplateId())
             .orElseThrow(() -> new RuntimeException("Template not found: " + reviewTemplateBody.getTemplateId()));
-        if (template.getStatus() == Status.APPROVED) {
-            throw new RuntimeException("Template already approved: " + reviewTemplateBody.getTemplateId());
+        if (template.getStatus() != Status.REVIEW) {
+            throw new ApplicationFailure(ApplicationFailure.Kind.INVALID_INPUT, "Template no longer in review");
         }
 
         Update update = new Update();
         update.setMessage(template.getMessage());
+        boolean notificationFailed = false;
 
         if (reviewTemplateBody.isApproved()) {
             templateService.approveTemplate(template);
             if (template.getMessage() != null) {
-                routerService.startFlow(update, bot, WorkflowAction.SEND_TEMPLATE_APPROVED_MESSAGE_STEP);
+                notificationFailed = !notifyDecision(update, WorkflowAction.SEND_TEMPLATE_APPROVED_MESSAGE_STEP);
             }
         } else {
             templateService.rejectTemplate(template);
@@ -90,11 +94,21 @@ public class TemplateController {
                 Message reasonMessage = new Message();
                 reasonMessage.setText(reviewTemplateBody.getReason());
                 update.setChannelPost(reasonMessage);
+                notificationFailed = !notifyDecision(update, WorkflowAction.SEND_TEMPLATE_REJECTED_MESSAGE);
             }
-
-            routerService.startFlow(update, bot, WorkflowAction.SEND_TEMPLATE_REJECTED_MESSAGE);
         }
-        return ResponseEntity.noContent().build();
+        return notificationFailed ? ResponseEntity.noContent().header("X-Notification-Status", "failed").build()
+            : ResponseEntity.noContent().build();
+    }
+
+    private boolean notifyDecision(Update update, WorkflowAction action) {
+        try {
+            routerService.startFlow(update, bot, action);
+            return true;
+        } catch (RuntimeException e) {
+            log.warn("Template decision applied, but notification failed");
+            return false;
+        }
     }
 
     @PostMapping("/reset_weights")

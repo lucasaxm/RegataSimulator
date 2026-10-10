@@ -1,10 +1,16 @@
 # Backend improvement plan
 
-Date: 2026-10-06. Updated: 2026-10-09. Status: **Phase 0 and the first Phase 1 callback-safety slice implemented**; remaining Phase 1 work and Phases 2–5 remain proposed. [Phase 0 results](phase-0-results.md) record the characterization coverage/test seams; [callback-safety results](phase-1-callback-safety-results.md) record the implemented behavior and compatibility/recovery limits.
+Date: 2026-10-06. Updated: 2026-10-09. Status: **Phases 0 and 1 implemented for their scoped acceptance items**; Phases 2–5 remain proposed. [Phase 0 results](phase-0-results.md), [callback-safety results](phase-1-callback-safety-results.md), and [Phase 1 reliability results](phase-1-reliability-results.md) record implementation, verification, and recovery limits.
 
 Read [backend review](backend-review.md) for evidence/tradeoffs and [project map](project-map.md) for the current structure. The goal is a simpler, reliable modular monolith, not a rewrite or a distributed system.
 
 ## Progress checkpoint — 2026-10-09
+
+- **Phase 1 completion:** isolated render ownership, bounded processes, capacity-aware history/birthday fallback, fail-closed bounded/exclusive workflows, actual image/geometry/CSV validation, upload/import/ZIP compensation, bounded imported transfers, and null-origin/moderation notification recovery. See [reliability results](phase-1-reliability-results.md) for acceptance mapping and local commits.
+- **Final verification:** targeted suites and `./gradlew clean build`; XML **649 tests / 29 suites**, zero failures/errors/skips. Dedicated Sonar analysis was unavailable in this session; editor findings were addressed, with workspace-import diagnostics remaining. No live effects or runtime data access.
+- **Next phase:** configuration/web security (Phase 2), not more proposed Phase 1 work. Cross-adapter transactions, coherent restore, durable retries, and production readiness remain explicitly unclaimed.
+
+### Earlier callback-only checkpoint (historical)
 
 - **Complete:** owner/REVIEW/preview-context validation, strict callback parsing, safe generic rejection, persisted nullable preview binding, successful-confirmation consumption, and process-local concurrent replay protection.
 - **Verified:** focused regression suites and `./gradlew clean build`, with **590 cases across 24 suites**, zero failures/errors/skips. Changed Java files were explicitly reanalyzed with Sonar; returned rule findings were fixed, with Java workspace-import warnings remaining rather than a verified server-wide quality-gate result.
@@ -34,7 +40,7 @@ Acceptance: baseline 12 tests remain green; new tests describe known failures an
 
 ## Phase 1 — Safety and reliability fixes
 
-Callback safety (item 1) is implemented as scoped in [callback-safety results](phase-1-callback-safety-results.md); cross-adapter transaction/recovery guarantees are still deferred. Items 2–5 remain next work.
+Items 1–5 are implemented as scoped in [callback-safety results](phase-1-callback-safety-results.md) and [reliability results](phase-1-reliability-results.md); cross-adapter transaction/recovery guarantees are still deferred. The list below remains the acceptance scope, not a pending implementation queue.
 
 Small independent changes, each with a regression test:
 
@@ -123,6 +129,6 @@ Acceptance for that first slice:
 4. Add adversarial/replay cases alongside existing valid-owner cases in `ReviewCallbackStepsTest` and route/workflow tests. Update known-failure expectations with their fixes, preserving callback formats and Portuguese messages where compatible.
 5. Pass targeted tests and `./gradlew clean build`; explicitly reanalyze changed Java files for Sonar findings. Do not suppress rules, include production data, migrate storage, or redesign the workflow framework in this slice.
 
-Then tackle isolated scratch directories and bounded subprocess execution, followed by small-pool selection and the remaining Phase 1 items. Follow with CORS/cookie/CSRF configuration in Phase 2. These address safety before replacing infrastructure; repository isolation then makes SQLite migration much less invasive.
+The subsequent rendering, selection, failure-reporting, validation, and recovery slices are now implemented; see [reliability results](phase-1-reliability-results.md). Continue with CORS/cookie/CSRF configuration in Phase 2. Repository isolation then makes SQLite migration much less invasive.
 
 Each phase is a sequence of small PRs, not one giant PR. Estimates should follow the data audit and required test work; the existing green suite does not justify calling a whole migration low-risk or a two-day task.

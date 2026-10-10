@@ -117,13 +117,14 @@ public class SendMemeStep implements WorkflowStep {
     private <T extends CommonEntity> void savePreview(T item, Class<T> itemClass, Message response) {
         if (response == null || response.getChat() == null || response.getChatId() == null
             || response.getMessageId() == null || response.getMessageId() <= 0) {
-            log.error("Preview send returned no usable message identity; callbacks remain disabled");
-            return;
+            throw new ApplicationFailure(ApplicationFailure.Kind.EXECUTION,
+                "Preview returned no usable identity; callbacks remain disabled");
         }
         T stored = jsonDBTemplate.findAndModify("/.[id='%s' and status='REVIEW']".formatted(item.getId()),
             update("previewChatId", response.getChatId()).set("previewMessageId", response.getMessageId()), itemClass);
         if (stored == null) {
-            log.warn("Preview item {} is absent or no longer in review; callbacks remain disabled", item.getId());
+            throw new ApplicationFailure(ApplicationFailure.Kind.EXECUTION,
+                "Preview item absent or no longer in review; callbacks remain disabled");
         }
     }
 
@@ -165,12 +166,15 @@ public class SendMemeStep implements WorkflowStep {
     }
 
     private void addConfirmKeyboard(WorkflowDataBag bag, RegataSimulatorBot regataSimulatorBot,
-                                    String type, SendPhoto sendPhoto, Message creatingTemplateMessage)
-        throws TelegramApiException {
-        regataSimulatorBot.execute(DeleteMessage.builder()
-            .chatId(creatingTemplateMessage.getChatId())
-            .messageId(creatingTemplateMessage.getMessageId())
-            .build());
+                                    String type, SendPhoto sendPhoto, Message creatingTemplateMessage) {
+        try {
+            regataSimulatorBot.execute(DeleteMessage.builder()
+                .chatId(creatingTemplateMessage.getChatId())
+                .messageId(creatingTemplateMessage.getMessageId())
+                .build());
+        } catch (TelegramApiException e) {
+            log.warn("Could not delete preview progress message; continuing preview delivery");
+        }
         List<Source> sources = bag.getGeneric(WorkflowDataKey.SOURCES, List.class, Source.class);
         UUID itemId = type.equals("template") ? bag.get(WorkflowDataKey.TEMPLATE, Template.class).getId()
             : sources.getFirst().getId();

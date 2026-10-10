@@ -3,6 +3,8 @@ package com.boatarde.regatasimulator.flows.simulator;
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.factory.TelegramTestFactory;
 import com.boatarde.regatasimulator.flows.WorkflowDataBag;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.flows.WorkflowManager;
 import com.boatarde.regatasimulator.models.CommonEntity;
@@ -134,7 +136,7 @@ class PreviewCallbackIntegrationTest {
     }
 
     private CommonEntity sendPreview(String type) throws IOException {
-        return sendPreview(type, item -> { });
+        return sendPreview(type, item -> { }, false);
     }
 
     @ParameterizedTest
@@ -146,7 +148,7 @@ class PreviewCallbackIntegrationTest {
             approved.setStatus(Status.APPROVED);
             approved.setWeight(99);
             database.save(approved, itemClass(type));
-        });
+        }, true);
         CommonEntity approved = find(type, item.getId());
         assertThat(approved.getStatus()).isEqualTo(Status.APPROVED);
         assertThat(approved.getWeight()).isEqualTo(99);
@@ -161,7 +163,7 @@ class PreviewCallbackIntegrationTest {
         assertThat(find(type, item.getId()).getStatus()).isEqualTo(Status.APPROVED);
     }
 
-    private CommonEntity sendPreview(String type, Consumer<CommonEntity> duringDelivery) throws IOException {
+    private CommonEntity sendPreview(String type, Consumer<CommonEntity> duringDelivery, boolean bindingFailure) throws IOException {
         CommonEntity item = type.equals("source") ? new Source() : new Template();
         item.setId(UUID.randomUUID());
         item.setStatus(Status.REVIEW);
@@ -193,8 +195,13 @@ class PreviewCallbackIntegrationTest {
                     duringDelivery.accept(item);
                     return message(900, 42L);
                 });
-            new SendMemeStep(-9000L, database).run(bag);
+            if (bindingFailure) {
+                assertThrows(ApplicationFailure.class, () -> new SendMemeStep(-9000L, database).run(bag));
+            } else {
+                new SendMemeStep(-9000L, database).run(bag);
+            }
         }
+        assertThat(output).doesNotExist();
         return item;
     }
 

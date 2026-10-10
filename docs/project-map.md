@@ -33,13 +33,13 @@ All package paths below are relative to `src/main/java/com/boatarde/regatasimula
 | `RegataSimulatorApplication` | Boot entry point; conditionally registers the bot through TelegramBotRegistration and creates four JsonDB collections in `@PostConstruct` |
 | `bots/RegataSimulatorBot` | Telegram long-polling adapter forwarding updates to `RouterService` |
 | `routes/` | Six route predicates: ping, meme, report, backup, source upload/callback, template upload/callback |
-| `service/RouterService` | Runs all matching routes; enum-driven synchronous workflow loop |
+| `service/RouterService` | Requires an exclusive route match; bounded enum-driven synchronous workflow loop and redacted failure reporting |
 | `flows/` | Workflow interface/action/registration, registry, and object-valued data bag |
 | `flows/ping/`, `flows/common/` | Pong construction and generic text/photo sending |
 | `flows/simulator/` | Source/template creation, selection, rendering, sending, confirmation/cancellation, decision notifications |
 | `flows/backup/` | JsonDB/media backup sequencing and report generation |
 | `service/SourceService`, `TemplateService` | JsonDB-backed gallery, image loading, review status, deletion, weight maintenance |
-| `service/SourceImporterService` | CSV import using the separate bilu-tags bot's file identity |
+| `service/SourceImporterService` | Validated bounded CSV import, typed row report, normalized batch deduplication/compensation, using bilu-tags file identity |
 | `service/BackupService` | ZIP packaging via FileUtils and Telegram document delivery |
 | `service/ScheduledTaskService` | Scheduled meme generation and backup; also called by administration endpoints |
 | `controller/` | SourceController, TemplateController, AdminController |
@@ -52,7 +52,7 @@ All package paths below are relative to `src/main/java/com/boatarde/regatasimula
 
 There are 21 concrete steps: one ping, two common sends, four backup/report, and fourteen simulator steps. `@WorkflowStepRegistration` also acts as a Spring component annotation. A new step needs an action/registration plus any bag keys it consumes/produces; there is no compile-time flow contract.
 
-Each invocation gets a fresh bag. `NONE` has no registered step and ends execution. Missing actions also end execution with the current implementation. See [backend review](backend-review.md) for actual flow sequences and defects; do not use these behaviors as recommended new design.
+Each invocation gets a fresh bag. `NONE` is the only successful terminal action and cannot be registered. Missing annotations/actions, null transitions, cycles beyond 64 transitions, and ambiguous route matches fail explicitly. Runner callers receive typed application failures; Telegram senders receive a redacted Portuguese message. See [Phase 1 reliability results](phase-1-reliability-results.md) for verified behavior and limits.
 
 ## Persistence and media
 
@@ -71,6 +71,8 @@ JsonDB discovers `@Document` entities under `models`. Review status values are e
 - Imported sources have no Telegram origin message. Current entity sorting derives dates from Message or zero.
 - Preview callbacks require the original submitter, REVIEW state, and the exact persisted preview chat/message identity. Successful confirmation consumes the binding without approving the record. Legacy/unbound previews fail closed. Binding metadata is updated with JsonDB field operations; process-local callback locks prevent concurrent successful replays, not all HTTP/multi-process races. See [callback-safety results](phase-1-callback-safety-results.md).
 - Files and JsonDB metadata are separate; neither source deletion nor create operations are application-level atomic across them.
+- Rendering scratch is job-local outside persisted media, with owner-only permissions. `ProcessRunner` bounds execution/output and checks exit status; final output ownership passes to `SendMemeStep` through delivery. Upload/import validation uses actual decoded PNG/JPEG bytes and bounded convex geometry/CSV. See [reliability results](phase-1-reliability-results.md) for numeric limits and recovery policies.
+- Moderation updates status and consumes preview bindings only from stored REVIEW state; unrelated current fields are preserved. Notification failure does not undo an applied decision; the existing HTTP 204 carries `X-Notification-Status: failed` when applicable. Null-origin imports receive no notification.
 
 ## HTTP and browser integration
 
@@ -91,10 +93,10 @@ Cookies/sessions use `MapSessionRepository`, not database-backed sessions. Stage
 - Meme publishing: `0 0,30 * * * *` — at minute 0 and 30 of each hour.
 - Backup: `0 15 12 * * SUN` — Sunday at 12:15.
 - Neither scheduled annotation sets a zone; the scheduler timezone applies. Birthday selection separately uses America/Sao_Paulo.
-- Backups include JsonDB, templates, sources, then a statistics report, delivered to a configured Telegram backup chat. ZIP grouping targets 40 MiB of uncompressed items, not a guaranteed maximum output size.
+- Backups include JsonDB, templates, sources, then a statistics report, delivered to a configured Telegram backup chat. Indivisible items and encoded ZIPs above 40 MiB fail explicitly; ZIP creation/delivery cleans prepared archives on failure. This is not a coherent live database/media snapshot; that remains Phase 5.
 - Application startup calls the live Telegram API and starts long polling. Registered schedules can publish and send backups. `bootRun` is **not** a harmless startup smoke test.
 - Phase 0 added explicit default-on switches: `telegram.bots.regata-simulator.registration-enabled` and `regata-simulator.scheduling.enabled`. Tests set both false and mock Telegram; disabling these alone does not disable manual operations/remote health calls.
-- `TimeConfig` supplies a Clock for birthday rules; JsonDBUtils offers RandomGenerator overloads, and BuildMemeStep has a process-start seam. Normal time/selection/process behavior remains unchanged.
+- `TimeConfig` supplies a Clock for birthday rules; JsonDBUtils offers RandomGenerator overloads, and BuildMemeStep retains a process-start seam. History exclusion now preserves required capacity, birthday pools fall back when insufficient, and subprocess execution is bounded.
 
 ## Build and test commands
 
@@ -106,7 +108,7 @@ Run from repository root with Java 21:
 - `./gradlew bootJar` — executable JAR under `build/libs/`.
 - `./gradlew test --tests 'com.boatarde.regatasimulator.service.RouterServiceTest'` — targeted test example.
 
-The suite has **590 passing cases across 24 suites** after the 2026-10-09 callback-safety slice (previous baseline: 300/23), with no runtime secrets, Telegram calls, or ImageMagick dependency. Test reports: `build/reports/tests/test/index.html` and `build/test-results/test/`. The dormant `BilubotApplicationTests.java` was replaced with safe context/startup tests; test-only profile YAML and dynamic temporary paths isolate them. See [Phase 0 results](phase-0-results.md) for characterization conventions and [callback-safety results](phase-1-callback-safety-results.md) for current regression coverage. IDE non-project diagnostics should be investigated via Gradle/Java workspace import, not fixed by changing valid package declarations.
+The suite has **649 passing cases across 29 suites** after the 2026-10-09 Phase 1 reliability work (callback baseline: 590/24; Phase 0: 300/23), with no runtime secrets, Telegram calls, or ImageMagick dependency. Process tests launch safe Java children; validation fixtures use generated ImageIO images. Test reports: `build/reports/tests/test/index.html` and `build/test-results/test/`. The dormant `BilubotApplicationTests.java` was replaced with safe context/startup tests; test-only profile YAML and dynamic temporary paths isolate them. See [Phase 0 results](phase-0-results.md), [callback-safety results](phase-1-callback-safety-results.md), and [reliability results](phase-1-reliability-results.md). IDE non-project diagnostics should be investigated via Gradle/Java workspace import, not fixed by changing valid package declarations.
 
 ## Runtime environment and local safety
 

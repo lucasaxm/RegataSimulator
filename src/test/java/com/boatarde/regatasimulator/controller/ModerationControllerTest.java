@@ -117,8 +117,9 @@ class ModerationControllerTest {
         doThrow(failure).when(router).startFlow(any(Update.class), eq(bot), eq(sourceAction(approved)));
 
         ReviewSourceBody review = sourceReview(source.getId(), approved);
-        assertSame(failure, assertThrows(IllegalStateException.class,
-            () -> sources.reviewSource(review)));
+        var response = sources.reviewSource(review);
+        assertEquals(204, response.getStatusCode().value());
+        assertEquals("failed", response.getHeaders().getFirst("X-Notification-Status"));
 
         assertEquals(decision(approved), persisted.get());
         assertEquals(decision(approved), source.getStatus());
@@ -135,8 +136,9 @@ class ModerationControllerTest {
         doThrow(failure).when(router).startFlow(any(Update.class), eq(bot), eq(templateAction(approved)));
 
         ReviewTemplateBody review = templateReview(template.getId(), approved);
-        assertSame(failure, assertThrows(IllegalStateException.class,
-            () -> templates.reviewTemplate(review)));
+        var response = templates.reviewTemplate(review);
+        assertEquals(204, response.getStatusCode().value());
+        assertEquals("failed", response.getHeaders().getFirst("X-Notification-Status"));
 
         assertEquals(decision(approved), persisted.get());
         assertEquals(decision(approved), template.getStatus());
@@ -155,8 +157,8 @@ class ModerationControllerTest {
         RuntimeException failure = assertThrows(RuntimeException.class,
             () -> sources.reviewSource(review));
 
-        assertEquals(RuntimeException.class, failure.getClass());
-        assertEquals("Source already approved: " + source.getId(), failure.getMessage());
+        assertEquals(ApplicationFailure.class, failure.getClass());
+        assertEquals("Source no longer in review", failure.getMessage());
         InOrder order = inOrder(sourceService);
         order.verify(sourceService).getSource(source.getId());
         verifyNoMoreInteractions(sourceService);
@@ -174,8 +176,8 @@ class ModerationControllerTest {
         RuntimeException failure = assertThrows(RuntimeException.class,
             () -> templates.reviewTemplate(review));
 
-        assertEquals(RuntimeException.class, failure.getClass());
-        assertEquals("Template already approved: " + template.getId(), failure.getMessage());
+        assertEquals(ApplicationFailure.class, failure.getClass());
+        assertEquals("Template no longer in review", failure.getMessage());
         InOrder order = inOrder(templateService);
         order.verify(templateService).getTemplate(template.getId());
         verifyNoMoreInteractions(templateService);
@@ -206,25 +208,19 @@ class ModerationControllerTest {
     }
 
     @Test
-    void nullOriginTemplateRejectionCurrentlyThrowsInRealStepAfterCommitPhase1NullOriginBug() {
+    void nullOriginTemplateRejectionCommitsWithoutStartingNotification() {
         Template template = template(null);
         AtomicReference<Status> persisted = trackTemplateCommit(template, false);
-        // No mocked exception: the controller leaves channelPost null and the real step dereferences it.
         RouterService realRouter = spy(new RouterService(
             new WorkflowManager(List.of(new SendTemplateRejectedMessageStep())), List.of()));
         TemplateController controller = new TemplateController(templateService, bot, realRouter);
 
         ReviewTemplateBody review = templateReview(template.getId(), false);
-        Throwable failure = assertThrows(ApplicationFailure.class,
-            () -> controller.reviewTemplate(review)).getCause();
-        assertTrue(failure instanceof NullPointerException);
+        assertEquals(204, controller.reviewTemplate(review).getStatusCode().value());
 
         assertEquals(Status.REJECTED, persisted.get());
         assertEquals(Status.REJECTED, template.getStatus());
-        assertTrue(Arrays.stream(failure.getStackTrace()).anyMatch(frame ->
-            frame.getClassName().equals(SendTemplateRejectedMessageStep.class.getName())
-                && frame.getMethodName().equals("run")));
-        verifyTemplateOrder(template, false, realRouter);
+        verifyNoInteractions(realRouter);
         verifyNoInteractions(bot);
     }
 
@@ -258,6 +254,21 @@ class ModerationControllerTest {
         inOrder(templateService).verify(templateService).getTemplate(id);
         verifyNoMoreInteractions(templateService);
         verifyNoInteractions(router, bot);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void rejectedItemsCannotBeReviewedAgain(boolean approved) {
+        Source source = source(origin());
+        source.setStatus(Status.REJECTED);
+        Template template = template(origin());
+        template.setStatus(Status.REJECTED);
+        when(sourceService.getSource(source.getId())).thenReturn(Optional.of(source));
+        when(templateService.getTemplate(template.getId())).thenReturn(Optional.of(template));
+        assertThrows(ApplicationFailure.class, () -> sources.reviewSource(sourceReview(source.getId(), approved)));
+        assertThrows(ApplicationFailure.class, () -> templates.reviewTemplate(templateReview(template.getId(), approved)));
+        verifyNoInteractions(router, bot);
+        verifyNoMoreInteractions(sourceService, templateService);
     }
 
     private AtomicReference<Status> trackSourceCommit(Source source, boolean approved) {

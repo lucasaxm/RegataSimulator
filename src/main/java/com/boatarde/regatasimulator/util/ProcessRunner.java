@@ -6,8 +6,8 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -31,9 +31,10 @@ public class ProcessRunner {
 
     public String run(ProcessBuilder builder, Starter starter) throws IOException, InterruptedException {
         Process process = starter.start(builder);
-        var readers = Executors.newVirtualThreadPerTaskExecutor();
-        Future<String> stdout = readers.submit(() -> drain(process.getInputStream()));
-        Future<String> stderr = readers.submit(() -> drain(process.getErrorStream()));
+        FutureTask<String> stdout = new FutureTask<>(() -> drain(process.getInputStream()));
+        FutureTask<String> stderr = new FutureTask<>(() -> drain(process.getErrorStream()));
+        Thread stdoutReader = Thread.ofPlatform().daemon().name("image-stdout").start(stdout);
+        Thread stderrReader = Thread.ofPlatform().daemon().name("image-stderr").start(stderr);
         long deadline = System.nanoTime() + timeout.toNanos();
         try {
             if (!process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
@@ -55,7 +56,23 @@ public class ProcessRunner {
             close(process.getOutputStream());
             stdout.cancel(true);
             stderr.cancel(true);
-            readers.shutdownNow();
+            awaitReaders(stdoutReader, stderrReader);
+        }
+    }
+
+    private void awaitReaders(Thread... readers) {
+        boolean interrupted = Thread.interrupted();
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+        try {
+            for (Thread reader : readers) {
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) break;
+                reader.join(Math.max(1, TimeUnit.NANOSECONDS.toMillis(remaining)));
+            }
+        } catch (InterruptedException e) {
+            interrupted = true;
+        } finally {
+            if (interrupted) Thread.currentThread().interrupt();
         }
     }
 
@@ -81,6 +98,7 @@ public class ProcessRunner {
     }
 
     private void terminate(Process process) {
+        boolean interrupted = Thread.interrupted();
         try {
             process.descendants().forEach(child -> {
                 child.destroy();
@@ -88,12 +106,19 @@ public class ProcessRunner {
                     child.destroyForcibly();
                 }
             });
+            process.destroy();
+            if (process.isAlive()) {
+                process.destroyForcibly();
+                process.waitFor(1, TimeUnit.SECONDS);
+            }
         } catch (UnsupportedOperationException ignored) {
             // Some synthetic Process implementations have no ProcessHandle.
-        }
-        process.destroy();
-        if (process.isAlive()) {
             process.destroyForcibly();
+        } catch (InterruptedException e) {
+            interrupted = true;
+            process.destroyForcibly();
+        } finally {
+            if (interrupted) Thread.currentThread().interrupt();
         }
     }
 

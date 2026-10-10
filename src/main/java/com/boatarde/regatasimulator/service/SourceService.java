@@ -1,6 +1,7 @@
 package com.boatarde.regatasimulator.service;
 
 import com.boatarde.regatasimulator.dto.SearchCriteria;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
 import com.boatarde.regatasimulator.models.GalleryResponse;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;
@@ -107,15 +108,24 @@ public class SourceService {
     }
 
     public void approveSource(Source source) {
-        source.setStatus(Status.APPROVED);
-        jsonDBTemplate.save(source, Source.class);
+        reviewSource(source, Status.APPROVED);
         log.info("Source {} approved", source.getId());
     }
 
     public void rejectSource(Source source) {
-        source.setStatus(Status.REJECTED);
-        jsonDBTemplate.save(source, Source.class);
+        reviewSource(source, Status.REJECTED);
         log.info("Source {} rejected", source.getId());
+    }
+
+    private void reviewSource(Source source, Status decision) {
+        Source stored = jsonDBTemplate.findAndModify("/.[id='%s' and status='REVIEW']".formatted(source.getId()),
+            Update.update("status", decision).set("previewChatId", null).set("previewMessageId", null), Source.class);
+        if (stored == null) {
+            throw new ApplicationFailure(ApplicationFailure.Kind.INVALID_INPUT, "Source no longer in review");
+        }
+        source.setStatus(decision);
+        source.setPreviewChatId(null);
+        source.setPreviewMessageId(null);
     }
 
     public void resetAllWeights() {

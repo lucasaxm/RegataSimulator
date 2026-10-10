@@ -3,6 +3,7 @@ package com.boatarde.regatasimulator.service;
 import com.boatarde.regatasimulator.dto.SearchCriteria;
 import com.boatarde.regatasimulator.models.AreaCorner;
 import com.boatarde.regatasimulator.models.CommonEntity;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
 import com.boatarde.regatasimulator.models.GalleryResponse;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;
@@ -135,6 +136,7 @@ class SourceAndTemplateServiceTest {
         Source current = db.findById(original.getId(), Source.class);
         current.setWeight(41);
         current.setDescription("updated approved source description");
+        db.save(current, Source.class);
         sources.approveSource(current);
         assertEquals(Status.REVIEW, staleReview.getStatus());
         assertEquals(original.getPreviewChatId(), staleReview.getPreviewChatId());
@@ -169,6 +171,7 @@ class SourceAndTemplateServiceTest {
             .topLeft(new AreaCorner(30, 40)).topRight(new AreaCorner(130, 45))
             .bottomRight(new AreaCorner(135, 240)).bottomLeft(new AreaCorner(35, 235))
             .background(false).build()));
+        db.save(current, Template.class);
         templates.approveTemplate(current);
         assertEquals(Status.REVIEW, staleReview.getStatus());
         assertEquals(original.getPreviewChatId(), staleReview.getPreviewChatId());
@@ -586,6 +589,43 @@ class SourceAndTemplateServiceTest {
 
         assertEquals(List.of(1, 2), templates.getTemplate(template.getId()).orElseThrow()
             .getAreas().stream().map(TemplateArea::getSource).toList());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void moderationUsesStoredReviewStateAndPreservesUnrelatedCurrentFields(boolean approved) {
+        Source originalSource = sourceWithPreview();
+        Template originalTemplate = templateWithPreview();
+        db.insert(List.of(originalSource), Source.class);
+        db.insert(List.of(originalTemplate), Template.class);
+        Source staleSource = reopenDatabase().findById(originalSource.getId(), Source.class);
+        Template staleTemplate = reopenDatabase().findById(originalTemplate.getId(), Template.class);
+        Source currentSource = db.findById(originalSource.getId(), Source.class);
+        Template currentTemplate = db.findById(originalTemplate.getId(), Template.class);
+        currentSource.setDescription("current description");
+        currentSource.setWeight(71);
+        currentTemplate.setWeight(72);
+        db.save(currentSource, Source.class);
+        db.save(currentTemplate, Template.class);
+        if (approved) {
+            sources.approveSource(staleSource);
+            templates.approveTemplate(staleTemplate);
+        } else {
+            sources.rejectSource(staleSource);
+            templates.rejectTemplate(staleTemplate);
+        }
+        Source storedSource = reopenDatabase().findById(originalSource.getId(), Source.class);
+        Template storedTemplate = reopenDatabase().findById(originalTemplate.getId(), Template.class);
+        assertEquals(approved ? Status.APPROVED : Status.REJECTED, storedSource.getStatus());
+        assertEquals(storedSource.getStatus(), storedTemplate.getStatus());
+        assertEquals("current description", storedSource.getDescription());
+        assertEquals(71, storedSource.getWeight());
+        assertEquals(72, storedTemplate.getWeight());
+        assertNull(storedSource.getPreviewChatId());
+        assertNull(storedTemplate.getPreviewMessageId());
+        assertThrows(ApplicationFailure.class, () -> sources.approveSource(staleSource));
+        assertThrows(ApplicationFailure.class, () -> templates.rejectTemplate(staleTemplate));
+        assertEquals(storedSource.getStatus(), reopenDatabase().findById(originalSource.getId(), Source.class).getStatus());
     }
 
     private JsonDBTemplate reopenDatabase() {

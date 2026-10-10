@@ -291,20 +291,23 @@ class SendMemeStepTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"source", "template"})
-    void currentlyProgressDeletionFailurePreventsPreviewSendButStillCleansOutput(String type) throws Exception {
-        // Phase1: deleting a progress message should not make the preview irrecoverable.
+    void progressDeletionFailureDoesNotPreventPreviewSendOrBinding(String type) throws Exception {
         Path output = output();
         WorkflowDataBag bag = publicationBag(output);
         bag.put(WorkflowDataKey.TELEGRAM_UPDATE, TelegramTestFactory.buildTextMessageUpdate("submission"));
         Path original = previewPath(type, UUID.randomUUID());
         addPreviewToBag(bag, type, original);
+        CommonEntity item = previewItem(bag, type);
+        stubStoredPreview(type, item);
+        Message response = TelegramTestFactory.buildTextMessage("preview");
         doThrow(new TelegramApiException("cannot delete progress")).when(bot).execute(any(DeleteMessage.class));
 
         try (MockedStatic<TelegramUtils> telegram = mockStatic(TelegramUtils.class)) {
-            assertThrows(ApplicationFailure.class, () -> new SendMemeStep(CHANNEL_ID, database).run(bag));
+            telegram.when(() -> TelegramUtils.executeSendMediaBotMethod(eq(bot), any(SendPhoto.class))).thenReturn(response);
+            assertEquals(WorkflowAction.NONE, new SendMemeStep(CHANNEL_ID, database).run(bag));
 
-            telegram.verifyNoInteractions();
-            verifyNoInteractions(database);
+            telegram.verify(() -> TelegramUtils.executeSendMediaBotMethod(eq(bot), any(SendPhoto.class)));
+            verifyPreviewUpdate(type, item.getId(), response);
             assertWeightsUnchanged(bag);
             assertFalse(Files.exists(output));
             assertTrue(Files.exists(original));
@@ -329,7 +332,7 @@ class SendMemeStepTest {
         try (MockedStatic<TelegramUtils> telegram = mockStatic(TelegramUtils.class)) {
             stubPreviewSend(telegram, preview, response);
 
-            assertEquals(WorkflowAction.NONE, new SendMemeStep(CHANNEL_ID, database).run(preview.bag()));
+            assertThrows(ApplicationFailure.class, () -> new SendMemeStep(CHANNEL_ID, database).run(preview.bag()));
 
             verifyNoInteractions(database);
             assertNull(preview.item().getPreviewChatId());
@@ -360,7 +363,7 @@ class SendMemeStepTest {
         try (MockedStatic<TelegramUtils> telegram = mockStatic(TelegramUtils.class)) {
             stubPreviewSend(telegram, preview, response);
 
-            assertEquals(WorkflowAction.NONE, new SendMemeStep(CHANNEL_ID, database).run(preview.bag()));
+            assertThrows(ApplicationFailure.class, () -> new SendMemeStep(CHANNEL_ID, database).run(preview.bag()));
 
             verifyPreviewUpdate(type, preview.item().getId(), response);
             assertNull(preview.item().getPreviewChatId());

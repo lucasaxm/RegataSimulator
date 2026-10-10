@@ -1,6 +1,7 @@
 package com.boatarde.regatasimulator.service;
 
 import com.boatarde.regatasimulator.models.GalleryResponse;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
 import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.models.Template;
 import com.boatarde.regatasimulator.util.JsonDBUtils;
@@ -107,15 +108,24 @@ public class TemplateService {
     }
 
     public void approveTemplate(Template template) {
-        template.setStatus(Status.APPROVED);
-        jsonDBTemplate.save(template, Template.class);
+        reviewTemplate(template, Status.APPROVED);
         log.info("Template {} approved", template.getId());
     }
 
     public void rejectTemplate(Template template) {
-        template.setStatus(Status.REJECTED);
-        jsonDBTemplate.save(template, Template.class);
+        reviewTemplate(template, Status.REJECTED);
         log.info("Template {} rejected", template.getId());
+    }
+
+    private void reviewTemplate(Template template, Status decision) {
+        Template stored = jsonDBTemplate.findAndModify("/.[id='%s' and status='REVIEW']".formatted(template.getId()),
+            Update.update("status", decision).set("previewChatId", null).set("previewMessageId", null), Template.class);
+        if (stored == null) {
+            throw new ApplicationFailure(ApplicationFailure.Kind.INVALID_INPUT, "Template no longer in review");
+        }
+        template.setStatus(decision);
+        template.setPreviewChatId(null);
+        template.setPreviewMessageId(null);
     }
 
     public void resetAllWeights() {

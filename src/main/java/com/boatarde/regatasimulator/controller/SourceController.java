@@ -3,6 +3,7 @@ package com.boatarde.regatasimulator.controller;
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.dto.SearchCriteria;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
 import com.boatarde.regatasimulator.models.GalleryResponse;
 import com.boatarde.regatasimulator.models.ReviewSourceBody;
 import com.boatarde.regatasimulator.models.Source;
@@ -80,18 +81,19 @@ public class SourceController {
         Source source = sourceService.getSource(reviewSourceBody.getSourceId())
             .orElseThrow(() -> new RuntimeException("Source not found: " + reviewSourceBody.getSourceId()));
 
-        if (source.getStatus() == Status.APPROVED) {
-            throw new RuntimeException("Source already approved: " + reviewSourceBody.getSourceId());
+        if (source.getStatus() != Status.REVIEW) {
+            throw new ApplicationFailure(ApplicationFailure.Kind.INVALID_INPUT, "Source no longer in review");
         }
 
         // Build an Update object from the source's message for workflow steps
         Update update = new Update();
         update.setMessage(source.getMessage());
+        boolean notificationFailed = false;
 
         if (reviewSourceBody.isApproved()) {
             sourceService.approveSource(source);
             if (source.getMessage() != null) {
-                routerService.startFlow(update, bot, WorkflowAction.SEND_SOURCE_APPROVED_MESSAGE_STEP);
+                notificationFailed = !notifyDecision(update, WorkflowAction.SEND_SOURCE_APPROVED_MESSAGE_STEP);
             }
         } else {
             sourceService.rejectSource(source);
@@ -100,11 +102,22 @@ public class SourceController {
                 Message reasonMessage = new Message();
                 reasonMessage.setText(reviewSourceBody.getReason());
                 update.setChannelPost(reasonMessage);
-                routerService.startFlow(update, bot, WorkflowAction.SEND_SOURCE_REJECTED_MESSAGE);
+                notificationFailed = !notifyDecision(update, WorkflowAction.SEND_SOURCE_REJECTED_MESSAGE);
             }
 
         }
-        return ResponseEntity.noContent().build();
+        return notificationFailed ? ResponseEntity.noContent().header("X-Notification-Status", "failed").build()
+            : ResponseEntity.noContent().build();
+    }
+
+    private boolean notifyDecision(Update update, WorkflowAction action) {
+        try {
+            routerService.startFlow(update, bot, action);
+            return true;
+        } catch (RuntimeException e) {
+            log.warn("Source decision applied, but notification failed");
+            return false;
+        }
     }
 
     @PostMapping("/import")

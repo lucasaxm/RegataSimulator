@@ -182,7 +182,12 @@ class BuildMemeStepTest {
     private static class FakeRenderer extends BuildMemeStep {
         final List<List<String>> commands = java.util.Collections.synchronizedList(new ArrayList<>());
         final List<InputStream> dimensionStreams = java.util.Collections.synchronizedList(new ArrayList<>());
+        final List<Path> jobDirectories = java.util.Collections.synchronizedList(new ArrayList<>());
         int exitCode;
+        String dimensions = "400 300\n";
+        boolean completed = true;
+        boolean writesOutput = true;
+        int failAt;
 
         FakeRenderer() { super(MAGICK_PATH); }
 
@@ -190,8 +195,10 @@ class BuildMemeStepTest {
         protected Process startProcess(ProcessBuilder builder) throws IOException {
             List<String> command = List.copyOf(builder.command());
             commands.add(command);
+            jobDirectories.add(builder.directory().toPath());
+            if (failAt > 0 && commands.size() == failAt) throw new IOException("synthetic mid-pipeline failure");
             Process process = mock(Process.class);
-            InputStream input = spy(new ByteArrayInputStream("400 300\n".getBytes(StandardCharsets.UTF_8)));
+            InputStream input = spy(new ByteArrayInputStream(dimensions.getBytes(StandardCharsets.UTF_8)));
             when(process.getInputStream()).thenReturn(input);
             when(process.getErrorStream()).thenReturn(InputStream.nullInputStream());
             when(process.exitValue()).thenReturn(exitCode);
@@ -199,14 +206,32 @@ class BuildMemeStepTest {
                 dimensionStreams.add(input);
             }
             try {
-                when(process.waitFor(anyLong(), eq(TimeUnit.MILLISECONDS))).thenReturn(true);
+                when(process.waitFor(anyLong(), eq(TimeUnit.MILLISECONDS))).thenReturn(completed);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new IOException(e);
             }
-            if (!command.contains("identify")) Files.writeString(Path.of(command.getLast()), "fake rendered image");
+            if (writesOutput && !command.contains("identify")) Files.writeString(Path.of(command.getLast()), "fake rendered image");
             return process;
         }
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"timeout", "dimensions", "noOutput", "partial"})
+    void failedJobsCleanTheirEntireOwnedDirectory(String mode) throws IOException {
+        FakeRenderer renderer = new FakeRenderer();
+        switch (mode) {
+            case "timeout" -> renderer.completed = false;
+            case "dimensions" -> renderer.dimensions = "400\n";
+            case "noOutput" -> renderer.writesOutput = false;
+            case "partial" -> renderer.failAt = 4;
+            default -> throw new IllegalArgumentException(mode);
+        }
+        WorkflowDataBag bag = bag(List.of(area(1, 1, true)));
+        assertThrows(ApplicationFailure.class, () -> renderer.run(bag));
+        assertThat(renderer.jobDirectories).isNotEmpty().allSatisfy(path -> assertThat(path).doesNotExist());
+        assertThat(bag.get(WorkflowDataKey.MEME_FILE, Path.class)).isNull();
+        assertThat(directory.resolve("template with spaces.png")).exists();
     }
 
     @Test

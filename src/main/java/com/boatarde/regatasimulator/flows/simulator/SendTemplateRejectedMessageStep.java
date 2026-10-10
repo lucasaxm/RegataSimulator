@@ -2,6 +2,7 @@ package com.boatarde.regatasimulator.flows.simulator;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
 import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.flows.WorkflowStep;
@@ -21,8 +22,9 @@ public class SendTemplateRejectedMessageStep implements WorkflowStep {
         Update update = bag.get(WorkflowDataKey.TELEGRAM_UPDATE, Update.class);
         RegataSimulatorBot bot = bag.get(WorkflowDataKey.REGATA_SIMULATOR_BOT, RegataSimulatorBot.class);
 
-        String reason = update.getChannelPost().getText();
-        Message originalMessage = update.getMessage();
+        Message originalMessage = update == null ? null : update.getMessage();
+        if (originalMessage == null || originalMessage.getChat() == null) return WorkflowAction.NONE;
+        String reason = update.getChannelPost() == null ? "" : update.getChannelPost().getText();
 
         try {
             bot.execute(SendMessage.builder()
@@ -32,7 +34,7 @@ public class SendTemplateRejectedMessageStep implements WorkflowStep {
                 .allowSendingWithoutReply(true)
                 .build());
         } catch (TelegramApiException e) {
-            log.error(e.getLocalizedMessage(), e);
+            throw new ApplicationFailure(ApplicationFailure.Kind.EXECUTION, "Template decision notification failed", e);
         }
 
         return WorkflowAction.NONE;
