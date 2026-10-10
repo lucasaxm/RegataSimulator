@@ -103,7 +103,7 @@ class JsonDBUtilsTest {
     }
 
     @Test
-    void sparseAndDuplicateAreaAndSourceIndicesAreCurrentlyAccepted() throws IOException {
+    void sparseAndDuplicateAreaAndSourceIndicesAreRejected() throws IOException {
         String csv = HEADER + "\n" + """
             3,7,0,0,10,0,10,10,0,10,0
             3,7,1,2,11,2,11,12,1,12,1
@@ -114,7 +114,7 @@ class JsonDBUtilsTest {
     }
 
     @Test
-    void headerOnlyCsvCurrentlyProducesNoAreas() throws IOException {
+    void headerOnlyTemplateCsvIsRejected() throws IOException {
         assertThrows(IOException.class, () -> JsonDBUtils.parseTemplateCsv(HEADER));
     }
 
@@ -211,7 +211,7 @@ class JsonDBUtilsTest {
         }
         RandomGenerator random = mock(RandomGenerator.class);
 
-        // Selection failure remains uncaught by the workflow; graceful recovery belongs to Phase 1.
+        // The utility rejects insufficient capacity; workflow adapters classify this as unavailable.
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
             () -> JsonDBUtils.selectSourcesWithWeight(candidates, 2, random));
 
@@ -230,7 +230,7 @@ class JsonDBUtilsTest {
         }
         RandomGenerator random = mock(RandomGenerator.class);
 
-        // Known Phase 0 failure contract, not a recommendation for graceful workflow handling.
+        // The utility rejects insufficient capacity; workflow adapters classify this as unavailable.
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
             () -> JsonDBUtils.selectTemplatesWithWeight(candidates, 2, random));
 
@@ -345,7 +345,7 @@ class JsonDBUtilsTest {
         List<Template> candidates = new ArrayList<>(List.of(template(1, 10, 2), template(2, 10, 0)));
         RandomGenerator random = mock(RandomGenerator.class);
 
-        // Known Phase 0 failure: preview workflows do not currently turn this exception into NONE.
+        // Preview workflows classify this as unavailable; only successful completion returns NONE.
         IllegalStateException failure = assertThrows(IllegalStateException.class,
             () -> JsonDBUtils.selectRandomSingleAreaTemplate(candidates, random));
 

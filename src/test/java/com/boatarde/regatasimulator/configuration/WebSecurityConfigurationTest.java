@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.session.web.http.CookieSerializer;
@@ -53,6 +54,34 @@ class WebSecurityConfigurationTest {
     void productionCannotOptOutOfSecureCookies() {
         runner.withPropertyValues("spring.profiles.active=prod", "regata-simulator.web.cookie-secure=false")
             .run(context -> assertThat(context).hasFailed());
+    }
+
+    @Test
+    void deployedProfileWinsOverDevCookieOptOut() {
+        runner.withPropertyValues("spring.profiles.active=prod,dev", "regata-simulator.web.cookie-secure=false")
+            .run(context -> assertThat(context).hasFailed());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"dev", "stage", "prod"})
+    void actualProfileFilesProduceExpectedCookieSettings(String profile) {
+        runner.withInitializer(new ConfigDataApplicationContextInitializer())
+            .withPropertyValues("spring.profiles.active=" + profile).run(context -> {
+                assertThat(context).hasNotFailed();
+                String cookie = cookie(context.getBean(CookieSerializer.class));
+                assertThat(cookie).contains("HttpOnly", "SameSite=Lax").doesNotContain("Domain=");
+                assertThat(cookie.contains("Secure")).isEqualTo(!profile.equals("dev"));
+            });
+    }
+
+    @Test
+    void crossSiteSameSiteNoneAlwaysRequiresSecure() {
+        runner.withPropertyValues("spring.profiles.active=dev", "regata-simulator.web.cookie-secure=false",
+            "regata-simulator.web.cookie-same-site=None").run(context -> assertThat(context).hasFailed());
+        runner.withPropertyValues("regata-simulator.web.cookie-same-site=None").run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(cookie(context.getBean(CookieSerializer.class))).contains("Secure", "SameSite=None");
+        });
     }
 
     @Test

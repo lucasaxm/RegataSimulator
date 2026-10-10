@@ -127,7 +127,7 @@ class SourceImporterServiceTest {
     }
 
     @Test
-    void rowDownloadFailureCurrentlyAllowsPartialSuccessAndLeavesFailedDirectoryPhase1CleanupGap() throws Exception {
+    void rowDownloadFailureAllowsPartialSuccessAndRemovesFailedDirectory() throws Exception {
         when(downloader.downloadTelegramPhoto(anyString(), any(Path.class))).thenAnswer(invocation -> {
             String fileId = invocation.getArgument(0);
             Path destination = invocation.getArgument(1);
@@ -158,7 +158,7 @@ class SourceImporterServiceTest {
     }
 
     @Test
-    void duplicateDescriptionsWithinOneBatchCurrentlyCreateTwoSourcesPhase1DeduplicationBug() throws Exception {
+    void duplicateDescriptionsWithinOneBatchCreateOnlyOneSource() throws Exception {
         placeholderDownloads();
 
         List<Source> created = importer.importFromCsv(HEADER
@@ -195,8 +195,8 @@ class SourceImporterServiceTest {
     }
 
     @Test
-    void unmatchedQuoteCurrentlyPropagatesMalformedLineIOExceptionWithoutDownloadsPhase1ValidationGap() throws Exception {
-        // OpenCSV 5.7.1 uses IOException here, bypassing the importer's CsvException wrapper.
+    void unmatchedQuotePropagatesMalformedLineIOExceptionWithoutDownloads() throws Exception {
+        // OpenCSV reports malformed lines as IOException; HTTP advice maps them to a safe 400.
         assertThrows(CsvMalformedLineException.class,
             () -> importer.importFromCsv(HEADER + "\"unterminated,,photo,file-1"));
 
@@ -206,7 +206,7 @@ class SourceImporterServiceTest {
     }
 
     @Test
-    void missingTypeHeaderCurrentlyFiltersEveryRowRatherThanRejectingCsvPhase1ValidationGap() throws Exception {
+    void missingRequiredHeadersRejectCsvBeforeDownloads() throws Exception {
         assertThrows(IOException.class, () -> importer.importFromCsv("name,text,kind,file\nname,,photo,file-1\n"));
         assertTrue(db.findAll(Source.class).isEmpty());
         assertTrue(sourceDirectories().isEmpty());
@@ -214,7 +214,7 @@ class SourceImporterServiceTest {
     }
 
     @Test
-    void batchInsertFailureCurrentlyPropagatesAndLeavesDownloadedImagePhase1AtomicityGap() throws Exception {
+    void batchInsertFailurePropagatesAndRemovesUncommittedDownloadedImages() throws Exception {
         // Only this failure-control case substitutes the DB; normal imports above use actual JsonDB.
         JsonDBTemplate failingDb = mock(JsonDBTemplate.class);
         when(failingDb.findAll(Source.class)).thenReturn(List.of());

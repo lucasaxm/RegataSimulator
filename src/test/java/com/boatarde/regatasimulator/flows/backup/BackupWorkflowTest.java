@@ -130,7 +130,7 @@ class BackupWorkflowTest {
     }
 
     @Test
-    void uncheckedBackupFailureCurrentlyEscapesRealRouterAndStopsLaterSteps() throws Exception {
+    void uncheckedBackupFailureIsReportedAndStopsLaterSteps() throws Exception {
         IllegalStateException failure = new IllegalStateException("unchecked failure");
         doThrow(failure).when(backup).zipToTelegram(bot, dbPath, "jsondb");
 
@@ -144,7 +144,7 @@ class BackupWorkflowTest {
     }
 
     @Test
-    void reportDeliveryFailureCurrentlyIsSwallowedByRealCommonSenderPhase1ObservabilityGap() throws Exception {
+    void reportDeliveryFailurePropagatesThroughRealCommonSenderAndRouter() throws Exception {
         reportData();
         when(bot.execute(any(SendMessage.class))).thenThrow(new TelegramApiException("report delivery failed"));
 

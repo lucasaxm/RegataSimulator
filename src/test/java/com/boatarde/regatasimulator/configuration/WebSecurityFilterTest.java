@@ -38,6 +38,8 @@ class WebSecurityFilterTest {
     @Autowired private MockMvc mvc;
     @MockBean private ScheduledTaskService tasks;
     @Autowired private ObjectMapper mapper;
+    @Autowired private org.springframework.security.core.userdetails.UserDetailsService accounts;
+    @Autowired private org.springframework.security.crypto.password.PasswordEncoder encoder;
 
     @ParameterizedTest
     @ValueSource(strings = {"https://boatarde.dev", "http://localhost:3000"})
@@ -129,5 +131,13 @@ class WebSecurityFilterTest {
                 .param("username", "phase0-admin").param("password", "wrong"))
             .andExpect(status().isUnauthorized()).andExpect(jsonPath("status").value(401));
         verifyNoInteractions(tasks);
+    }
+
+    @Test
+    void configuredAccountHasAdminAuthorityAndExplicitBcryptHash() {
+        var account = accounts.loadUserByUsername("phase0-admin");
+        assertThat(account.getAuthorities()).extracting("authority").containsExactly("ROLE_ADMIN");
+        assertThat(account.getPassword()).startsWith("$2a$").isNotEqualTo("phase0-test-password");
+        assertThat(encoder.matches("phase0-test-password", account.getPassword())).isTrue();
     }
 }

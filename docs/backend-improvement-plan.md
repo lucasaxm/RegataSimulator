@@ -1,10 +1,16 @@
 # Backend improvement plan
 
-Date: 2026-10-06. Updated: 2026-10-09. Status: **Phases 0 and 1 implemented for their scoped acceptance items**; Phases 2–5 remain proposed. [Phase 0 results](phase-0-results.md), [callback-safety results](phase-1-callback-safety-results.md), and [Phase 1 reliability results](phase-1-reliability-results.md) record implementation, verification, and recovery limits.
+Date: 2026-10-06. Updated: 2026-10-09. Status: **Phases 0, 1 and 2 implemented for their scoped acceptance items**; Phases 3–5 remain proposed. [Phase 0 results](phase-0-results.md), [callback-safety results](phase-1-callback-safety-results.md), [Phase 1 reliability results](phase-1-reliability-results.md), and [Phase 2 web security results](phase-2-web-security-results.md) record implementation, verification, and recovery limits.
 
 Read [backend review](backend-review.md) for evidence/tradeoffs and [project map](project-map.md) for the current structure. The goal is a simpler, reliable modular monolith, not a rewrite or a distributed system.
 
 ## Progress checkpoint — 2026-10-09
+
+- **Phase 2 completion:** validated explicit CORS/frame/session-cookie configuration, POST-only admin tasks, ROLE_ADMIN/BCrypt, Security 6.2 XOR CSRF and existing-client integration, full-filter-chain tests, validated APIs/generic ProblemDetail, minimized DTOs/byte-detected image MIME, typed import HTTP report. See [web security results](phase-2-web-security-results.md).
+- **Current verification:** `./gradlew clean build`, XML **735 tests / 33 suites**, zero failures/errors/skips; separate Node browser tests **5/5**. Local commits only; no runtime effects/data access. Actual hosting and authenticated Telegram iframe cookie compatibility remain unverified.
+- **Next phase:** typed application services with JsonDB retained (Phase 3). Phases 3–5, coherent restore, cross-adapter transactions, durable retries and production readiness remain unclaimed.
+
+### Earlier Phase 1 checkpoint (historical)
 
 - **Phase 1 completion:** isolated render ownership, bounded processes, capacity-aware history/birthday fallback, fail-closed bounded/exclusive workflows, actual image/geometry/CSV validation, upload/import/ZIP compensation, bounded imported transfers, and null-origin/moderation notification recovery. See [reliability results](phase-1-reliability-results.md) for acceptance mapping and local commits.
 - **Final verification:** targeted suites and `./gradlew clean build`; XML **649 tests / 29 suites**, zero failures/errors/skips. Dedicated Sonar analysis was unavailable in this session; editor findings were addressed, with workspace-import diagnostics remaining. No live effects or runtime data access.
@@ -53,6 +59,8 @@ Small independent changes, each with a regression test:
 Acceptance: failed jobs leave no shared render artifacts; two concurrent jobs using the same template cannot overwrite each other; timeouts and error paths are visible and bounded. Selection works with minimal viable datasets.
 
 ## Phase 2 — Configuration and web security
+
+Items 1–6 are implemented as scoped in [web security results](phase-2-web-security-results.md). The list below is retained as acceptance scope, not pending work. Hosting was inspected through client/source contracts only, not a live server; cross-origin grants default to denied. Authenticated Telegram iframe behavior remains explicitly unverified rather than weakening SameSite speculatively.
 
 1. Establish actual hosting topology. Remove cross-origin API grants if unnecessary, or introduce validated web/CORS properties with explicit per-environment origins and one security-integrated CORS source.
 2. Configure Spring Session cookies through `CookieSerializer`; prefer host-only scope and explicitly test Secure/SameSite requirements for local development and supported Telegram clients.
@@ -129,6 +137,6 @@ Acceptance for that first slice:
 4. Add adversarial/replay cases alongside existing valid-owner cases in `ReviewCallbackStepsTest` and route/workflow tests. Update known-failure expectations with their fixes, preserving callback formats and Portuguese messages where compatible.
 5. Pass targeted tests and `./gradlew clean build`; explicitly reanalyze changed Java files for Sonar findings. Do not suppress rules, include production data, migrate storage, or redesign the workflow framework in this slice.
 
-The subsequent rendering, selection, failure-reporting, validation, and recovery slices are now implemented; see [reliability results](phase-1-reliability-results.md). Continue with CORS/cookie/CSRF configuration in Phase 2. Repository isolation then makes SQLite migration much less invasive.
+The subsequent rendering, selection, failure-reporting, validation, and recovery slices are now implemented; see [reliability results](phase-1-reliability-results.md). Phase 2 CORS/cookie/CSRF and API boundaries are also implemented; see [web security results](phase-2-web-security-results.md). Continue with Phase 3 typed services and repository isolation before SQLite migration.
 
 Each phase is a sequence of small PRs, not one giant PR. Estimates should follow the data audit and required test work; the existing green suite does not justify calling a whole migration low-risk or a two-day task.

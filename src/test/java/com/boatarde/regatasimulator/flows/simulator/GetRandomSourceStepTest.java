@@ -170,7 +170,7 @@ class GetRandomSourceStepTest {
     }
 
     @Test
-    void returnsNoneWithoutLoadingHistoryWhenNoApprovedSourcesExist() {
+    void reportsUnavailableWithoutLoadingHistoryWhenNoApprovedSourcesExist() {
         when(database.find(APPROVED_QUERY, Source.class)).thenReturn(new ArrayList<>());
 
         assertEquals(ApplicationFailure.Kind.UNAVAILABLE,
@@ -184,7 +184,7 @@ class GetRandomSourceStepTest {
     }
 
     @Test
-    void returnsNoneWithoutPublishingSelectionWhenSourceMediaIsMissing() {
+    void reportsUnavailableWithoutPublishingSelectionWhenSourceMediaIsMissing() {
         Source source = source(1);
         bag.put(WorkflowDataKey.MEMES_HISTORY, List.of());
         when(database.find(APPROVED_QUERY, Source.class)).thenReturn(new ArrayList<>(List.of(source)));
@@ -206,7 +206,7 @@ class GetRandomSourceStepTest {
     }
 
     @Test
-    void insufficientDistinctSourcesForRequiredSlotsCurrentlyThrows() {
+    void insufficientDistinctSourcesForRequiredSlotsReportsUnavailable() {
         bag.put(WorkflowDataKey.TEMPLATE, template(1, 1, 2));
         bag.put(WorkflowDataKey.MEMES_HISTORY, List.of());
         when(database.find(APPROVED_QUERY, Source.class)).thenReturn(new ArrayList<>(List.of(source(1))));
@@ -228,7 +228,7 @@ class GetRandomSourceStepTest {
         "2026-08-12T12:00:00Z, valb|punhet",
         "2026-10-25T12:00:00Z, dedey"
     })
-    void birthdayQueryRequiresApprovalAndReturnsNoneWithoutMatchingCandidates(String instant, String aliases) {
+    void birthdayQueryRequiresApprovalAndReportsUnavailableWhenFallbackIsAlsoEmpty(String instant, String aliases) {
         step = new GetRandomSourceStep(sourcesDirectory.toString(), database,
             Clock.fixed(Instant.parse(instant), ZoneOffset.UTC));
         String expectedQuery = birthdayQuery(aliases);

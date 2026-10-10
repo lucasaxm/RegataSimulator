@@ -85,23 +85,11 @@ public class SecurityConfig {
                 .loginPage("/login.html")
                 .loginProcessingUrl("/api/login")
                 .successHandler(customAuthenticationSuccessHandler())
-                .failureHandler((request, response, failure) -> {
-                    if (isAjax(request)) {
-                        writeProblem(response, HttpStatus.UNAUTHORIZED);
-                    } else {
-                        response.sendRedirect("/login.html?error=true");
-                    }
-                })
+                .failureHandler((request, response, failure) -> authenticationFailure(request, response))
             )
             .logout((logout) -> logout
                 .logoutUrl("/api/logout")
-                .logoutSuccessHandler((request, response, authentication) -> {
-                    if (isAjax(request)) {
-                        response.setStatus(HttpServletResponse.SC_NO_CONTENT);
-                    } else {
-                        response.sendRedirect("/login.html");
-                    }
-                })
+                .logoutSuccessHandler((request, response, authentication) -> logoutSuccess(request, response))
             )
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
@@ -148,6 +136,22 @@ public class SecurityConfig {
 
     private boolean isAjax(HttpServletRequest request) {
         return "XMLHttpRequest".equals(request.getHeader("X-Requested-With"));
+    }
+
+    private void authenticationFailure(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        if (isAjax(request)) {
+            writeProblem(response, HttpStatus.UNAUTHORIZED);
+        } else {
+            response.sendRedirect("/login.html?error=true");
+        }
+    }
+
+    private void logoutSuccess(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        if (isAjax(request)) {
+            response.setStatus(HttpServletResponse.SC_NO_CONTENT);
+        } else {
+            response.sendRedirect("/login.html");
+        }
     }
 
     private void writeProblem(HttpServletResponse response, HttpStatus status) throws IOException {

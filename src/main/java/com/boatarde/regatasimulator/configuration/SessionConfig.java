@@ -22,7 +22,8 @@ public class SessionConfig {
 
     @Bean
     public CookieSerializer cookieSerializer(WebSecurityProperties properties, Environment environment) {
-        if (!properties.isCookieSecure() && !environment.acceptsProfiles(Profiles.of("dev", "test"))) {
+        boolean deployed = environment.acceptsProfiles(Profiles.of("prod", "stage"));
+        if (!properties.isCookieSecure() && (deployed || !environment.acceptsProfiles(Profiles.of("dev", "test")))) {
             throw new IllegalArgumentException("Insecure session cookies require the dev or test profile");
         }
         DefaultCookieSerializer serializer = new DefaultCookieSerializer();

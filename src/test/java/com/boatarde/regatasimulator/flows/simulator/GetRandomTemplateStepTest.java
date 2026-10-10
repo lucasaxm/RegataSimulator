@@ -135,7 +135,7 @@ class GetRandomTemplateStepTest {
     }
 
     @Test
-    void returnsNoneWithoutLoadingHistoryWhenNoApprovedTemplatesExist() {
+    void reportsUnavailableWithoutLoadingHistoryWhenNoApprovedTemplatesExist() {
         when(database.find(APPROVED_QUERY, Template.class)).thenReturn(new ArrayList<>());
 
         assertEquals(ApplicationFailure.Kind.UNAVAILABLE,
@@ -148,7 +148,7 @@ class GetRandomTemplateStepTest {
     }
 
     @Test
-    void returnsNoneWithoutPublishingSelectionWhenTemplateMediaIsMissing() {
+    void reportsUnavailableWithoutPublishingSelectionWhenTemplateMediaIsMissing() {
         Template template = template(1, 1);
         bag.put(WorkflowDataKey.MEMES_HISTORY, List.of());
         when(database.find(APPROVED_QUERY, Template.class)).thenReturn(new ArrayList<>(List.of(template)));
@@ -209,7 +209,7 @@ class GetRandomTemplateStepTest {
     }
 
     @Test
-    void sourcePreviewWithoutSingleAreaTemplateCurrentlyThrowsRatherThanReturningNone() throws IOException {
+    void sourcePreviewWithoutSingleAreaTemplateReportsUnavailable() throws IOException {
         List<Source> submittedSources = submittedSourcePreview();
         Template multiArea = template(1, 2);
         when(database.find(APPROVED_QUERY, Template.class)).thenReturn(new ArrayList<>(List.of(multiArea)));
@@ -224,7 +224,7 @@ class GetRandomTemplateStepTest {
     }
 
     @Test
-    void sourcePreviewWithMissingTemplateMediaReturnsNoneAndPreservesSubmission() throws IOException {
+    void sourcePreviewWithMissingTemplateMediaReportsUnavailableAndPreservesSubmission() throws IOException {
         List<Source> submittedSources = submittedSourcePreview();
         List<Path> submittedFiles = bag.getGeneric(WorkflowDataKey.SOURCE_FILES, List.class, Path.class);
         Template singleArea = template(1, 1);

@@ -172,8 +172,8 @@ class CreateTemplateStepTest {
     }
 
     @Test
-    void currentlyPartialDownloadFailureLeavesNonemptyDirectoryBehind() throws Exception {
-        // Phase1: recursively compensate partial downloads on creation failure.
+    void partialDownloadFailureRemovesFilesAndDirectory() throws Exception {
+        // Creation failure recursively compensates partial downloads.
         WorkflowDataBag bag = bag(submission(CSV));
         AtomicReference<Path> partialFile = new AtomicReference<>();
 
@@ -194,8 +194,8 @@ class CreateTemplateStepTest {
     }
 
     @Test
-    void currentlyInvalidCsvStopsAfterDownloadAndLeavesMediaBehind() throws Exception {
-        // Phase1: validate input before downloading and report validation failure to the user.
+    void invalidCsvFailsBeforeDownloadingOrCreatingMedia() throws Exception {
+        // Input validation precedes downloads; the runner reports application failures.
         WorkflowDataBag bag = bag(submission("invalid header"));
 
         try (MockedStatic<TelegramUtils> telegram = mockStatic(TelegramUtils.class)) {
@@ -209,8 +209,8 @@ class CreateTemplateStepTest {
     }
 
     @Test
-    void currentlyProgressMessageFailureLeavesDownloadedFileWithoutDatabaseWrites() throws Exception {
-        // Phase1: compensate media when Telegram fails before metadata insertion.
+    void progressMessageFailureRemovesDownloadedMediaWithoutDatabaseWrites() throws Exception {
+        // Media is compensated when Telegram fails before metadata insertion.
         when(bot.execute(any(SendMessage.class))).thenThrow(new TelegramApiException("send unavailable"));
         WorkflowDataBag bag = bag(submission(CSV));
 

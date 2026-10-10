@@ -110,7 +110,7 @@ class BackupServiceTest {
     }
 
     @Test
-    void firstDeliveryFailureCurrentlyLeavesAllArchivesAndStopsPhase1CleanupGap() throws Exception {
+    void firstDeliveryFailureRemovesAllArchivesAndStops() throws Exception {
         Path first = archive("first.zip");
         Path second = archive("second.zip");
         TelegramApiException failure = new TelegramApiException("controlled send failure");
@@ -131,7 +131,7 @@ class BackupServiceTest {
     }
 
     @Test
-    void laterDeliveryFailureCurrentlyDeletesOnlySuccessfulArchivesPhase1CleanupGap() throws Exception {
+    void laterDeliveryFailureDeletesSentFailedAndUnsentArchives() throws Exception {
         Path first = archive("first.zip");
         Path second = archive("second.zip");
         Path third = archive("third.zip");

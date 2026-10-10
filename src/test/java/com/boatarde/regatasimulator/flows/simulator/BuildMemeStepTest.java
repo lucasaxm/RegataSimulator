@@ -68,7 +68,7 @@ class BuildMemeStepTest {
     }
 
     @Test
-    void processStartFailureCurrentlyEndsWorkflowWithoutAnOutput() throws Exception {
+    void processStartFailureRaisesApplicationFailureWithoutAnOutput() throws Exception {
         BuildMemeStep renderer = new BuildMemeStep(MAGICK_PATH) {
             @Override protected Process startProcess(ProcessBuilder builder) throws IOException {
                 throw new IOException("synthetic process-start failure");
@@ -81,8 +81,8 @@ class BuildMemeStepTest {
     }
 
     @Test
-    void sparseAreaIndicesCurrentlyFailDuringComposition() throws Exception {
-        // Phase 1 will reject invalid geometry before starting external work.
+    void sparseAreaIndicesAreRejectedBeforeComposition() throws Exception {
+        // Invalid geometry is rejected before composition.
         FakeRenderer renderer = new FakeRenderer();
         WorkflowDataBag bag = bag(List.of(area(3, 1, true)));
 
@@ -92,7 +92,7 @@ class BuildMemeStepTest {
     }
 
     @Test
-    void sparseSourceSlotsCurrentlyFailBeforeStartingAProcess() throws Exception {
+    void sparseSourceSlotsFailBeforeStartingAProcess() throws Exception {
         FakeRenderer renderer = new FakeRenderer();
         WorkflowDataBag bag = bag(List.of(area(1, 3, true)));
 
@@ -137,7 +137,7 @@ class BuildMemeStepTest {
     }
 
     @Test
-    void emptyIdentifyOutputEndsTheWorkflowAndClosesItsReader() throws Exception {
+    void emptyIdentifyOutputRaisesApplicationFailureAndClosesItsReader() throws Exception {
         Process process = mock(Process.class);
         InputStream input = spy(new ByteArrayInputStream(new byte[0]));
         when(process.getInputStream()).thenReturn(input);

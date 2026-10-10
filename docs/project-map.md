@@ -6,7 +6,7 @@ Verified: 2026-10-09. This describes the **current** application, not the propos
 
 - Java 21; `.tool-versions` pins OpenJDK 21.0.2.
 - Gradle wrapper 8.6, Groovy build configuration; Spring Boot 3.2.3.
-- Spring MVC, Security, Actuator, in-memory Spring Session; Lombok/Jackson.
+- Spring MVC, Security 6.2, Jakarta validation, Actuator, in-memory Spring Session; Lombok/Jackson.
 - Telegram Bots 6.9.7.1, JsonDB 1.0.115-j11, OpenCSV, Jasypt, Tika, springdoc.
 - External ImageMagick executable selected by `MAGICK_PATH`.
 
@@ -42,10 +42,10 @@ All package paths below are relative to `src/main/java/com/boatarde/regatasimula
 | `service/SourceImporterService` | Validated bounded CSV import, typed row report, normalized batch deduplication/compensation, using bilu-tags file identity |
 | `service/BackupService` | ZIP packaging via FileUtils and Telegram document delivery |
 | `service/ScheduledTaskService` | Scheduled meme generation and backup; also called by administration endpoints |
-| `controller/` | SourceController, TemplateController, AdminController |
+| `controller/` | SourceController, TemplateController, AdminController, public CsrfController, generic ProblemDetail advice and byte-detected image responses |
 | `configuration/` | Security, sessions/cookies, CORS, MVC forwarding, JsonDB, scheduling, Telegram health |
 | `models/` | Persisted entities, geometry, status, gallery/review bodies |
-| `dto/` | CSV row and search request data |
+| `dto/` | CSV row, validated search request, minimized gallery/origin/import-report HTTP projections |
 | `util/` | Telegram methods/file transfer, JXPath builders, CSV/weighted selection, filesystem/ZIP helpers |
 
 ### Workflow count and contracts
@@ -78,15 +78,18 @@ JsonDB discovers `@Document` entities under `models`. Review status values are e
 
 | Prefix / mapping | Main operations |
 | --- | --- |
-| `/api/sources` | Paginated/filter list; `/{id}.png` image and `/{id}.json` entity; delete; review; CSV import; search; reset weights |
-| `/api/templates` | List, image/entity, delete, review, reset weights, initialize source IDs |
-| `/api/admin` | Current GET `/post_meme` and `/create_backup` trigger side effects |
+| `/api/sources` | Validated paginated/filter list; `/{id}.png` image and `/{id}.json` DTO; delete; review; legacy list CSV import and typed `/import/report`; search; reset weights |
+| `/api/templates` | Validated list, image/DTO, delete, review, reset weights, initialize source IDs |
+| `/api/admin` | POST-only `/post_meme` and `/create_backup` trigger side effects; no mutating GET aliases |
 | `/api/login`, `/api/logout` | Spring Security form-login/logout processing |
+| `/api/csrf` | Public no-store deferred XOR token acquisition for login/API/logout requests |
 | `/`, `/create` | Forward to gallery and template-creator pages |
 
-`SecurityConfig` permits login/create assets and root JS/CSS, then requires authentication for other requests. API docs/Swagger and Actuator health are **not** explicitly permitted anonymously; enabling them in YAML does not override that filter chain. The authenticated admin account currently has role USER.
+`SecurityConfig` permits login/create assets, root JS/CSS and `/api/csrf`; other APIs require ROLE_ADMIN, while protected browser pages redirect to login. The existing encrypted plaintext admin configuration is BCrypt-encoded at startup through an explicit encoder. API docs/Swagger and Actuator health are **not** explicitly permitted anonymously; enabling them in YAML does not override the filter chain.
 
-Cookies/sessions use `MapSessionRepository`, not database-backed sessions. Stage explicitly sets a domain; dev explicitly forces Secure. Prod uses the default cookie serializer. CSRF is currently disabled. Browser API calls are same-origin relative fetches. Keep existing endpoints, body shapes, callback strings, and Portuguese messages compatible unless the task intentionally changes them.
+Cookies/sessions use `MapSessionRepository`, not database-backed sessions. One real CookieSerializer defaults host-only/Secure/HttpOnly/Lax across profiles; dev YAML explicitly permits local HTTP, stage/prod refuse insecure cookies. Validated `regata-simulator.web` properties control origins, credential grants, Telegram frame ancestors, cookie domain/Secure/SameSite. One security CORS source defaults to denying cross-origin API access; relative browser calls need no grant. Hosting/proxy and authenticated iframe cookie requirements remain unverified.
+
+CSRF is enabled using Security 6.2 session/XOR tokens. Existing fetch helpers acquire tokens for unsafe methods and refresh after XHR login/logout (204); API auth failures are generic 401/403 problems rather than redirects. HTTP validation bounds pagination/query/review fields, and safe ProblemDetail maps invalid/missing/conflict/unavailable/internal outcomes to 400/404/409/503/500. Gallery/import DTOs omit full Telegram messages and preview bindings while preserving `message.from` names and geometry. Legacy `.png` image URLs serve actual PNG/JPEG byte-detected MIME. See [Phase 2 results](phase-2-web-security-results.md) for intentional contract changes and limits.
 
 ## Scheduling and side effects
 
@@ -107,8 +110,9 @@ Run from repository root with Java 21:
 - `./gradlew clean build` — compile/test/package (the standard PR CI command).
 - `./gradlew bootJar` — executable JAR under `build/libs/`.
 - `./gradlew test --tests 'com.boatarde.regatasimulator.service.RouterServiceTest'` — targeted test example.
+- `node --test src/test/js/web-security.test.cjs` — five mocked-fetch browser security tests, separate from Gradle/CI.
 
-The suite has **649 passing cases across 29 suites** after the 2026-10-09 Phase 1 reliability work (callback baseline: 590/24; Phase 0: 300/23), with no runtime secrets, Telegram calls, or ImageMagick dependency. Process tests launch safe Java children; validation fixtures use generated ImageIO images. Test reports: `build/reports/tests/test/index.html` and `build/test-results/test/`. The dormant `BilubotApplicationTests.java` was replaced with safe context/startup tests; test-only profile YAML and dynamic temporary paths isolate them. See [Phase 0 results](phase-0-results.md), [callback-safety results](phase-1-callback-safety-results.md), and [reliability results](phase-1-reliability-results.md). IDE non-project diagnostics should be investigated via Gradle/Java workspace import, not fixed by changing valid package declarations.
+The suite has **735 passing cases across 33 suites** after the 2026-10-09 Phase 2 work (Phase 1 baseline: 649/29; callback baseline: 590/24; Phase 0: 300/23), plus **5 separate Node cases**, with no runtime secrets, Telegram calls, or ImageMagick dependency. Process tests launch safe Java children; validation fixtures use generated ImageIO images. Test reports: `build/reports/tests/test/index.html` and `build/test-results/test/`. The dormant `BilubotApplicationTests.java` was replaced with safe context/startup tests; test-only profile YAML and dynamic temporary paths isolate them. See [Phase 0 results](phase-0-results.md), [callback-safety results](phase-1-callback-safety-results.md), [reliability results](phase-1-reliability-results.md), and [web security results](phase-2-web-security-results.md). IDE non-project diagnostics should be investigated via Gradle/Java workspace import, not fixed by changing valid package declarations.
 
 ## Runtime environment and local safety
 

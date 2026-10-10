@@ -170,8 +170,8 @@ class CreateSourceStepTest {
     }
 
     @Test
-    void currentlyDuplicateImageFailureStopsWithoutUserFacingError() throws Exception {
-        // Phase1: make a failed duplicate-image lookup visible to the submitter.
+    void duplicateImageFailureRaisesApplicationFailureForRouterReporting() throws Exception {
+        // The runner, not this preparation step, sends the generic failure notification.
         Source duplicate = new Source();
         duplicate.setDescription("Barco");
         when(database.findAll(Source.class)).thenReturn(List.of(duplicate));
@@ -218,8 +218,8 @@ class CreateSourceStepTest {
     }
 
     @Test
-    void currentlyPartialDownloadFailureLeavesNonemptyDirectoryBehind() throws Exception {
-        // Phase1: cleanup must remove partial files, not just attempt to delete their parent.
+    void partialDownloadFailureRemovesFilesAndDirectory() throws Exception {
+        // Cleanup removes partial files as well as their parent.
         when(database.findAll(Source.class)).thenReturn(List.of());
         WorkflowDataBag bag = bag(submission("source: Barco"));
         AtomicReference<Path> partialFile = new AtomicReference<>();
@@ -243,8 +243,8 @@ class CreateSourceStepTest {
     }
 
     @Test
-    void currentlyProgressMessageFailureLeavesDownloadedFileWithoutDatabaseWrites() throws Exception {
-        // Phase1: compensate downloaded media when Telegram fails before metadata insertion.
+    void progressMessageFailureRemovesDownloadedMediaWithoutDatabaseWrites() throws Exception {
+        // Downloaded media is compensated when Telegram fails before metadata insertion.
         when(database.findAll(Source.class)).thenReturn(List.of());
         when(bot.execute(any(SendMessage.class))).thenThrow(new TelegramApiException("send unavailable"));
         WorkflowDataBag bag = bag(submission("source: Barco"));
