@@ -1,10 +1,12 @@
-# Phase 3 remaining removal manifest
+# Phase 3 removal manifest (historical; resolved)
 
 Root for every path below: `/Users/lucas.xavier/repos/lucas/RegataSimulator/`.
 
-The exact editor batch Delete operation reported success for these 51 paths, but independent search/disk/Git verification showed no deletions. Single-file retry input was exactly `*** Begin Patch`, newline, `*** Delete File: /Users/lucas.xavier/repos/lucas/RegataSimulator/src/main/java/com/boatarde/regatasimulator/flows/WorkflowStep.java`, newline, `*** End Patch`. Result: “The following files were successfully edited” naming that path; disk check: `DELETE_VERIFY WorkflowStep.java STILL_EXISTS`. Do not infer deletion from that success message.
+**Resolved — 2026-10-09:** all 51 paths below and the earlier `flows/ApplicationFailure.java` are physically absent and independently verified as Git deletions (52 total; no extra deletions). BackupService cleanup and active regression validation are complete: clean build **702 tests / 25 suites**, zero failures/errors/skips, Node **5/5**. See [final implemented results](phase-3-service-results.md). The path list is retained as the historical removal record, not pending work.
 
-`src/main/java/com/boatarde/regatasimulator/flows/ApplicationFailure.java` is already actually deleted and is **not** in this pending list. Replacement contracts are in commit `b30a42c`. `ReviewCallbackStepsTest.java` is retained and migrated to active adapters, not deleted.
+Earlier editor Delete attempts reported success without changing disk/Git; that blocker is now resolved. Independent disk/Git verification, not a patch success message alone, establishes the completed removal.
+
+`src/main/java/com/boatarde/regatasimulator/flows/ApplicationFailure.java` is deleted and is **not** in the 51-path list. Replacement contracts are in commit `b30a42c`. `ReviewCallbackStepsTest.java` is retained and migrated to active adapters, not deleted.
 
 ## Production paths (36)
 
@@ -63,6 +65,6 @@ The exact editor batch Delete operation reported success for these 51 paths, but
 - `src/test/java/com/boatarde/regatasimulator/flows/simulator/PreviewCallbackIntegrationTest.java`
 - `src/test/java/com/boatarde/regatasimulator/flows/simulator/SendMemeStepTest.java`
 
-## After successful physical removal
+## Completed follow-up
 
-Remove BackupService's legacy constructor/`zipToTelegram` method and associated bot imports, make its injected fields final, verify no obsolete production imports in tests/source, then run focused tests, `./gradlew clean build`, Node security tests and `git diff --check`. Record actual XML totals and update current map/plan/AGENTS to complete only after those checks. Keep historical reports clearly historical. JsonDB message compatibility and rendering/process algorithms remain unchanged; Phases 4–5 are outside this task.
+Removed BackupService's legacy constructor/`zipToTelegram` method and associated bot imports, made injected fields final, verified no obsolete production imports/callers in tests/source, and passed focused tests, `./gradlew clean build`, Node security tests and `git diff --check`. Actual XML totals and current map/plan/AGENTS record completion. JsonDB message compatibility and rendering/process algorithms remain unchanged; Phases 4–5 are outside this cleanup.

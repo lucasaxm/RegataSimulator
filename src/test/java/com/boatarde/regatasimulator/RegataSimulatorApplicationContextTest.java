@@ -90,6 +90,7 @@ class RegataSimulatorApplicationContextTest {
             .isFalse();
         assertThat(context.containsBean("workflowManager")).isFalse();
         assertThat(context.containsBean("routerService")).isFalse();
+        assertThat(context.getBeanDefinitionNames()).noneMatch(name -> name.endsWith("Step"));
         assertThat(context.getBeansOfType(com.boatarde.regatasimulator.adapter.telegram.TelegramRouter.class)).hasSize(1);
         assertThat(context.getEnvironment().getProperty("regata-simulator.database.path"))
             .startsWith(storage.toString());

@@ -1,6 +1,8 @@
-# Phase 3 — Typed application services (in progress)
+# Phase 3 — Typed application services (complete)
 
 Baseline: `6275028`, Java 21.0.2 / Gradle 8.6. JsonDB is retained. No SQLite, dependency upgrade, UI redesign, runtime data access or live integrations are part of this phase.
+
+**Current status — 2026-10-09:** Phase 3 is complete for its scoped acceptance items. The final implemented section below supersedes every intermediate pending/removal-blocked statement in the historical slices. Final clean-build baseline: **702 cases / 25 suites**, zero failures/errors/skips; separate Node security tests **5/5**. Phase 4 is next and remains proposed.
 
 ## Verified local commits
 
@@ -85,10 +87,21 @@ Slice 1 validation: focused repository/service/workflow/callback/context tests p
 - Focused tests and clean build passed with **914 cases / 40 suites**, zero failures/errors/skips, Node **5/5**, and whitespace checks. This is an **intermediate** count: obsolete duplicate tests still compile and run. It is not final acceptance.
 - The shared `flows/ApplicationFailure.java` deletion is real and independently verified by Git. The Slice 7 statement that it still exists is historical and superseded. No other attempted deletion actually removed a file.
 
-## Blocked final cleanup / remaining Phase 3 work
+## Earlier blocked final cleanup (historical; resolved below)
 
 On this continuation, an exact V4A batch Delete patch reported success for 51 obsolete production/test files but file searches still returned the original files. A second exact single-file patch for `/Users/lucas.xavier/repos/lucas/RegataSimulator/src/main/java/com/boatarde/regatasimulator/flows/WorkflowStep.java` also reported success. Independent shell **read-only** verification printed `DELETE_VERIFY WorkflowStep.java STILL_EXISTS`; `git diff --name-status` showed only the prior ApplicationFailure deletion. Thus deletion is not universally broken (that prior deletion worked), but these remaining Delete operations did not change disk/Git. No terminal source editing/deletion was used. See [complete removal manifest](phase-3-cleanup-removal-manifest.md) for all attempted paths and the exact retry patch.
 
 Remove the manifest's obsolete runner/actions/bag/registration/steps/routes and duplicate harnesses, then remove BackupService's one-argument constructor and `zipToTelegram` implementation once those callers are physically gone. The active contract replacements and coherent integration are implemented and green; legacy files have not been silently emptied to disguise failed deletion. Update the final documentation/map/AGENTS and independently count the post-removal suite before committing final cleanup. Phases 4–5 and durable recovery/cross-adapter transactions remain pending. **Phase 3 remains incomplete and blocked on final obsolete-file removal.**
 
 Dedicated Sonar analysis was not invoked because its deferred loading interface was unavailable; editor diagnostics were checked and actionable findings corrected. Retained compatibility-class naming and Java workspace-import/non-project warnings remain; no zero-warning/project-wide quality-gate claim is made. No environment/secrets/userdata, live app/Telegram/ImageMagick, push or deployment was used.
+
+## Final implemented cleanup and Phase 3 acceptance — 2026-10-09
+
+- Independently verified physical removal and Git deletion of all **51 paths** in the [historical removal manifest](phase-3-cleanup-removal-manifest.md), plus `flows/ApplicationFailure.java`: **52 deletions**, no additional deletions. No production Java files remain under `flows/`; obsolete routes and `RouterService` are removed. Earlier failed-removal reports above are historical, not the current state.
+- Removed `BackupService`'s legacy one-argument constructor and bot-specific `zipToTelegram`, associated transport imports and unused logging. Its single typed constructor initializes final dependencies; normal `create`, report destination and bounded `archive` APIs/cleanup remain unchanged. The shared `Archives` cleanup helper is retained because the active path uses it.
+- Production services/adapters and tests have no obsolete workflow imports/callers. The isolated context checks absence by bean name (including legacy step names), not by importing deleted types. Retained `ReviewCallbackStepsTest` uses active router/callback/gateway adapters despite its historical package/name. The standalone `LogProcessor` utility retains string patterns for historical step log labels, not imports or active workflow calls; it was not executed or changed.
+- Active migrated renderer/process, repository, submission, meme, backup, moderation and callback suites preserve meaningful ordering, failure/cleanup, ownership, birthday/history and nullable-origin regressions. Real temporary JsonDB/media submission→preview→routed callback→HTTP moderation tests cover both item types, confirmation versus approval, replay, cancellation and ROLE_ADMIN/CSRF. This is not acceptance based merely on deleting tests or disabling beans.
+- Focused active service/render/process/repository/context regressions passed. `./gradlew clean build` passed on **OpenJDK 21.0.2 / Gradle 8.6**; independent sums of clean XML suite headers give **702 tests / 25 suites**, **0 failures / 0 errors / 0 skips**. `node --test src/test/js/web-security.test.cjs` passed **5/5**, zero failures/skips; `git diff --check` passed. The earlier 914/40 count included 15 obsolete duplicate suites and is superseded, not a coverage target.
+- Typed repositories, transport/media/render boundaries, explicit preview/publication and direct HTTP/Telegram/scheduler orchestration meet Phase 3 scope. JsonDB, nullable persisted Telegram messages, callback formats, HTTP bodies/security and rendering/process algorithms remain compatible. No database engine/dependency/UI migration occurred.
+- Remaining limits: process-local locks and conditional JsonDB writes are not cross-adapter/process transactions; filesystem/Telegram effects are not atomic, retries are not durable, backup is not a coherent whole-app restore guarantee. Phase 4 SQLite/rehearsed migration is next; Phase 5 remains proposed. No production readiness or Sonar server quality-gate claim is made; Java editor non-project warnings remain workspace-import diagnostics.
+- No environment files, secrets, generated outputs or runtime datasets were edited/staged; no live application, Telegram/ImageMagick integration, push or deployment was used. Final cleanup is local only.
