@@ -2,7 +2,7 @@ package com.boatarde.regatasimulator.service;
 
 import com.boatarde.regatasimulator.dto.SourceCsvRecord;
 import com.boatarde.regatasimulator.flows.ApplicationFailure;
-import com.boatarde.regatasimulator.util.FileUtils;
+import com.boatarde.regatasimulator.application.MediaStorage;
 import com.boatarde.regatasimulator.util.MediaValidation;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;
@@ -15,7 +15,6 @@ import org.springframework.stereotype.Service;
 
 import java.io.StringReader;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -33,16 +32,16 @@ public class SourceImporterService {
 
     private final SourceRepository repository;
     private final TelegramFileDownloader fileDownloader;
-    private final String sourcesPathString;
+    private final MediaStorage media;
     private final int initialWeight;
 
     public SourceImporterService(SourceRepository repository,
                                  TelegramFileDownloader fileDownloader,
-                                 @Value("${regata-simulator.sources.path}") String sourcesPathString,
+                                 MediaStorage media,
                                  @Value("${regata-simulator.sources.initial-weight}") int initialWeight) {
         this.repository = repository;
         this.fileDownloader = fileDownloader;
-        this.sourcesPathString = sourcesPathString;
+        this.media = media;
         this.initialWeight = initialWeight;
     }
 
@@ -116,7 +115,7 @@ public class SourceImporterService {
                     throw new ApplicationFailure(ApplicationFailure.Kind.EXECUTION,
                         "Import compensation failed; retained media requires reconciliation", e);
                 }
-                FileUtils.deleteTree(Path.of(sourcesPathString, source.getId().toString()));
+                media.discardUncommitted(MediaStorage.Kind.SOURCE, source.getId());
             }
             return false;
         }
@@ -124,9 +123,8 @@ public class SourceImporterService {
 
     private Source createSourceFromRecord(SourceCsvRecord record) throws Exception {
         UUID uuid = UUID.randomUUID();
-        Path newDir = Path.of(sourcesPathString, uuid.toString());
         try {
-            Files.createDirectories(newDir);
+            Path newDir = media.prepare(MediaStorage.Kind.SOURCE, uuid);
             Path image = fileDownloader.downloadTelegramPhoto(record.getConteudo(), newDir);
             if (image == null || !image.normalize().getParent().equals(newDir.normalize())) {
                 throw new IOException("Downloader returned no owned image");
@@ -141,7 +139,7 @@ public class SourceImporterService {
             source.setStatus(Status.REVIEW);
             return source;
         } catch (Exception e) {
-            FileUtils.deleteTree(newDir);
+            media.discardUncommitted(MediaStorage.Kind.SOURCE, uuid);
             throw e;
         }
     }

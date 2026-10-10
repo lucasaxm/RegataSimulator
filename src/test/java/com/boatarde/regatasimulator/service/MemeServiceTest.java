@@ -225,8 +225,8 @@ class MemeServiceTest {
     @ValueSource(booleans = {true, false})
     void realModerationCommitsBeforeNotificationAndPreservesDecisionOnFailure(boolean approved) throws Exception {
         Source source = source(Status.REVIEW);
-        SourceService sourceService = new SourceService(sources);
-        TemplateService templateService = new TemplateService(root.resolve("templates").toString(), templates);
+        SourceService sourceService = new SourceService(sources, media);
+        TemplateService templateService = new TemplateService(templates, media);
         var moderation = new ModerationService(sourceService, templateService, telegram);
         doAnswer(call -> {
             assertEquals(approved ? Status.APPROVED : Status.REJECTED, sources.findById(source.getId()).orElseThrow().getStatus());

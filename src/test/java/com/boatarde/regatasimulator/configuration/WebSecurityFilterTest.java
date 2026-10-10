@@ -81,7 +81,7 @@ class WebSecurityFilterTest {
         mvc.perform(post(url).with(user("viewer").roles("USER")).with(csrf())).andExpect(status().isForbidden());
         verifyNoInteractions(tasks);
         mvc.perform(post(url).with(user("admin").roles("ADMIN")).with(csrf())).andExpect(status().isOk());
-        if (operation.equals("post_meme")) verify(tasks).generateMeme();
+        if (operation.equals("post_meme")) verify(tasks).generateAdminMeme();
         else verify(tasks).createBackup();
     }
 
@@ -122,7 +122,7 @@ class WebSecurityFilterTest {
         Cookie fresh = loggedOut.getResponse().getCookie("JSESSIONID");
         mvc.perform(post("/api/login").cookie(fresh).header("X-CSRF-TOKEN", after))
             .andExpect(status().isForbidden());
-        verify(tasks).generateMeme();
+        verify(tasks).generateAdminMeme();
     }
 
     @Test

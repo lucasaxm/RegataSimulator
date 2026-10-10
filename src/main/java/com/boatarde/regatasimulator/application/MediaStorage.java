@@ -8,4 +8,5 @@ public interface MediaStorage {
     Path image(Kind kind, UUID id);
     Path prepare(Kind kind, UUID id);
     void delete(Kind kind, UUID id);
+    void discardUncommitted(Kind kind, UUID id);
 }

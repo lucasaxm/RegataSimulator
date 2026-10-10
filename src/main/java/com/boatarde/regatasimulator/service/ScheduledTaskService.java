@@ -22,6 +22,10 @@ public class ScheduledTaskService {
         memes.publish(new MemeService.Publish(MemeService.Origin.SCHEDULED, TelegramGateway.Destination.chat(channelId)));
     }
 
+    public void generateAdminMeme() {
+        memes.publish(new MemeService.Publish(MemeService.Origin.ADMIN, TelegramGateway.Destination.chat(channelId)));
+    }
+
     @Scheduled(cron = "0 15 12 * * SUN")
     public void createBackup() {
         backups.create();

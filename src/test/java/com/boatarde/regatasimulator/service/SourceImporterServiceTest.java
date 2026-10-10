@@ -2,6 +2,7 @@ package com.boatarde.regatasimulator.service;
 
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.repository.jsondb.JsonDbSourceRepository;
+import com.boatarde.regatasimulator.adapter.media.FileMediaStorage;
 import com.boatarde.regatasimulator.factory.ImageTestFactory;
 import com.boatarde.regatasimulator.util.MediaValidation;
 import com.boatarde.regatasimulator.flows.ApplicationFailure;
@@ -69,7 +70,7 @@ class SourceImporterServiceTest {
         // JsonDB 1.0.115 has no public close API; without listeners it starts no watcher.
         assertFalse(db.hasCollectionFileChangeListener());
         db.createCollection(Source.class);
-        importer = new SourceImporterService(new JsonDbSourceRepository(db), downloader, sourceRoot.toString(), 37);
+        importer = new SourceImporterService(new JsonDbSourceRepository(db), downloader, new FileMediaStorage(sourceRoot.toString(), tempDir.resolve("templates").toString()), 37);
     }
 
     @Test
@@ -223,7 +224,7 @@ class SourceImporterServiceTest {
         doThrow(failure).when(failingDb).insert(anyList(), eq(Source.class));
         placeholderDownloads();
         SourceImporterService failingImporter = new SourceImporterService(
-            new JsonDbSourceRepository(failingDb), downloader, sourceRoot.toString(), 37);
+            new JsonDbSourceRepository(failingDb), downloader, new FileMediaStorage(sourceRoot.toString(), tempDir.resolve("templates").toString()), 37);
 
         assertThrows(ApplicationFailure.class, () -> failingImporter.importFromCsv(HEADER + "new,,photo,file-1\n"));
 
@@ -310,7 +311,7 @@ class SourceImporterServiceTest {
             return stored.remove(source.getId());
         });
         placeholderDownloads();
-        var report = new SourceImporterService(new JsonDbSourceRepository(partial), downloader, sourceRoot.toString(), 37)
+        var report = new SourceImporterService(new JsonDbSourceRepository(partial), downloader, new FileMediaStorage(sourceRoot.toString(), tempDir.resolve("templates").toString()), 37)
             .importReport(HEADER + "first,,photo,a\nsecond,,photo,b\n");
         assertTrue(report.persistenceFailed());
         assertTrue(report.created().isEmpty());

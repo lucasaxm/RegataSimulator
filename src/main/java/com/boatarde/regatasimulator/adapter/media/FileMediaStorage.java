@@ -44,4 +44,7 @@ public class FileMediaStorage implements MediaStorage {
     }
 
     private Path directory(Kind kind, UUID id) { return (kind == Kind.SOURCE ? sources : templates).resolve(id.toString()); }
+
+    @Override
+    public void discardUncommitted(Kind kind, UUID id) { FileUtils.deleteTree(directory(kind, id)); }
 }

@@ -1,6 +1,7 @@
 package com.boatarde.regatasimulator.service;
 
 import com.boatarde.regatasimulator.application.TelegramGateway;
+import com.boatarde.regatasimulator.adapter.media.FileMediaStorage;
 import com.boatarde.regatasimulator.factory.ImageTestFactory;
 import com.boatarde.regatasimulator.models.*;
 import com.boatarde.regatasimulator.repository.jsondb.JsonDbSourceRepository;
@@ -41,9 +42,9 @@ class ReviewCallbackServiceTest {
     void setUp() throws Exception {
         db = new JsonDBTemplate(Files.createDirectories(root.resolve("db")).toString(), "com.boatarde.regatasimulator.models");
         db.createCollection(Source.class); db.createCollection(Template.class);
-        SourceService sources = new SourceService(new JsonDbSourceRepository(db));
-        ReflectionTestUtils.setField(sources, "sourcesPathString", root.resolve("sources").toString());
-        TemplateService templates = new TemplateService(root.resolve("templates").toString(), new JsonDbTemplateRepository(db));
+        var media = new FileMediaStorage(root.resolve("sources").toString(), root.resolve("templates").toString());
+        SourceService sources = new SourceService(new JsonDbSourceRepository(db), media);
+        TemplateService templates = new TemplateService(new JsonDbTemplateRepository(db), media);
         telegram = mock(TelegramGateway.class);
         callbacks = new ReviewCallbackService(sources, templates, telegram, 999);
     }

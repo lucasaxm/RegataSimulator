@@ -7,18 +7,14 @@ import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.util.JsonDBUtils;
 import com.boatarde.regatasimulator.repository.SourceRepository;
+import com.boatarde.regatasimulator.application.MediaStorage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
 
-import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -30,13 +26,13 @@ import java.util.stream.Stream;
 public class SourceService {
 
     private final SourceRepository repository;
-    @Value("${regata-simulator.sources.path}")
-    private String sourcesPathString;
+    private final MediaStorage media;
     @Value("${regata-simulator.sources.initial-weight}")
     private int initialWeight;
 
-    public SourceService(SourceRepository repository) {
+    public SourceService(SourceRepository repository, MediaStorage media) {
         this.repository = repository;
+        this.media = media;
     }
 
     public GalleryResponse<Source> getSources(int page, int perPage, Status status, Long userId) {
@@ -52,18 +48,10 @@ public class SourceService {
     }
 
     public Resource loadSourceAsResource(Source source) {
-        Path dir = Paths.get(sourcesPathString, source.getId().toString());
-        List<String> possibleExtensions = Arrays.asList("jpg", "jpeg", "png");
-
         try {
-            // Find the first source file that exists
-            Path sourceFile = possibleExtensions.stream()
-                .map(ext -> dir.resolve("source." + ext))
-                .filter(Files::exists)
-                .findFirst()
-                .orElseThrow(() -> new ApplicationFailure(ApplicationFailure.Kind.NOT_FOUND, "Source not found: " + source.getId()));
-
-            return new UrlResource(sourceFile.toUri());
+            return new UrlResource(media.image(MediaStorage.Kind.SOURCE, source.getId()).toUri());
+        } catch (ApplicationFailure e) {
+            throw new ApplicationFailure(e.getKind(), "Source not found: " + source.getId(), e);
         } catch (IOException e) {
             throw new RuntimeException("Failed to load file.", e);
         }
@@ -71,19 +59,12 @@ public class SourceService {
 
     public void deleteSource(Source source) {
         try {
-            Path filePath = Paths.get(sourcesPathString, source.getId().toString());
-            try (Stream<Path> paths = Files.walk(filePath)) {
-                if (!paths.sorted(Comparator.reverseOrder())
-                    .map(Path::toFile)
-                    .allMatch(File::delete)) {
-                    throw new RuntimeException("Failed to delete source: " + source.getId());
-                }
-            }
-            repository.remove(source);
-            log.info("Source {} deleted", source.getId());
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to delete source: " + source.getId(), e);
+            media.delete(MediaStorage.Kind.SOURCE, source.getId());
+        } catch (ApplicationFailure e) {
+            throw new ApplicationFailure(e.getKind(), "Failed to delete source: " + source.getId(), e.getCause());
         }
+        repository.remove(source);
+        log.info("Source {} deleted", source.getId());
     }
 
     public Optional<Source> getSource(UUID id) {

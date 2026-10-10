@@ -61,6 +61,16 @@ class DirectOperationsTest {
     }
 
     @Test
+    void adminAndScheduledAdaptersUseTheSameMemeServiceWithDistinctOrigins() {
+        MemeService memes = mock(MemeService.class);
+        ScheduledTaskService tasks = new ScheduledTaskService(memes, backups, 456L);
+        tasks.generateMeme(); tasks.generateAdminMeme();
+        verify(memes).publish(new MemeService.Publish(MemeService.Origin.SCHEDULED, TelegramGateway.Destination.chat(456L)));
+        verify(memes).publish(new MemeService.Publish(MemeService.Origin.ADMIN, TelegramGateway.Destination.chat(456L)));
+        verifyNoMoreInteractions(memes);
+    }
+
+    @Test
     void realRepositoriesBuildReportWithoutTransportOrMissingAuthorFailures() {
         Author author = Author.builder().id(42L).userName("fixture").firstName("Author").build();
         db.insert(author);

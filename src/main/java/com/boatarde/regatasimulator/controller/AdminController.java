@@ -18,7 +18,7 @@ public class AdminController {
 
     @PostMapping("/post_meme")
     public ResponseEntity<Void> postMeme() {
-        scheduledTaskService.generateMeme();
+        scheduledTaskService.generateAdminMeme();
         return ResponseEntity.ok().build();
     }
 

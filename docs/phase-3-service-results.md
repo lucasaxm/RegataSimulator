@@ -41,8 +41,6 @@ Slice 1 validation: focused repository/service/workflow/callback/context tests p
 - `SourceImporterService` now uses `SourceRepository` for names/batch persistence/compensation. Existing ordered reports, byte bounds and metadata-before-media compensation remain covered with real temporary JsonDB.
 - Existing direct moderation tests now exercise the real service through a fake gateway; full-chain API tests retain real auth/CSRF and real moderation with mocked persistence/transport. Additional temporary-repository tests cover complete submissions, invalid-image cleanup and committed decision/notification failure. Focused suites and clean build passed: **777 cases / 36 suites**, zero failures/errors/skips; Node **5/5** and whitespace check passed.
 
-## Remaining Phase 3 work (after slice 4)
-
 ## Slice 5 — Direct Telegram router and callbacks
 
 - Bot now calls `adapter.telegram.TelegramRouter`, which parses commands/uploads/callbacks and dispatches typed services directly. Creator-only private-chat administration, exact callback format/canonical UUID/type/action, accessible envelope/actor/photo checks and generic acknowledgment remain enforced.
@@ -51,6 +49,12 @@ Slice 1 validation: focused repository/service/workflow/callback/context tests p
 - Direct callback tests use real temporary repositories/media and cover invalid ownership/state/origin/chat/binding, missing records/photo, confirmation persistence/replay, cancellation, concurrent races, failed forwarding and acknowledgment. Router tests cover command dispatch/creator checks, malformed/valid callbacks, missing envelopes and redacted failure reporting. Original callback regressions also remain green during migration.
 - Focused callback/router/context regressions, clean build **829 cases / 38 suites** (zero failures/errors/skips), Node **5/5** and whitespace check passed. Generic test lookup/fixture issues and reported complexity findings were corrected. No new runtime property, live call or data access was introduced.
 
-## Remaining Phase 3 work (after slice 5)
+## Slice 6 — Complete media consumption and publication origins
 
-Media boundary consumption throughout existing gallery/import services; distinguish administrator/scheduled publish origins; central application failures outside `flows`; remove obsolete runner/actions/bag/registration/steps/routes and adapt remaining tests to direct service contracts. Phases 4–5 and durable recovery/cross-adapter transactions remain pending. **Phase 3 remains incomplete.**
+- Gallery services and importer now use `MediaStorage` for lookup/preparation/deletion/discard rather than configured paths and filesystem work in orchestration. Existing extension priority, missing-media errors, strict gallery deletion and best-effort uncommitted import cleanup remain covered. Metadata compensation still precedes media cleanup; this is not a transaction.
+- Administrator publication and scheduled publication use distinct ADMIN/SCHEDULED origins on the same MemeService. HTTP paths/statuses, ROLE_ADMIN and CSRF are unchanged. Full-chain tests verify the administrator adapter; a direct test verifies both origin requests.
+- Focused gallery/import/callback/meme/API/security/context regressions, clean build **830 cases / 38 suites** (zero failures/errors/skips), Node **5/5** and whitespace check passed. The sequential stateful import loop is intentionally retained; no parallelization or rule suppression was introduced.
+
+## Remaining Phase 3 work (after slice 6)
+
+Central application failures outside `flows`; remove obsolete runner/actions/bag/registration/steps/routes and adapt remaining tests to direct service contracts. Phases 4–5 and durable recovery/cross-adapter transactions remain pending. **Phase 3 remains incomplete.**

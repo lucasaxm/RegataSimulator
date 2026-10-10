@@ -44,6 +44,6 @@ class CredentiallessCorsFilterTest {
         mvc.perform(post("/api/admin/post_meme").header("Origin", "https://example.com")
                 .with(user("admin").roles("ADMIN")).with(csrf()))
             .andExpect(status().isOk()).andExpect(header().doesNotExist("Access-Control-Allow-Credentials"));
-        verify(tasks).generateMeme();
+        verify(tasks).generateAdminMeme();
     }
 }

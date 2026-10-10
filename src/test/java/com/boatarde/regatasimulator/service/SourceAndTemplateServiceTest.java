@@ -3,6 +3,7 @@ package com.boatarde.regatasimulator.service;
 import com.boatarde.regatasimulator.dto.SearchCriteria;
 import com.boatarde.regatasimulator.repository.jsondb.JsonDbSourceRepository;
 import com.boatarde.regatasimulator.repository.jsondb.JsonDbTemplateRepository;
+import com.boatarde.regatasimulator.adapter.media.FileMediaStorage;
 import com.boatarde.regatasimulator.models.AreaCorner;
 import com.boatarde.regatasimulator.models.CommonEntity;
 import com.boatarde.regatasimulator.flows.ApplicationFailure;
@@ -66,7 +67,7 @@ class SourceAndTemplateServiceTest {
         db.createCollection(Source.class);
         db.createCollection(Template.class);
         sources = sourceService(db);
-        templates = new TemplateService(templateRoot.toString(), new JsonDbTemplateRepository(db));
+        templates = new TemplateService(new JsonDbTemplateRepository(db), new FileMediaStorage(sourceRoot.toString(), templateRoot.toString()));
         ReflectionTestUtils.setField(templates, "initialWeight", 37);
     }
 
@@ -473,7 +474,7 @@ class SourceAndTemplateServiceTest {
         }).when(failingDb).remove(template, Template.class);
 
         SourceService failingSources = sourceService(failingDb);
-        TemplateService failingTemplates = new TemplateService(templateRoot.toString(), new JsonDbTemplateRepository(failingDb));
+        TemplateService failingTemplates = new TemplateService(new JsonDbTemplateRepository(failingDb), new FileMediaStorage(sourceRoot.toString(), templateRoot.toString()));
         assertThrows(IllegalStateException.class, () -> failingSources.deleteSource(source));
         assertThrows(IllegalStateException.class,
             () -> failingTemplates.deleteTemplate(template));
@@ -710,8 +711,7 @@ class SourceAndTemplateServiceTest {
     }
 
     private SourceService sourceService(JsonDBTemplate database) {
-        SourceService service = new SourceService(new JsonDbSourceRepository(database));
-        ReflectionTestUtils.setField(service, "sourcesPathString", sourceRoot.toString());
+        SourceService service = new SourceService(new JsonDbSourceRepository(database), new FileMediaStorage(sourceRoot.toString(), templateRoot.toString()));
         ReflectionTestUtils.setField(service, "initialWeight", 37);
         return service;
     }
