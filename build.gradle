@@ -1,20 +1,36 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '3.2.3'
-    id 'io.spring.dependency-management' version '1.1.4'
+    id 'org.springframework.boot' version '3.5.16'
+    id 'io.spring.dependency-management' version '1.1.7'
 }
 
 group = 'com.boatarde'
 version = '0.0.1'
 
+// Cohesive BOM-family overrides for verified OSV fixes newer than Boot 3.5.16.
+ext['jackson-bom.version'] = '2.21.7'
+// 10.1.58 is the advisory fix but its public artifact returned 404 on verification.
+ext['tomcat.version'] = '10.1.57'
+ext['log4j2.version'] = '2.25.5'
+ext['commons-lang3.version'] = '3.21.0'
+
 java {
-    sourceCompatibility = '21'
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
 }
 
 configurations {
+    runtimeClasspath {
+        resolutionStrategy.activateDependencyLocking()
+    }
     compileOnly {
         extendsFrom annotationProcessor
     }
+}
+
+dependencyLocking {
+    lockMode = LockMode.STRICT
 }
 
 repositories {
@@ -23,6 +39,8 @@ repositories {
 }
 
 dependencies {
+    implementation 'com.google.guava:guava:33.7.2-jre'
+    implementation 'commons-jxpath:commons-jxpath:1.4.0'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-aop'
     implementation 'org.springframework.boot:spring-boot-starter-web'
@@ -31,14 +49,14 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-jdbc'
     implementation 'org.xerial:sqlite-jdbc:3.53.4.0'
     implementation 'org.liquibase:liquibase-core:4.33.0'
-    implementation 'org.springframework.session:spring-session-core:3.3.2'
+    implementation 'org.springframework.session:spring-session-core'
     implementation 'com.fasterxml.jackson.core:jackson-databind'
     implementation 'org.telegram:telegrambots:6.9.7.1'
     implementation 'com.github.ulisesbocchio:jasypt-spring-boot-starter:3.0.5'
-    implementation 'org.apache.tika:tika-core:2.9.0'
-    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.0.2'
+    implementation 'org.apache.tika:tika-core:3.3.2'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.17'
     implementation 'io.jsondb:jsondb-core:1.0.115-j11'
-    implementation 'com.opencsv:opencsv:5.7.1'
+    implementation 'com.opencsv:opencsv:5.12.0'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
     compileOnly 'org.projectlombok:lombok'
@@ -64,4 +82,52 @@ tasks.register('restoreBundle', JavaExec) {
     description = 'Offline recovery into new directories only; never starts Spring'
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'com.boatarde.regatasimulator.migration.RestoreCli'
+}
+
+tasks.register('dependencyInventory') {
+    description = 'Resolved Maven inventory and retained upstream license/notice texts (no application startup)'
+    outputs.dir(layout.buildDirectory.dir('dependency-security'))
+    outputs.upToDateWhen { false }
+    doLast {
+        def output = layout.buildDirectory.dir('dependency-security').get().asFile
+        output.mkdirs()
+        def artifacts = configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts.sort { it.moduleVersion.id.toString() }
+        def inventory = artifacts.collect { artifact ->
+            def id = artifact.moduleVersion.id
+            def notices = []
+            new java.util.zip.ZipFile(artifact.file).withCloseable { zip ->
+                zip.entries().each { entry ->
+                    if (!entry.directory && entry.name ==~ /(?i)META-INF\/.*(LICENSE|NOTICE|COPYING).*/) {
+                        def notice = new File(output, "licenses/${id.group}/${id.name}/${id.version}/${entry.name}")
+                        notice.parentFile.mkdirs()
+                        notice.bytes = zip.getInputStream(entry).withCloseable { it.bytes }
+                        notices.add(output.toPath().relativize(notice.toPath()).toString())
+                    }
+                }
+            }
+            [name: "${id.group}:${id.name}".toString(), version: id.version, licenses: notices,
+             licenseReview: notices.empty ? 'UPSTREAM_POM_REVIEW_REQUIRED' : 'RETAINED_NOTICES']
+        }
+        new File(output, 'inventory.json').text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(inventory))
+        configurations.runtimeClasspath.incoming.resolutionResult.allComponents.findAll { it.id instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+            .collect { "${it.id.group}:${it.id.module}:${it.id.version}=runtimeClasspath" }.sort().each { println "LOCK_ENTRY ${it}" }
+    }
+}
+
+tasks.register('dependencyScan', Exec) {
+    dependsOn 'dependencyInventory'
+    description = 'Bounded public OSV scan; findings or incomplete network results fail the gate'
+    doFirst { layout.buildDirectory.file('dependency-security/osv-report.json').get().asFile.delete() }
+    commandLine providers.gradleProperty('nodeExecutable').getOrElse('node'), 'scripts/dependency-scan.cjs', layout.buildDirectory.file('dependency-security/inventory.json').get().asFile,
+        layout.buildDirectory.file('dependency-security/osv-report.json').get().asFile
+}
+
+tasks.register('verifyMaintenanceJava') {
+    description = 'CI/deployment maintenance gate; local tests may still run on the installed older Java 21'
+    doLast {
+        def runtime = Runtime.version()
+        if (runtime.feature() != 21 || runtime.compareTo(Runtime.Version.parse('21.0.12.1')) < 0) {
+            throw new GradleException('CI/release requires patched Java 21.0.12.1 or newer Java 21; no global installation is performed')
+        }
+    }
 }
