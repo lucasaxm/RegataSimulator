@@ -1,6 +1,9 @@
 package com.boatarde.regatasimulator.service;
 
 import com.boatarde.regatasimulator.models.Source;
+import com.boatarde.regatasimulator.factory.ImageTestFactory;
+import com.boatarde.regatasimulator.util.MediaValidation;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
 import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.util.TelegramFileDownloader;
 import com.opencsv.exceptions.CsvMalformedLineException;
@@ -148,28 +151,25 @@ class SourceImporterServiceTest {
         order.verify(downloader).downloadTelegramPhoto(eq("bad-file"), directories.capture());
         order.verify(downloader).downloadTelegramPhoto(eq("last-file"), directories.capture());
         Path failedDirectory = directories.getAllValues().get(1);
-        assertEquals("bad-file", Files.readString(failedDirectory.resolve("source.jpg")));
+        assertFalse(Files.exists(failedDirectory));
         assertFalse(created.stream().anyMatch(source ->
             source.getId().toString().equals(failedDirectory.getFileName().toString())));
-        assertEquals(3, sourceDirectories().size());
+        assertEquals(2, sourceDirectories().size());
     }
 
     @Test
     void duplicateDescriptionsWithinOneBatchCurrentlyCreateTwoSourcesPhase1DeduplicationBug() throws Exception {
-        // Filtering queries the DB before any batch item is inserted, not the in-flight descriptions.
         placeholderDownloads();
 
         List<Source> created = importer.importFromCsv(HEADER
             + "duplicate,,photo,file-1\nduplicate,,photo,file-2\n");
 
-        assertEquals(2, created.size());
-        assertEquals(List.of("duplicate", "duplicate"), created.stream().map(Source::getDescription).toList());
-        assertNotEquals(created.get(0).getId(), created.get(1).getId());
-        assertEquals(2, db.findAll(Source.class).size());
+        assertEquals(1, created.size());
+        assertEquals(List.of("duplicate"), created.stream().map(Source::getDescription).toList());
+        assertEquals(1, db.findAll(Source.class).size());
         assertPersistedWithImage(created.get(0), "file-1");
-        assertPersistedWithImage(created.get(1), "file-2");
-        assertEquals(2, sourceDirectories().size());
-        verify(downloader, times(2)).downloadTelegramPhoto(anyString(), any(Path.class));
+        assertEquals(1, sourceDirectories().size());
+        verify(downloader).downloadTelegramPhoto(anyString(), any(Path.class));
     }
 
     @ParameterizedTest
@@ -207,9 +207,7 @@ class SourceImporterServiceTest {
 
     @Test
     void missingTypeHeaderCurrentlyFiltersEveryRowRatherThanRejectingCsvPhase1ValidationGap() throws Exception {
-        List<Source> created = importer.importFromCsv("name,text,kind,file\nname,,photo,file-1\n");
-
-        assertTrue(created.isEmpty());
+        assertThrows(IOException.class, () -> importer.importFromCsv("name,text,kind,file\nname,,photo,file-1\n"));
         assertTrue(db.findAll(Source.class).isEmpty());
         assertTrue(sourceDirectories().isEmpty());
         verifyNoInteractions(downloader);
@@ -219,20 +217,18 @@ class SourceImporterServiceTest {
     void batchInsertFailureCurrentlyPropagatesAndLeavesDownloadedImagePhase1AtomicityGap() throws Exception {
         // Only this failure-control case substitutes the DB; normal imports above use actual JsonDB.
         JsonDBTemplate failingDb = mock(JsonDBTemplate.class);
-        when(failingDb.find(anyString(), eq(Source.class))).thenReturn(List.of());
+        when(failingDb.findAll(Source.class)).thenReturn(List.of());
         IllegalStateException failure = new IllegalStateException("controlled insert failure");
         doThrow(failure).when(failingDb).insert(anyList(), eq(Source.class));
         placeholderDownloads();
         SourceImporterService failingImporter = new SourceImporterService(
             failingDb, downloader, sourceRoot.toString(), 37);
 
-        assertSame(failure, assertThrows(IllegalStateException.class,
-            () -> failingImporter.importFromCsv(HEADER + "new,,photo,file-1\n")));
+        assertThrows(ApplicationFailure.class, () -> failingImporter.importFromCsv(HEADER + "new,,photo,file-1\n"));
 
         verify(failingDb).insert(anyList(), eq(Source.class));
         List<Path> directories = sourceDirectories();
-        assertEquals(1, directories.size());
-        assertEquals("file-1", Files.readString(directories.getFirst().resolve("source.jpg")));
+        assertTrue(directories.isEmpty());
     }
 
     private void placeholderDownloads() throws IOException {
@@ -244,7 +240,7 @@ class SourceImporterServiceTest {
         assertEquals(sourceRoot, destination.getParent());
         assertTrue(destination.startsWith(tempDir));
         assertTrue(Files.isDirectory(destination));
-        return Files.writeString(destination.resolve("source.jpg"), fileId);
+        return ImageTestFactory.image(destination.resolve("source.jpg"));
     }
 
     private void assertPersistedWithImage(Source source, String fileId) throws IOException {
@@ -254,7 +250,72 @@ class SourceImporterServiceTest {
         assertEquals(Status.REVIEW, stored.getStatus());
         assertEquals(37, stored.getWeight());
         assertNull(stored.getMessage());
-        assertEquals(fileId, Files.readString(sourceRoot.resolve(source.getId().toString()).resolve("source.jpg")));
+        assertEquals(new MediaValidation.Dimensions(400, 300),
+            MediaValidation.image(sourceRoot.resolve(source.getId().toString()).resolve("source.jpg")));
+    }
+
+    @Test
+    void typedReportIncludesInvalidSkippedFailedAndCreatedRows() throws Exception {
+        when(downloader.downloadTelegramPhoto(anyString(), any(Path.class))).thenAnswer(invocation -> {
+            Path target = invocation.getArgument(1);
+            if (invocation.getArgument(0).equals("bad")) return Files.writeString(target.resolve("source.jpg"), "not image");
+            return writePlaceholder(target, invocation.getArgument(0));
+        });
+        SourceImporterService.ImportReport report = importer.importReport(HEADER
+            + "valid,,photo,good\nVALID,,photo,duplicate\nshort,only,two\nvideo,,video,file\nbad,,photo,bad\n");
+        assertEquals(1, report.created().size());
+        assertEquals(List.of(SourceImporterService.Outcome.CREATED, SourceImporterService.Outcome.SKIPPED,
+            SourceImporterService.Outcome.FAILED, SourceImporterService.Outcome.SKIPPED,
+            SourceImporterService.Outcome.FAILED), report.rows().stream().map(SourceImporterService.RowResult::outcome).toList());
+        assertEquals(List.of(2, 3, 4, 5, 6), report.rows().stream().map(SourceImporterService.RowResult::row).toList());
+        assertEquals(SourceImporterService.Reason.MEDIA_FAILURE, report.rows().getLast().reason());
+        assertEquals(1, sourceDirectories().size());
+    }
+
+    @Test
+    void normalizationIsLocaleIndependentAndToleratesHistoricalNullDescriptions() throws Exception {
+        db.insert(List.of(existing("TITLE"), existing(null)), Source.class);
+        java.util.Locale previous = java.util.Locale.getDefault();
+        try {
+            java.util.Locale.setDefault(java.util.Locale.forLanguageTag("tr-TR"));
+            assertTrue(importer.importFromCsv(HEADER + "title,,photo,file\n").isEmpty());
+        } finally {
+            java.util.Locale.setDefault(previous);
+        }
+        verifyNoInteractions(downloader);
+    }
+
+    @Test
+    void rowLimitAndDuplicateHeadersFailBeforeDownloads() {
+        assertThrows(IOException.class, () -> importer.importFromCsv(HEADER + "name,,photo,file\n".repeat(1001)));
+        assertThrows(IOException.class, () -> importer.importFromCsv("nome,texto,tipo,conteudo,NOME\n"));
+        verifyNoInteractions(downloader);
+    }
+
+    @Test
+    void partialBatchInsertIsCompensatedBeforeMediaCleanup() throws Exception {
+        JsonDBTemplate partial = mock(JsonDBTemplate.class);
+        when(partial.findAll(Source.class)).thenReturn(List.of());
+        java.util.Map<UUID, Source> stored = new java.util.HashMap<>();
+        org.mockito.Mockito.doAnswer(invocation -> {
+            List<Source> batch = invocation.getArgument(0);
+            stored.put(batch.getFirst().getId(), batch.getFirst());
+            throw new IllegalStateException("partial persistence");
+        }).when(partial).insert(anyList(), eq(Source.class));
+        when(partial.findById(any(UUID.class), eq(Source.class))).thenAnswer(invocation -> stored.get(invocation.getArgument(0)));
+        when(partial.remove(any(Source.class), eq(Source.class))).thenAnswer(invocation -> {
+            Source source = invocation.getArgument(0);
+            assertTrue(Files.exists(sourceRoot.resolve(source.getId().toString()).resolve("source.jpg")));
+            return stored.remove(source.getId());
+        });
+        placeholderDownloads();
+        var report = new SourceImporterService(partial, downloader, sourceRoot.toString(), 37)
+            .importReport(HEADER + "first,,photo,a\nsecond,,photo,b\n");
+        assertTrue(report.persistenceFailed());
+        assertTrue(report.created().isEmpty());
+        assertTrue(report.rows().stream().allMatch(row -> row.reason() == SourceImporterService.Reason.PERSISTENCE_FAILURE));
+        assertTrue(stored.isEmpty());
+        assertTrue(sourceDirectories().isEmpty());
     }
 
     private Source existing(String description) {

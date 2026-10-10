@@ -1,21 +1,27 @@
 package com.boatarde.regatasimulator.service;
 
 import com.boatarde.regatasimulator.dto.SourceCsvRecord;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import com.boatarde.regatasimulator.util.FileUtils;
+import com.boatarde.regatasimulator.util.MediaValidation;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;
 import com.boatarde.regatasimulator.util.TelegramFileDownloader;
-import com.opencsv.CSVReader;
-import com.opencsv.exceptions.CsvException;
+import com.opencsv.CSVReaderBuilder;
 import io.jsondb.JsonDBTemplate;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.StringReader;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.Locale;
+import java.text.Normalizer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,119 +46,151 @@ public class SourceImporterService {
         this.initialWeight = initialWeight;
     }
 
+    public enum Outcome { CREATED, SKIPPED, FAILED }
+    public enum Reason { NONE, NON_PHOTO, DUPLICATE, INVALID_ROW, MEDIA_FAILURE, PERSISTENCE_FAILURE }
+    public record RowResult(int row, String name, Outcome outcome, Reason reason) { }
+    public record ImportReport(List<Source> created, List<RowResult> rows, boolean persistenceFailed) { }
+    private record CsvRow(int row, SourceCsvRecord record) { }
+
     public List<Source> importFromCsv(String csvContent) throws Exception {
-        log.info("Starting import of sources from CSV content");
+        ImportReport report = importReport(csvContent);
+        if (report.persistenceFailed()) {
+            throw new ApplicationFailure(ApplicationFailure.Kind.EXECUTION, "Import persistence failed");
+        }
+        return report.created();
+    }
 
-        List<SourceCsvRecord> records = parseCsv(csvContent);
-        log.info("Parsed {} records from CSV", records.size());
+    public ImportReport importReport(String csvContent) throws Exception {
+        List<CsvRow> records = parseCsv(csvContent);
+        List<RowResult> results = new ArrayList<>();
+        List<Source> created = new ArrayList<>();
+        Set<String> names = new HashSet<>();
+        jsonDBTemplate.<Source>findAll(Source.class).stream().map(Source::getDescription)
+            .filter(java.util.Objects::nonNull).map(SourceImporterService::normalize).forEach(names::add);
+        for (CsvRow row : records) {
+            results.add(prepareRow(row, names, created));
+        }
+        boolean persistenceFailed = !persistBatch(created);
+        if (persistenceFailed) {
+            results.replaceAll(result -> result.outcome() == Outcome.CREATED
+                ? new RowResult(result.row(), result.name(), Outcome.FAILED, Reason.PERSISTENCE_FAILURE) : result);
+            created.clear();
+        }
+        return new ImportReport(List.copyOf(created), List.copyOf(results), persistenceFailed);
+    }
 
-        List<SourceCsvRecord> filtered = records.stream()
-            .filter(r -> "photo".equalsIgnoreCase(r.getTipo()))
-            .filter(r -> !sourceExists(r.getNome()))
-            .toList();
-        log.info("Filtered {} records of type 'photo' and not already existing", filtered.size());
+    private RowResult prepareRow(CsvRow row, Set<String> names, List<Source> created) {
+        SourceCsvRecord record = row.record();
+        String name = record.getNome();
+        if (name.isBlank() || record.getTipo().isBlank() || record.getConteudo().isBlank()) {
+            return new RowResult(row.row(), name, Outcome.FAILED, Reason.INVALID_ROW);
+        }
+        if (!"photo".equalsIgnoreCase(record.getTipo())) {
+            return new RowResult(row.row(), name, Outcome.SKIPPED, Reason.NON_PHOTO);
+        }
+        if (names.contains(normalize(name))) {
+            return new RowResult(row.row(), name, Outcome.SKIPPED, Reason.DUPLICATE);
+        }
+        try {
+            created.add(createSourceFromRecord(record));
+            names.add(normalize(name));
+            return new RowResult(row.row(), name, Outcome.CREATED, Reason.NONE);
+        } catch (Exception e) {
+            log.warn("Import row {} failed during media preparation", row.row());
+            return new RowResult(row.row(), name, Outcome.FAILED, Reason.MEDIA_FAILURE);
+        }
+    }
 
-        List<Source> createdSources = new ArrayList<>();
-        for (int i = 0; i < filtered.size(); i++) {
-            SourceCsvRecord record = filtered.get(i);
-            try {
-                log.info("Processing record: {}/{}", i + 1, filtered.size());
-                Source source = createSourceFromRecord(record);
-                createdSources.add(source);
-                log.info("Successfully created source: {}", source);
-            } catch (Exception e) {
-                log.error("Failed to create source for record {}. Error: {}", record.getNome(), e.getMessage(), e);
+    private boolean persistBatch(List<Source> created) {
+        if (created.isEmpty()) {
+            return true;
+        }
+        try {
+            jsonDBTemplate.insert(created, Source.class);
+            return true;
+        } catch (RuntimeException e) {
+            // Compensate metadata before files; retain media if removal cannot be confirmed.
+            for (Source source : created) {
+                Source stored = jsonDBTemplate.findById(source.getId(), Source.class);
+                if (stored != null && jsonDBTemplate.remove(stored, Source.class) == null) {
+                    throw new ApplicationFailure(ApplicationFailure.Kind.EXECUTION,
+                        "Import compensation failed; retained media requires reconciliation", e);
+                }
+                FileUtils.deleteTree(Path.of(sourcesPathString, source.getId().toString()));
             }
+            return false;
         }
-
-        if (!createdSources.isEmpty()) {
-            log.info("Saving {} created sources to the database", createdSources.size());
-            jsonDBTemplate.insert(createdSources, Source.class);
-            log.info("Successfully saved all created sources");
-        } else {
-            log.info("No new sources were created");
-        }
-
-        log.info("Import process completed with {} new sources created", createdSources.size());
-        return createdSources;
     }
 
     private Source createSourceFromRecord(SourceCsvRecord record) throws Exception {
         UUID uuid = UUID.randomUUID();
         Path newDir = Path.of(sourcesPathString, uuid.toString());
-        Files.createDirectories(newDir);
-        log.info("Created directory for source {}: {}", record.getNome(), newDir);
-
-        fileDownloader.downloadTelegramPhoto(record.getConteudo(), newDir);
-        log.info("Downloaded Telegram photo for source {} to directory: {}", record.getNome(), newDir);
-
-        Source source = new Source();
-        source.setId(uuid);
-        source.setDescription(record.getNome());
-        source.setWeight(initialWeight);
-        source.setMessage(null);
-        source.setStatus(Status.REVIEW);
-
-        log.info("Created Source object for {}: {}", record.getNome(), source);
-        return source;
-    }
-
-    private boolean sourceExists(String description) {
-        log.debug("Checking if source with description '{}' already exists", description);
-        String jxQuery = "/.[description='" + description.replace("'", "\\'") + "']";
-        boolean exists = !jsonDBTemplate.find(jxQuery, Source.class).isEmpty();
-        log.debug("Source with description '{}' exists: {}", description, exists);
-        return exists;
-    }
-
-    private List<SourceCsvRecord> parseCsv(String csvContent) throws Exception {
-        log.info("Parsing CSV content");
-        try (CSVReader csvReader = new CSVReader(new StringReader(csvContent))) {
-            List<String[]> lines = csvReader.readAll();
-
-            if (lines.isEmpty()) {
-                log.warn("CSV content is empty");
-                return Collections.emptyList();
+        try {
+            Files.createDirectories(newDir);
+            Path image = fileDownloader.downloadTelegramPhoto(record.getConteudo(), newDir);
+            if (image == null || !image.normalize().getParent().equals(newDir.normalize())) {
+                throw new IOException("Downloader returned no owned image");
             }
+            MediaValidation.image(image);
 
-            log.info("Read {} lines from CSV", lines.size());
-            String[] header = lines.remove(0);
-            log.debug("CSV Header: {}", String.join(",", header));
-            Map<String, Integer> headerMap = mapHeaders(header);
+            Source source = new Source();
+            source.setId(uuid);
+            source.setDescription(record.getNome());
+            source.setWeight(initialWeight);
+            source.setMessage(null);
+            source.setStatus(Status.REVIEW);
+            return source;
+        } catch (Exception e) {
+            FileUtils.deleteTree(newDir);
+            throw e;
+        }
+    }
 
-            List<SourceCsvRecord> records = new ArrayList<>();
-            for (String[] row : lines) {
-                if (row.length < 4) {
-                    log.warn("Skipping malformed CSV row: {}", (Object) row);
-                    continue;
+    private static String normalize(String name) {
+        return Normalizer.normalize(name.strip(), Normalizer.Form.NFKC).toLowerCase(Locale.ROOT);
+    }
+
+    private List<CsvRow> parseCsv(String csvContent) throws Exception {
+        if (csvContent == null || csvContent.length() > 1024 * 1024) {
+            throw new IOException("CSV content exceeds limits or is absent");
+        }
+        if (csvContent.isBlank()) {
+            return List.of();
+        }
+        try (var csvReader = new CSVReaderBuilder(new StringReader(csvContent)).withMultilineLimit(20).build()) {
+            Map<String, Integer> headerMap = mapHeaders(csvReader.readNext());
+            List<CsvRow> records = new ArrayList<>();
+            String[] row;
+            while ((row = csvReader.readNext()) != null) {
+                if (records.size() >= 1000) {
+                    throw new IOException("CSV row limit exceeded");
                 }
                 String nome = getField(row, headerMap, "nome");
                 String texto = getField(row, headerMap, "texto");
                 String tipo = getField(row, headerMap, "tipo");
                 String conteudo = getField(row, headerMap, "conteudo");
-                records.add(new SourceCsvRecord(nome, texto, tipo, conteudo));
+                records.add(new CsvRow(records.size() + 2, new SourceCsvRecord(nome, texto, tipo, conteudo)));
             }
-            log.info("Parsed {} valid records from CSV", records.size());
             return records;
-        } catch (CsvException e) {
-            log.error("Error parsing CSV: {}", e.getMessage(), e);
-            throw new Exception("CSV parsing error", e);
         }
     }
 
-    private Map<String, Integer> mapHeaders(String[] header) {
+    private Map<String, Integer> mapHeaders(String[] header) throws IOException {
         Map<String, Integer> map = new HashMap<>();
         for (int i = 0; i < header.length; i++) {
-            map.put(header[i].trim().toLowerCase(), i);
+            if (map.put(header[i].trim().toLowerCase(Locale.ROOT), i) != null) {
+                throw new IOException("Duplicate CSV header");
+            }
         }
-        log.debug("Mapped CSV headers: {}", map);
+        if (!map.keySet().containsAll(Set.of("nome", "texto", "tipo", "conteudo"))) {
+            throw new IOException("Missing required CSV headers");
+        }
         return map;
     }
 
     private String getField(String[] row, Map<String, Integer> headerMap, String fieldName) {
         Integer idx = headerMap.get(fieldName);
         String value = (idx != null && idx < row.length) ? row[idx].trim() : "";
-        log.debug("Extracted field '{}' from row: {}", fieldName, value);
         return value;
     }
 }
