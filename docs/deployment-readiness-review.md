@@ -2,9 +2,9 @@
 
 ## Decision
 
-**Locally verified release candidate; not yet approved for production deployment.** A controlled development/staging rehearsal is the next gate. Completing Phase 5's implementation/offline acceptance does not establish the target host, real external integrations, or production-data restore readiness.
+**Local runtime gate now passed; production host/data prerequisites remain.** Following this initial review, the user authorized a local `dev` test with real Telegram MCP tools. The [Boot 4 live dev run](boot-4-live-dev-results.md) passed final-artifact startup, real Telegram commands/render/backup, actual dev credential binding, HTTP security and captured JsonDB restoration/native rerendering. A separate staging server is not required. This is not automatic approval of an unverified Linux production setup or production-data recovery.
 
-This review inspected source, the current lockfile, Git history, saved verification reports, editor diagnostics and passive Telegram SDK bytecode/dependencies. It did not rerun the full build/scan, start the application, register a bot, decrypt runtime configuration, inspect user data, deploy, or change runtime code.
+The initial review inspected source, the current lockfile, Git history, saved verification reports, editor diagnostics and passive Telegram SDK bytecode/dependencies. Its initial scope did not start an app or use real credentials. The subsequently authorized live run resolved dev credentials only in memory and used isolated neutral fixtures/private test-account destinations. Neither step deployed, pushed, changed runtime code, accessed production data or reran the full build/scan.
 
 ## Verified evidence
 
@@ -25,17 +25,17 @@ The workflow's `SERVER_ROOT` is configurable, but the checked-in unit uses `%h/.
 
 Validate Linux user-manager lifecycle/lingering, unit hardening, writable paths, memory limits, permissions, pinned SSH host keys, private runtime environment, proxy/TLS and firewall policy. No real Linux host has been validated by the macOS deployment fixtures.
 
-### 2. Verify actual runtime integrations in isolation
+### 2. Local integrations verified; check intended production configuration
 
-Use a dedicated development/stage bot identity, copied storage, test-account destinations and explicit scheduling controls. Verify real encrypted-property binding, cold start, login/CSRF/CORS/cookies, long-poll replies, ImageMagick rendering/delivery, backup capture/delivery and graceful shutdown using the final artifact and intended Java/native binaries.
+The dedicated dev bot, actual encrypted-property binding, cold start, HTTP login/CSRF/default CORS/cookies, long-poll replies, ImageMagick rendering/delivery, backup capture/delivery and graceful shutdown now passed with the final artifact on patched Java. Preserve this local isolated rehearsal model; no separate stage server is needed. Production profile destinations, secrets, proxy/cookies, native executable and existing metadata/media paths still need explicit checking.
 
-The successful live smoke test from October 6 predates the final Boot 4 migration; it is not final-artifact live evidence. Anonymous readiness checks are local lifecycle checks, not storage/render/Telegram readiness. Do not let a staging rehearsal register the production bot or publish into normal channels.
+The October 6 live report predates Boot 4; use the October 10 report for current live evidence. Anonymous readiness remains a local lifecycle check, not storage/render/Telegram readiness. Live uploads/inline callbacks, browser/WebView behavior and production identities were not verified by this run. Do not let local rehearsals register the production bot or publish into normal channels.
 
 ### 3. Provision and rehearse recovery
 
 Configure an existing private, nonoverlapping `regata-simulator.backup.local-directory`; its default is blank and does not provision a usable backup destination. Verify independent failure-domain storage, capacity, indivisible 40 MiB item/archive limits, retention and protected access.
 
-Rehearse restoration to fresh isolated directories with the actual intended ImageMagick/runtime, not only the fake renderer. Preserve coherent metadata/media snapshots and uncertain deletion stages. Artifact rollback is schema-compatible binary selection, not undoing database writes or schema migrations. Establish the previous compatible release and explicit freeze/recovery procedure before rollout.
+Fresh isolated restoration and actual ImageMagick rerendering now passed for the neutral JsonDB store. This is not proof that existing production metadata/media match or that an older binary can safely read new writes. Preserve coherent metadata/media snapshots and uncertain deletion stages. Artifact rollback is schema-compatible binary selection, not undoing database writes or schema migrations. Establish the previous compatible release and explicit freeze/recovery procedure before rollout.
 
 ### 4. Separate database cutover from artifact rollout
 
@@ -46,6 +46,6 @@ JsonDB remains the default. Do not turn on SQLite merely because its implementat
 - Offline tests and a zero-finding Maven scan provide useful bounded evidence, not an end-to-end production certification. Earlier progress messages were incomplete/badly formatted; use current Git history and the final results documents rather than those messages as release evidence.
 - Editor diagnostics still include workspace-import/package warnings and some genuine style findings in retained helpers/tests. A project-wide clean Sonar quality gate was not established. These are not interchangeable with Gradle compilation errors; blindly changing valid packages or subprocess-fixture stdout/stderr would damage the tests.
 - The deployment Java/root/port constraints are configuration hazards if provisioned inconsistently, not unconditional failure of the documented default setup. They must be explicitly checked rather than assumed.
-- No new runtime defect requiring an immediate source change was confirmed by this bounded review. The remaining live/host/data-readiness checks are necessary before production approval; absence of a confirmed defect is not proof of readiness.
+- No new runtime defect requiring a source change was confirmed by the bounded review or exercised local live flows. Remaining host/production-data checks and explicit live-test coverage limits still matter; a passed local smoke test is not whole-host deployment certification.
 
 See [operations runbook](phase-5-operations-results.md), [dependency assessment](phase-5-dependency-assessment.md), and [implementation plan](backend-improvement-plan.md) for exact contracts and historical evidence.
