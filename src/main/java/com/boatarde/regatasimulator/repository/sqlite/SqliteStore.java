@@ -59,13 +59,13 @@ public final class SqliteStore implements AutoCloseable {
         transactions = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
         try {
             requirePatchedEngine(jdbc.queryForObject("SELECT sqlite_version()", String.class));
-            if (!"wal".equalsIgnoreCase(jdbc.queryForObject("PRAGMA journal_mode", String.class))) {
+            String journal = jdbc.queryForObject("PRAGMA journal_mode", String.class);
+            if (!"wal".equalsIgnoreCase(journal) && !(readOnly && "delete".equalsIgnoreCase(journal))) {
                 throw new IllegalStateException("WAL unavailable");
             }
             if (readOnly) {
-                if (jdbc.queryForObject("SELECT count(*) FROM DATABASECHANGELOG",Integer.class) != 2) {
-                    throw new IllegalStateException("Unsupported schema for offline export");
-                }
+                validateSchema();
+                verifyIntegrity();
             } else migrate();
         } catch (RuntimeException e) {
             dataSource.close();
@@ -96,6 +96,45 @@ public final class SqliteStore implements AutoCloseable {
     }
 
     public HikariDataSource dataSource() { return dataSource; }
+    public void verifyIntegrity() {
+        if (!java.util.List.of("ok").equals(jdbc.queryForList("PRAGMA integrity_check", String.class))
+            || !jdbc.queryForList("PRAGMA foreign_key_check").isEmpty()) {
+            throw new IllegalStateException("SQLite integrity validation failed");
+        }
+    }
+
+    private void validateSchema() {
+        var ids = jdbc.queryForList("SELECT ID FROM DATABASECHANGELOG ORDER BY ORDEREXECUTED", String.class);
+        if (!ids.equals(java.util.List.of("1", "2"))
+            || jdbc.queryForObject("SELECT count(*) FROM DATABASECHANGELOG WHERE AUTHOR='regata' AND FILENAME='db/changelog/sqlite.sql'", Integer.class) != ids.size()) {
+            throw new IllegalStateException("Unsupported schema for offline export");
+        }
+        try (var connection = dataSource.getConnection(); var resources = new ClassLoaderResourceAccessor()) {
+            SQLiteDatabase database = new SQLiteDatabase();
+            database.setConnection(new JdbcConnection(connection));
+            try (var migrations = new Liquibase("db/changelog/sqlite.sql", resources, database)) { migrations.validate(); }
+        } catch (Exception e) { throw new IllegalStateException("SQLite changelog validation failed", e); }
+    }
+
+    /** Autocommit-only snapshot, including committed WAL writes. Output must be new. */
+    public void snapshot(Path target) {
+        if (!target.isAbsolute() || target.toString().contains("?") || target.toString().contains("#")
+            || Files.exists(target, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+            || !Files.isDirectory(target.getParent())
+            || org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+            throw new IllegalArgumentException("New snapshot file outside a transaction required");
+        }
+        for (Path part = target; part != null; part = part.getParent()) {
+            if (Files.isSymbolicLink(part)) throw new IllegalArgumentException("Snapshot symlinks forbidden");
+        }
+        try (var connection = dataSource.getConnection(); var statement = connection.prepareStatement("VACUUM INTO ?")) {
+            if (!connection.getAutoCommit()) throw new IllegalStateException("Autocommit snapshot required");
+            statement.setString(1, target.toString());
+            statement.execute();
+            Files.setPosixFilePermissions(target, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+            try (var copy = new SqliteStore(target, 2000, true)) { copy.verifyIntegrity(); }
+        } catch (Exception e) { throw new IllegalStateException("SQLite snapshot failed; candidate must not be used", e); }
+    }
     public JdbcTemplate jdbc() { return jdbc; }
     public TransactionTemplate transactions() { return transactions; }
     @Override public void close() { dataSource.close(); }
