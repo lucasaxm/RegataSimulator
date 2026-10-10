@@ -1,6 +1,10 @@
 package com.boatarde.regatasimulator.controller;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
+import com.boatarde.regatasimulator.dto.GalleryDtos;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Max;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
 import com.boatarde.regatasimulator.flows.ApplicationFailure;
 import lombok.extern.slf4j.Slf4j;
@@ -42,25 +46,25 @@ public class TemplateController {
     }
 
     @GetMapping
-    public ResponseEntity<GalleryResponse<Template>> getTemplates(@RequestParam(defaultValue = "1") int page,
-                                                                  @RequestParam(defaultValue = "12") int perPage,
+    public ResponseEntity<GalleryResponse<GalleryDtos.TemplateItem>> getTemplates(@RequestParam(defaultValue = "1") @Min(1) int page,
+                                                                  @RequestParam(defaultValue = "12") @Min(1) @Max(100) int perPage,
                                                                   @RequestParam(required = false) Status status,
                                                                   @RequestParam(required = false) Long userId) {
         GalleryResponse<Template> response = templateService.getTemplates(page, perPage, status, userId);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(GalleryDtos.templates(response));
     }
 
     @GetMapping("/{id}.png")
     public ResponseEntity<Resource> getTemplateImage(@PathVariable UUID id) {
         Template template = getTemplate(id);
         Resource file = templateService.loadTemplateAsResource(template);
-        return ResponseEntity.ok().contentType(MediaType.IMAGE_PNG).body(file);
+        return ImageResponse.of(file);
     }
 
     @GetMapping("/{id}.json")
-    public ResponseEntity<Template> getTemplateJson(@PathVariable UUID id) {
+    public ResponseEntity<GalleryDtos.TemplateItem> getTemplateJson(@PathVariable UUID id) {
         Template template = getTemplate(id);
-        return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(template);
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(GalleryDtos.template(template));
     }
 
     @DeleteMapping("/{id}")
@@ -71,11 +75,10 @@ public class TemplateController {
     }
 
     @PostMapping("/review")
-    public ResponseEntity<Void> reviewTemplate(@RequestBody ReviewTemplateBody reviewTemplateBody) {
-        Template template = templateService.getTemplate(reviewTemplateBody.getTemplateId())
-            .orElseThrow(() -> new RuntimeException("Template not found: " + reviewTemplateBody.getTemplateId()));
+    public ResponseEntity<Void> reviewTemplate(@Valid @RequestBody ReviewTemplateBody reviewTemplateBody) {
+        Template template = getTemplate(reviewTemplateBody.getTemplateId());
         if (template.getStatus() != Status.REVIEW) {
-            throw new ApplicationFailure(ApplicationFailure.Kind.INVALID_INPUT, "Template no longer in review");
+            throw new ApplicationFailure(ApplicationFailure.Kind.CONFLICT, "Template no longer in review");
         }
 
         Update update = new Update();
@@ -125,6 +128,6 @@ public class TemplateController {
 
     private Template getTemplate(UUID id) {
         return templateService.getTemplate(id)
-            .orElseThrow(() -> new RuntimeException("Template not found: " + id));
+            .orElseThrow(() -> new ApplicationFailure(ApplicationFailure.Kind.NOT_FOUND, "Template not found: " + id));
     }
 }

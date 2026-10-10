@@ -68,7 +68,7 @@ public class TemplateService {
                 .map(ext -> dir.resolve("template." + ext))
                 .filter(Files::exists)
                 .findFirst()
-                .orElseThrow(() -> new RuntimeException("Template not found: " + template.getId()));
+                .orElseThrow(() -> new ApplicationFailure(ApplicationFailure.Kind.NOT_FOUND, "Template not found: " + template.getId()));
 
             return new UrlResource(templateFile.toUri());
         } catch (IOException e) {
@@ -121,7 +121,7 @@ public class TemplateService {
         Template stored = jsonDBTemplate.findAndModify("/.[id='%s' and status='REVIEW']".formatted(template.getId()),
             Update.update("status", decision).set("previewChatId", null).set("previewMessageId", null), Template.class);
         if (stored == null) {
-            throw new ApplicationFailure(ApplicationFailure.Kind.INVALID_INPUT, "Template no longer in review");
+            throw new ApplicationFailure(ApplicationFailure.Kind.CONFLICT, "Template no longer in review");
         }
         template.setStatus(decision);
         template.setPreviewChatId(null);

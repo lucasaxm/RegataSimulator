@@ -2,7 +2,7 @@ package com.boatarde.regatasimulator.flows;
 
 /** Safe classification for adapters; exception details are never sent to users. */
 public class ApplicationFailure extends RuntimeException {
-    public enum Kind { UNAVAILABLE, INVALID_INPUT, EXECUTION }
+    public enum Kind { UNAVAILABLE, INVALID_INPUT, NOT_FOUND, CONFLICT, EXECUTION }
 
     private final Kind kind;
 

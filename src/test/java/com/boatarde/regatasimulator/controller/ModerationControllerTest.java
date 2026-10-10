@@ -46,7 +46,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-/** Phase 0: direct controller characterization, not HTTP security/desired Phase 1 behavior. */
+/** Direct moderation ordering/recovery regressions; full HTTP security is tested separately. */
 @ExtendWith(MockitoExtension.class)
 class ModerationControllerTest {
 
@@ -110,7 +110,7 @@ class ModerationControllerTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    void sourceNotificationFailureCurrentlyLeavesCommittedStatusPhase1RecoveryGap(boolean approved) {
+    void sourceNotificationFailureRetainsCommittedStatusAndReportsFailure(boolean approved) {
         Source source = source(origin());
         AtomicReference<Status> persisted = trackSourceCommit(source, approved);
         IllegalStateException failure = new IllegalStateException("notification failed");
@@ -129,7 +129,7 @@ class ModerationControllerTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    void templateNotificationFailureCurrentlyLeavesCommittedStatusPhase1RecoveryGap(boolean approved) {
+    void templateNotificationFailureRetainsCommittedStatusAndReportsFailure(boolean approved) {
         Template template = template(origin());
         AtomicReference<Status> persisted = trackTemplateCommit(template, approved);
         IllegalStateException failure = new IllegalStateException("notification failed");
@@ -148,7 +148,7 @@ class ModerationControllerTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    void alreadyApprovedSourceCurrentlyRejectsEitherDecisionWithRuntimeException(boolean approved) {
+    void alreadyApprovedSourceRejectsEitherDecisionWithConflict(boolean approved) {
         Source source = source(origin());
         source.setStatus(Status.APPROVED);
         when(sourceService.getSource(source.getId())).thenReturn(Optional.of(source));
@@ -167,7 +167,7 @@ class ModerationControllerTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    void alreadyApprovedTemplateCurrentlyRejectsEitherDecisionWithRuntimeException(boolean approved) {
+    void alreadyApprovedTemplateRejectsEitherDecisionWithConflict(boolean approved) {
         Template template = template(origin());
         template.setStatus(Status.APPROVED);
         when(templateService.getTemplate(template.getId())).thenReturn(Optional.of(template));
@@ -225,7 +225,7 @@ class ModerationControllerTest {
     }
 
     @Test
-    void missingSourceCurrentlyThrowsRuntimeExceptionBeforeMutation() {
+    void missingSourceFailsBeforeMutation() {
         UUID id = UUID.randomUUID();
         when(sourceService.getSource(id)).thenReturn(Optional.empty());
 
@@ -233,7 +233,7 @@ class ModerationControllerTest {
         RuntimeException failure = assertThrows(RuntimeException.class,
             () -> sources.reviewSource(review));
 
-        assertEquals(RuntimeException.class, failure.getClass());
+        assertEquals(ApplicationFailure.class, failure.getClass());
         assertEquals("Source not found: " + id, failure.getMessage());
         inOrder(sourceService).verify(sourceService).getSource(id);
         verifyNoMoreInteractions(sourceService);
@@ -241,7 +241,7 @@ class ModerationControllerTest {
     }
 
     @Test
-    void missingTemplateCurrentlyThrowsRuntimeExceptionBeforeMutation() {
+    void missingTemplateFailsBeforeMutation() {
         UUID id = UUID.randomUUID();
         when(templateService.getTemplate(id)).thenReturn(Optional.empty());
 
@@ -249,7 +249,7 @@ class ModerationControllerTest {
         RuntimeException failure = assertThrows(RuntimeException.class,
             () -> templates.reviewTemplate(review));
 
-        assertEquals(RuntimeException.class, failure.getClass());
+        assertEquals(ApplicationFailure.class, failure.getClass());
         assertEquals("Template not found: " + id, failure.getMessage());
         inOrder(templateService).verify(templateService).getTemplate(id);
         verifyNoMoreInteractions(templateService);

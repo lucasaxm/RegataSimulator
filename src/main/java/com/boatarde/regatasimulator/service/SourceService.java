@@ -68,7 +68,7 @@ public class SourceService {
                 .map(ext -> dir.resolve("source." + ext))
                 .filter(Files::exists)
                 .findFirst()
-                .orElseThrow(() -> new RuntimeException("Source not found: " + source.getId()));
+                .orElseThrow(() -> new ApplicationFailure(ApplicationFailure.Kind.NOT_FOUND, "Source not found: " + source.getId()));
 
             return new UrlResource(sourceFile.toUri());
         } catch (IOException e) {
@@ -121,7 +121,7 @@ public class SourceService {
         Source stored = jsonDBTemplate.findAndModify("/.[id='%s' and status='REVIEW']".formatted(source.getId()),
             Update.update("status", decision).set("previewChatId", null).set("previewMessageId", null), Source.class);
         if (stored == null) {
-            throw new ApplicationFailure(ApplicationFailure.Kind.INVALID_INPUT, "Source no longer in review");
+            throw new ApplicationFailure(ApplicationFailure.Kind.CONFLICT, "Source no longer in review");
         }
         source.setStatus(decision);
         source.setPreviewChatId(null);
