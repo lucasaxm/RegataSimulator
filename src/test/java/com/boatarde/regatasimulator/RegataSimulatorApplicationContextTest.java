@@ -28,6 +28,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -79,7 +80,7 @@ class RegataSimulatorApplicationContextTest {
     void permitsPublicPagesButProtectsTheSourceApi() throws Exception {
         mvc.perform(get("/login.html")).andExpect(status().isOk());
         mvc.perform(get("/create/index.html")).andExpect(status().isOk());
-        mvc.perform(get("/api/sources")).andExpect(status().is3xxRedirection());
+        mvc.perform(get("/api/sources")).andExpect(status().isUnauthorized());
         verifyNoInteractions(registration, bot);
     }
 
@@ -100,6 +101,7 @@ class RegataSimulatorApplicationContextTest {
     @Test
     void authenticatesWithSyntheticTestCredentials() throws Exception {
         mvc.perform(post("/api/login")
+            .with(csrf())
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .param("username", "phase0-admin")
                 .param("password", "phase0-test-password"))

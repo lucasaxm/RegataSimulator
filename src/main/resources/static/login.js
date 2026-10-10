@@ -24,7 +24,7 @@ function loginApp() {
                 formData.append('username', this.username);
                 formData.append('password', this.password);
 
-                const response = await fetch('/api/login', {
+                const response = await webSecurity.request('/api/login', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
@@ -32,14 +32,13 @@ function loginApp() {
                     body: formData
                 });
 
-                if (response.ok) {
-                    // Redirect to the gallery page or dashboard
+                if (response.status === 204) {
+                    await webSecurity.refresh();
                     window.location.href = '/';
                 } else {
                     this.errorMessage = 'Invalid username or password';
                 }
             } catch (error) {
-                console.error('Login error:', error);
                 this.errorMessage = 'An error occurred. Please try again.';
             }
         },
