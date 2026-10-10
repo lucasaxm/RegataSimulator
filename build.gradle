@@ -59,3 +59,9 @@ tasks.register('offlineStore', JavaExec) {
 springBoot {
     mainClass = 'com.boatarde.regatasimulator.RegataSimulatorApplication'
 }
+
+tasks.register('restoreBundle', JavaExec) {
+    description = 'Offline recovery into new directories only; never starts Spring'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.boatarde.regatasimulator.migration.RestoreCli'
+}

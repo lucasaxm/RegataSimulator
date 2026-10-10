@@ -23,6 +23,8 @@ public class BackupService {
     private final String databasePath;
     private final String templatesPath;
     private final String sourcesPath;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.boatarde.regatasimulator.migration.RecoverySnapshotService snapshots;
     @Value("${regata-simulator.database.engine:jsondb}")
     private String databaseEngine = "jsondb";
 
@@ -44,13 +46,18 @@ public class BackupService {
         create(TelegramGateway.Destination.chat(backupChatId));
     }
 
-    public void create(TelegramGateway.Destination reportDestination) {
-        if ("sqlite".equalsIgnoreCase(databaseEngine)) {
-            throw new ApplicationFailure(ApplicationFailure.Kind.UNAVAILABLE, "SQLite consistent backups require Phase 5");
+    public synchronized void create(TelegramGateway.Destination reportDestination) {
+        if (snapshots==null) throw new ApplicationFailure(ApplicationFailure.Kind.UNAVAILABLE,"Recovery capture not configured");
+        Path bundle=snapshots.capture();
+        // The independent local artifact survives every delivery/report failure.
+        try (var paths=Files.list(bundle)) {
+            for (Path path:paths.filter(Files::isRegularFile).sorted().toList()) {
+                telegram.sendDocument(new TelegramGateway.Document(TelegramGateway.Destination.chat(backupChatId),
+                    path,path.getFileName().toString(),"Recovery bundle " + bundle.getFileName()));
+            }
+        } catch (IOException e) {
+            throw new ApplicationFailure(ApplicationFailure.Kind.EXECUTION,"Backup delivery failed; local bundle retained",e);
         }
-        archive(databasePath, "jsondb");
-        archive(templatesPath, "templates");
-        archive(sourcesPath, "sources");
         reports.send(reportDestination);
     }
 

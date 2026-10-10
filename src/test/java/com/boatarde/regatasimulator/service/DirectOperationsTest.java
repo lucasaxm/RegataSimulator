@@ -88,17 +88,16 @@ class DirectOperationsTest {
     }
 
     @Test
-    void backupRunsDatabaseTemplatesSourcesThenReportWithConfiguredDestination() {
-        try (var files = mockStatic(FileUtils.class)) {
-            List<String> paths = new java.util.ArrayList<>();
-            files.when(() -> FileUtils.zipInChunks(anyString(), anyLong())).thenAnswer(call -> {
-                paths.add(call.getArgument(0));
-                return List.of();
-            });
-            backups.create();
-            assertEquals(List.of(root.resolve("db").toString(), root.resolve("templates").toString(),
-                root.resolve("sources").toString()), paths);
-        }
+    void backupDeliversCapturedBundleThenReportWithConfiguredDestination() throws Exception {
+        var snapshots=mock(com.boatarde.regatasimulator.migration.RecoverySnapshotService.class);
+        Path bundle=Files.createDirectory(root.resolve("bundle"));
+        Path part=Files.writeString(bundle.resolve("part.zip"),"synthetic");
+        when(snapshots.capture()).thenReturn(bundle);
+        org.springframework.test.util.ReflectionTestUtils.setField(backups,"snapshots",snapshots);
+        backups.create();
+        var order=inOrder(snapshots,telegram);
+        order.verify(snapshots).capture(); order.verify(telegram).sendDocument(any()); order.verify(telegram).sendText(any());
+        assertTrue(Files.exists(part));
         ArgumentCaptor<TelegramGateway.Text> text = ArgumentCaptor.forClass(TelegramGateway.Text.class);
         verify(telegram).sendText(text.capture());
         assertEquals(TelegramGateway.Destination.chat(456L), text.getValue().destination());
@@ -125,6 +124,17 @@ class DirectOperationsTest {
         verifyNoInteractions(telegram);
     }
 
+    @Test void deliveryFailurePreservesIndependentLocalArtifactAndDoesNotSendReport() throws Exception {
+        var snapshots=mock(com.boatarde.regatasimulator.migration.RecoverySnapshotService.class);
+        Path bundle=Files.createDirectory(root.resolve("retained-bundle"));
+        Path part=Files.writeString(bundle.resolve("part.zip"),"synthetic");
+        when(snapshots.capture()).thenReturn(bundle);
+        org.springframework.test.util.ReflectionTestUtils.setField(backups,"snapshots",snapshots);
+        doThrow(new IllegalStateException("synthetic failure")).when(telegram).sendDocument(any());
+        assertThrows(IllegalStateException.class,backups::create);
+        assertTrue(Files.exists(part)); verify(telegram,never()).sendText(any());
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"jsondb", "templates", "sources"})
     void failureStopsLaterStagesAndCleansAllPreparedArchives(String prefix) throws Exception {
@@ -138,14 +148,8 @@ class DirectOperationsTest {
                 String stage = directory.endsWith("db") ? "jsondb" : Path.of(directory).getFileName().toString();
                 return stage.equals(prefix) ? List.of(first, second) : List.of();
             });
-            assertSame(failure, assertThrows(ApplicationFailure.class, backups::create));
-            files.verify(() -> FileUtils.zipInChunks(root.resolve("db").toString(), 40L * 1024 * 1024));
-            if (prefix.equals("jsondb")) {
-                files.verify(() -> FileUtils.zipInChunks(root.resolve("templates").toString(), 40L * 1024 * 1024), never());
-            }
-            if (!prefix.equals("sources")) {
-                files.verify(() -> FileUtils.zipInChunks(root.resolve("sources").toString(), 40L * 1024 * 1024), never());
-            }
+            String directory=prefix.equals("jsondb") ? root.resolve("db").toString() : root.resolve(prefix).toString();
+            assertSame(failure, assertThrows(ApplicationFailure.class, () -> backups.archive(directory,prefix)));
         }
         assertFalse(Files.exists(first)); assertFalse(Files.exists(second));
         verify(telegram).sendDocument(any()); verifyNoMoreInteractions(telegram);
