@@ -33,17 +33,24 @@ public class RouterService {
     private PingService ping;
     private ReportService reports;
     private BackupService backups;
+    private MemeService memes;
 
     public RouterService(WorkflowManager workflowManager, List<Route> routes) {
         this.workflowManager = workflowManager;
         this.routes = routes;
     }
 
-    @Autowired
     public RouterService(WorkflowManager workflowManager, List<Route> routes, PingService ping,
                          ReportService reports, BackupService backups) {
         this(workflowManager, routes);
         this.ping = ping; this.reports = reports; this.backups = backups;
+    }
+
+    @Autowired
+    public RouterService(WorkflowManager workflowManager, List<Route> routes, PingService ping,
+                         ReportService reports, BackupService backups, MemeService memes) {
+        this(workflowManager, routes, ping, reports, backups);
+        this.memes = memes;
     }
 
     public void route(Update update, TelegramBot bot) {
@@ -61,6 +68,9 @@ public class RouterService {
                 runDirect(update, bot, () -> reports.send(destination(update)));
             } else if (backups != null && action == WorkflowAction.BACKUP_JSON_DB_STEP) {
                 runDirect(update, bot, () -> backups.create(destination(update)));
+            } else if (memes != null && action == WorkflowAction.GET_RANDOM_TEMPLATE) {
+                runDirect(update, bot, () -> memes.publish(new MemeService.Publish(MemeService.Origin.TELEGRAM_COMMAND,
+                    destination(update))));
             } else {
                 startFlow(update, bot, action);
             }

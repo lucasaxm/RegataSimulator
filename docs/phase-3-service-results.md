@@ -14,8 +14,6 @@ Baseline: `6275028`, Java 21.0.2 / Gradle 8.6. JsonDB is retained. No SQLite, de
 
 Slice 1 validation: focused repository/service/workflow/callback/context tests passed; `./gradlew clean build` passed with **745 cases / 34 suites**, zero failures/errors/skips; separate Node security tests **5/5**; `git diff --check` passed. Editor findings for duplicate literals and a test method reference were fixed; remaining Java package/non-project warnings are workspace-import diagnostics, not a server quality-gate result. No environment files, secrets, generated files, runtime media or user datasets are staged.
 
-## Remaining Phase 3 work
-
 ## Slice 2 — Direct operations and Telegram boundary
 
 - Added typed Telegram destination/text/photo/document/delivery requests behind `TelegramGateway`; bot-method construction is in `BotTelegramGateway`. Bot lookup is lazy to avoid the bot/router/service dependency cycle; isolated context startup performs no external calls.
@@ -27,4 +25,15 @@ Slice 1 validation: focused repository/service/workflow/callback/context tests p
 
 ## Remaining Phase 3 work (after slice 2)
 
-Extract shared media/render boundaries; explicit publication/preview/submission/moderation services; thin Telegram parsing/router and HTTP/scheduler adapters; central application failures outside `flows`; remove production runner/actions/bag/registration/steps and adapt tests to direct service contracts. Phases 4–5 and durable recovery/cross-adapter transactions remain pending.
+## Slice 3 — Shared rendering and explicit meme service
+
+- `MediaStorage`/`FileMediaStorage` and `ImageRenderer`/`ImageMagickRenderer` provide reusable boundaries. The shared renderer retains isolated owner-only scratch, argument-array process execution, memory/map/disk/thread/time limits, bounded process/output handling, geometry/dimension/output validation, interruption preservation and intermediate cleanup.
+- `RenderedImage` transfers whole-job ownership to the caller until delivery finishes. `MemeService` closes that ownership around send and persistence, including failed sends/binding writes. The old rendering step is only a temporary adapter; its duplicate algorithm was removed.
+- Explicit `publish`, `previewSource`, and `previewTemplate` methods use typed origin/destination inputs. Preview mode is independent of progress messages and null transport updates. Preview delivery binds the actual returned message only while REVIEW; publication alone updates current weights and delivered history.
+- Production Telegram meme commands and scheduled/admin generation now call `MemeService` directly. Submission preview still enters the runner temporarily. Administrator generation currently passes through the scheduled adapter and remains a pending origin-classification cleanup.
+- Real temporary repository/media tests cover minimal pools/history, all birthday fallback dates, explicit previews with no progress message, original origin preservation, conditional binding versus concurrent moderation, failure cleanup and publication-only weights/history. Existing process/render/concurrent-job regressions exercise the shared renderer through the temporary step seam.
+- Focused suites, clean build **771 cases / 36 suites** (zero failures/errors/skips) and separate Node **5/5** passed after correcting Mockito restubbing in failure fixtures; no actual Telegram/ImageMagick or runtime dataset was used. Counts were independently read from all XML suite headers.
+
+## Remaining Phase 3 work (after slice 3)
+
+Explicit submission/moderation services; import/media boundary consumption throughout existing services; thin Telegram parsing/router and HTTP adapters; central application failures outside `flows`; remove production runner/actions/bag/registration/steps and adapt tests to direct service contracts. Phases 4–5 and durable recovery/cross-adapter transactions remain pending. **Phase 3 remains incomplete.**

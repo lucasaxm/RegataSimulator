@@ -1,37 +1,25 @@
 package com.boatarde.regatasimulator.service;
 
-import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
-import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.application.TelegramGateway;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class ScheduledTaskService {
 
-    private final RegataSimulatorBot bot;
-    private final RouterService routerService;
-    private final Long backupChatId;
-    private BackupService backups;
+    private final MemeService memes;
+    private final BackupService backups;
+    private final Long channelId;
 
-    public ScheduledTaskService(RegataSimulatorBot bot, RouterService routerService,
-                                @Value("${telegram.bots.regata-simulator.backup-chat}") Long backupChatId) {
-        this.bot = bot;
-        this.routerService = routerService;
-        this.backupChatId = backupChatId;
-    }
-
-    @Autowired
-    public ScheduledTaskService(RegataSimulatorBot bot, RouterService routerService, BackupService backups,
-                                @Value("${telegram.bots.regata-simulator.backup-chat}") Long backupChatId) {
-        this(bot, routerService, backupChatId);
-        this.backups = backups;
+    public ScheduledTaskService(MemeService memes, BackupService backups,
+                                @Value("${telegram.bots.regata-simulator.channel}") Long channelId) {
+        this.memes = memes; this.backups = backups; this.channelId = channelId;
     }
 
     @Scheduled(cron = "0 0,30 * * * *")
     public void generateMeme() {
-        routerService.startFlow(null, bot, WorkflowAction.GET_RANDOM_TEMPLATE);
+        memes.publish(new MemeService.Publish(MemeService.Origin.SCHEDULED, TelegramGateway.Destination.chat(channelId)));
     }
 
     @Scheduled(cron = "0 15 12 * * SUN")
