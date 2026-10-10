@@ -24,6 +24,8 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
@@ -74,7 +76,7 @@ class BuildMemeStepTest {
         };
         WorkflowDataBag bag = bag(List.of(area(1, 1, true)));
 
-        assertThat(renderer.run(bag)).isEqualTo(WorkflowAction.NONE);
+        assertThrows(ApplicationFailure.class, () -> renderer.run(bag));
         assertThat(bag.get(WorkflowDataKey.MEME_FILE, Path.class)).isNull();
     }
 
@@ -84,7 +86,7 @@ class BuildMemeStepTest {
         FakeRenderer renderer = new FakeRenderer();
         WorkflowDataBag bag = bag(List.of(area(3, 1, true)));
 
-        assertThat(renderer.run(bag)).isEqualTo(WorkflowAction.NONE);
+        assertThrows(ApplicationFailure.class, () -> renderer.run(bag));
         assertThat(directory.resolve("distorted_source_3.png")).doesNotExist();
         assertThat(bag.get(WorkflowDataKey.MEME_FILE, Path.class)).isNull();
     }
@@ -94,7 +96,7 @@ class BuildMemeStepTest {
         FakeRenderer renderer = new FakeRenderer();
         WorkflowDataBag bag = bag(List.of(area(1, 3, true)));
 
-        assertThat(renderer.run(bag)).isEqualTo(WorkflowAction.NONE);
+        assertThrows(ApplicationFailure.class, () -> renderer.run(bag));
         assertThat(renderer.commands).isEmpty();
     }
 
@@ -114,7 +116,8 @@ class BuildMemeStepTest {
         FakeRenderer renderer = new FakeRenderer();
         renderer.exitCode = 7;
 
-        assertThat(renderer.run(bag(List.of(area(1, 1, true))))).isEqualTo(WorkflowAction.NONE);
+        WorkflowDataBag bag = bag(List.of(area(1, 1, true)));
+        assertThrows(ApplicationFailure.class, () -> renderer.run(bag));
     }
 
     @Test
@@ -127,7 +130,7 @@ class BuildMemeStepTest {
         WorkflowDataBag bag = bag(List.of(area(1, 1, true)));
 
         try {
-            assertThat(renderer.run(bag)).isEqualTo(WorkflowAction.NONE);
+            assertThrows(ApplicationFailure.class, () -> renderer.run(bag));
             assertThat(Thread.currentThread().isInterrupted()).isTrue();
             assertThat(bag.get(WorkflowDataKey.MEME_FILE, Path.class)).isNull();
         } finally {
@@ -144,7 +147,7 @@ class BuildMemeStepTest {
         when(process.waitFor(anyLong(), eq(TimeUnit.MILLISECONDS))).thenReturn(true);
         WorkflowDataBag bag = bag(List.of(area(1, 1, true)));
 
-        assertThat(rendererReturning(process).run(bag)).isEqualTo(WorkflowAction.NONE);
+        assertThrows(ApplicationFailure.class, () -> rendererReturning(process).run(bag));
         assertThat(bag.get(WorkflowDataKey.MEME_FILE, Path.class)).isNull();
         verify(input, org.mockito.Mockito.atLeastOnce()).close();
     }

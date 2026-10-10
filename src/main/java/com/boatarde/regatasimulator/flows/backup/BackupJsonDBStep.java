@@ -2,6 +2,7 @@ package com.boatarde.regatasimulator.flows.backup;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
 import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.flows.WorkflowStep;
@@ -32,8 +33,7 @@ public class BackupJsonDBStep implements WorkflowStep {
         try {
             backupService.zipToTelegram(regataSimulatorBot, jsonDbPath, "jsondb");
         } catch (IOException | TelegramApiException e) {
-            log.error("Error during backup of jsondb: {}", e.getMessage(), e);
-            return WorkflowAction.NONE;
+            throw new ApplicationFailure(ApplicationFailure.Kind.EXECUTION, "Database backup failed", e);
         }
 
         return WorkflowAction.BACKUP_TEMPLATES_STEP;

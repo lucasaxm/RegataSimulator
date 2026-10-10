@@ -2,6 +2,7 @@ package com.boatarde.regatasimulator.flows.simulator;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
 import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.flows.WorkflowStep;
@@ -69,11 +70,9 @@ public class BuildMemeStep implements WorkflowStep {
             handedOff = true;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            log.error("Meme rendering interrupted", e);
-            return WorkflowAction.NONE;
+            throw new ApplicationFailure(ApplicationFailure.Kind.EXECUTION, "Meme rendering interrupted", e);
         } catch (IOException | RuntimeException e) {
-            log.error(e.getLocalizedMessage(), e);
-            return WorkflowAction.NONE;
+            throw new ApplicationFailure(ApplicationFailure.Kind.EXECUTION, "Meme rendering failed", e);
         } finally {
             distortedSources.forEach(this::deleteTemporaryFile);
             if (!handedOff) {

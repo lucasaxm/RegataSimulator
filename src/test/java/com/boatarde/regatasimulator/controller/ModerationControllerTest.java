@@ -2,6 +2,7 @@ package com.boatarde.regatasimulator.controller;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
 import com.boatarde.regatasimulator.flows.WorkflowManager;
 import com.boatarde.regatasimulator.flows.simulator.SendTemplateRejectedMessageStep;
 import com.boatarde.regatasimulator.models.ReviewSourceBody;
@@ -214,8 +215,9 @@ class ModerationControllerTest {
         TemplateController controller = new TemplateController(templateService, bot, realRouter);
 
         ReviewTemplateBody review = templateReview(template.getId(), false);
-        NullPointerException failure = assertThrows(NullPointerException.class,
-            () -> controller.reviewTemplate(review));
+        Throwable failure = assertThrows(ApplicationFailure.class,
+            () -> controller.reviewTemplate(review)).getCause();
+        assertTrue(failure instanceof NullPointerException);
 
         assertEquals(Status.REJECTED, persisted.get());
         assertEquals(Status.REJECTED, template.getStatus());

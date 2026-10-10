@@ -2,6 +2,7 @@ package com.boatarde.regatasimulator.flows.common;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
 import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.flows.WorkflowStep;
@@ -24,7 +25,7 @@ public class SendMessageStep implements WorkflowStep {
             BotApiObject response = regataSimulatorBot.execute(message);
             log.info("Response: {}", TelegramUtils.toJson(response, false));
         } catch (TelegramApiException e) {
-            log.error(e.getLocalizedMessage(), e);
+            throw new ApplicationFailure(ApplicationFailure.Kind.EXECUTION, "Message delivery failed", e);
         }
         return WorkflowAction.NONE;
     }

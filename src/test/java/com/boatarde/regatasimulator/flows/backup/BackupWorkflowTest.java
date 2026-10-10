@@ -2,6 +2,8 @@ package com.boatarde.regatasimulator.flows.backup;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
+import static org.mockito.Mockito.verify;
 import com.boatarde.regatasimulator.flows.WorkflowManager;
 import com.boatarde.regatasimulator.flows.common.SendMessageStep;
 import com.boatarde.regatasimulator.models.Author;
@@ -89,12 +91,12 @@ class BackupWorkflowTest {
 
         router.startFlow(update, bot, WorkflowAction.BACKUP_JSON_DB_STEP);
 
-        verifyFullOrderAndReport();
+        verifyFullOrderAndReport(false);
     }
 
     @ParameterizedTest
     @CsvSource({"jsondb,io", "jsondb,telegram", "templates,io", "templates,telegram", "sources,io", "sources,telegram"})
-    void firstCheckedFailureCurrentlyIsSwallowedAndTerminatesRealWorkflowPhase1ObservabilityGap(
+    void firstCheckedFailureIsReportedAndStopsLaterStages(
         String failingStage, String failureType) throws Exception {
         Exception failure = "io".equals(failureType)
             ? new IOException("controlled backup failure")
@@ -111,8 +113,8 @@ class BackupWorkflowTest {
             return null;
         }).when(backup).zipToTelegram(eq(bot), anyString(), anyString());
 
-        // The real step returns NONE; RouterService exits normally rather than surfacing the failure.
-        assertDoesNotThrow(() -> router.startFlow(update, bot, WorkflowAction.BACKUP_JSON_DB_STEP));
+        assertSame(failure, assertThrows(ApplicationFailure.class,
+            () -> router.startFlow(update, bot, WorkflowAction.BACKUP_JSON_DB_STEP)).getCause());
 
         InOrder order = inOrder(backup);
         order.verify(backup).zipToTelegram(bot, dbPath, "jsondb");
@@ -123,7 +125,8 @@ class BackupWorkflowTest {
             order.verify(backup).zipToTelegram(bot, sourcesPath, "sources");
         }
         verifyNoMoreInteractions(backup);
-        verifyNoInteractions(db, bot);
+        verifyNoInteractions(db);
+        verify(bot).execute(any(SendMessage.class));
     }
 
     @Test
@@ -131,12 +134,13 @@ class BackupWorkflowTest {
         IllegalStateException failure = new IllegalStateException("unchecked failure");
         doThrow(failure).when(backup).zipToTelegram(bot, dbPath, "jsondb");
 
-        assertSame(failure, assertThrows(IllegalStateException.class,
-            () -> router.startFlow(update, bot, WorkflowAction.BACKUP_JSON_DB_STEP)));
+        assertSame(failure, assertThrows(ApplicationFailure.class,
+            () -> router.startFlow(update, bot, WorkflowAction.BACKUP_JSON_DB_STEP)).getCause());
 
         inOrder(backup).verify(backup).zipToTelegram(bot, dbPath, "jsondb");
         verifyNoMoreInteractions(backup);
-        verifyNoInteractions(db, bot);
+        verifyNoInteractions(db);
+        verify(bot).execute(any(SendMessage.class));
     }
 
     @Test
@@ -144,17 +148,17 @@ class BackupWorkflowTest {
         reportData();
         when(bot.execute(any(SendMessage.class))).thenThrow(new TelegramApiException("report delivery failed"));
 
-        assertDoesNotThrow(() -> router.startFlow(update, bot, WorkflowAction.BACKUP_JSON_DB_STEP));
+        assertThrows(ApplicationFailure.class, () -> router.startFlow(update, bot, WorkflowAction.BACKUP_JSON_DB_STEP));
 
-        verifyFullOrderAndReport();
+        verifyFullOrderAndReport(true);
     }
 
     @Test
     void missingReportOriginCurrentlyThrowsAfterAllBackupsPhase1NullOriginBug() throws Exception {
         update.setMessage(null);
 
-        assertThrows(NullPointerException.class,
-            () -> router.startFlow(update, bot, WorkflowAction.BACKUP_JSON_DB_STEP));
+        assertTrue(assertThrows(ApplicationFailure.class,
+            () -> router.startFlow(update, bot, WorkflowAction.BACKUP_JSON_DB_STEP)).getCause() instanceof NullPointerException);
 
         InOrder order = inOrder(backup);
         order.verify(backup).zipToTelegram(bot, dbPath, "jsondb");
@@ -177,7 +181,7 @@ class BackupWorkflowTest {
         when(db.findAll(Author.class)).thenReturn(List.of(author));
     }
 
-    private void verifyFullOrderAndReport() throws Exception {
+    private void verifyFullOrderAndReport(boolean deliveryFailed) throws Exception {
         ArgumentCaptor<SendMessage> report = ArgumentCaptor.forClass(SendMessage.class);
         InOrder order = inOrder(backup, db, bot);
         order.verify(backup).zipToTelegram(bot, dbPath, "jsondb");
@@ -186,8 +190,8 @@ class BackupWorkflowTest {
         order.verify(db).findAll(Template.class);
         order.verify(db).findAll(Source.class);
         order.verify(db).findAll(Author.class);
-        order.verify(bot).execute(report.capture());
-        SendMessage message = report.getValue();
+        order.verify(bot, org.mockito.Mockito.times(deliveryFailed ? 2 : 1)).execute(report.capture());
+        SendMessage message = report.getAllValues().getFirst();
         assertEquals("123", message.getChatId());
         assertEquals(42, message.getReplyToMessageId());
         assertEquals("HTML", message.getParseMode());
@@ -196,6 +200,10 @@ class BackupWorkflowTest {
         assertTrue(message.getText().contains("• Sources: 2"));
         assertTrue(message.getText().contains("<b>@test_author</b>: 1 templates."));
         assertTrue(message.getText().contains("<b>@test_author</b>: 1 sources."));
+        if (deliveryFailed) {
+            assertTrue(report.getAllValues().getLast().getText().contains("Não foi possível"));
+            assertEquals("123", report.getAllValues().getLast().getChatId());
+        }
         verifyNoMoreInteractions(backup, db, bot);
     }
 

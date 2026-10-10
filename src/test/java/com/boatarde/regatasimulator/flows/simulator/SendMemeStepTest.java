@@ -3,6 +3,7 @@ package com.boatarde.regatasimulator.flows.simulator;
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.factory.TelegramTestFactory;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
 import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.models.CommonEntity;
@@ -272,7 +273,8 @@ class SendMemeStepTest {
                 .thenThrow(new TelegramApiException("media transport unavailable"));
 
             SendMemeStep step = new SendMemeStep(CHANNEL_ID, database);
-            assertEquals(WorkflowAction.NONE, assertDoesNotThrow(() -> step.run(bag)));
+            ApplicationFailure failure = assertThrows(ApplicationFailure.class, () -> step.run(bag));
+            assertEquals("media transport unavailable", failure.getCause().getMessage());
 
             telegram.verify(() -> TelegramUtils.executeSendMediaBotMethod(eq(bot), any(SendPhoto.class)));
             verifyNoInteractions(database);
@@ -283,7 +285,7 @@ class SendMemeStepTest {
                 verify(bot).execute(any(DeleteMessage.class));
             }
             verifyNoMoreInteractions(bot);
-            assertTrue(capturedOutput.getAll().contains("media transport unavailable"));
+            assertFalse(capturedOutput.getAll().contains("media transport unavailable"));
         }
     }
 
@@ -299,7 +301,7 @@ class SendMemeStepTest {
         doThrow(new TelegramApiException("cannot delete progress")).when(bot).execute(any(DeleteMessage.class));
 
         try (MockedStatic<TelegramUtils> telegram = mockStatic(TelegramUtils.class)) {
-            assertEquals(WorkflowAction.NONE, new SendMemeStep(CHANNEL_ID, database).run(bag));
+            assertThrows(ApplicationFailure.class, () -> new SendMemeStep(CHANNEL_ID, database).run(bag));
 
             telegram.verifyNoInteractions();
             verifyNoInteractions(database);

@@ -2,6 +2,7 @@ package com.boatarde.regatasimulator.flows.simulator;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.flows.ApplicationFailure;
 import com.boatarde.regatasimulator.flows.WorkflowDataBag;
 import com.boatarde.regatasimulator.flows.WorkflowDataKey;
 import com.boatarde.regatasimulator.flows.WorkflowStep;
@@ -79,8 +80,7 @@ public class SendMemeStep implements WorkflowStep {
                 savePreview(sources.getFirst(), Source.class, response);
             }
         } catch (TelegramApiException e) {
-            log.error(String.format("TelegramApiException when sending media: %s", e.getMessage()), e);
-            return WorkflowAction.NONE;
+            throw new ApplicationFailure(ApplicationFailure.Kind.EXECUTION, "Meme delivery failed", e);
         } finally {
             Path jobDirectory = bag.get(WorkflowDataKey.RENDER_JOB_DIRECTORY, Path.class);
             if (jobDirectory != null) {
