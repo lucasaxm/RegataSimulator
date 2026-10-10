@@ -2,11 +2,19 @@
 
 Verified: 2026-10-09. This describes the **current** application, not the proposed redesign.
 
+## Phase 4 offline SQLite checkpoint
+
+Phase 4's scoped implementation and synthetic offline rehearsal are complete: JsonDB remains default; explicit `regata-simulator.database.engine=sqlite` plus an absolute `sqlite-file` selects the four JDBC adapters. Xerial 3.53.4.0 loads measured SQLite **3.53.4**; Liquibase **4.33.0** owns versioned migrations under `src/main/resources/db/changelog/sqlite.sql`. WAL/FULL, per-connection foreign keys, bounded busy timeout and a two-connection Hikari pool target a single host/local disk, whose actual deployed suitability remains unverified.
+
+`repository.sqlite` implements conditional field writes, positive weights, normalized source uniqueness, parameterized literal filters, deterministic SQL paging/counts and ordered history. `MetadataUnitOfWork` coordinates source/template weight changes with delivered history, and author/entity submission metadata, without transport/files inside the transaction. `migration.OfflineStoreCli`/Gradle `offlineStore` provide guarded, audited raw-JsonDB import and read-only SQLite→JSON/media rollback export without starting Spring. History keeps immutable IDs with nullable ON DELETE SET NULL links; geometry/full nullable Messages remain validated JSON.
+
+Deletion stages media beside its original directory, restores after confirmed metadata failure, and retains uncertain stages for reconciliation. SQLite legacy backup delivery is blocked until Phase 5 consistent snapshots exist. See [Phase 4 results and offline operator commands](phase-4-sqlite-results.md) for policies, artifacts, rollback and limits. Clean baseline: **725 JUnit cases / 32 suites**, zero failures/errors/skips; Node **5/5**. No live migration/cutover, user data, secrets or deployment was accessed; Phase 5 is next.
+
 ## Phase 3 completed checkpoint
 
 Typed repositories with JsonDB adapters, Telegram/media/render boundaries, and direct ping/report/backup/meme/submission/moderation/callback services are implemented in sequential local slices. Bot dispatch now uses `adapter.telegram.TelegramRouter`; scheduler publication/backup and HTTP moderation use typed services. There is no registered production workflow runner/step graph. Persisted nullable Telegram messages and Phase 2 DTO/security contracts remain compatible. See [Phase 3 service results](phase-3-service-results.md).
 
-Media-boundary consumption, central application failures and administrator/scheduled origin separation are implemented. Active replacement regression coverage and full-chain submission→callback→moderation integration are implemented; all obsolete workflow/route sources and duplicate harnesses are physically removed, including the old compatibility exception (52 verified Git deletions). The [removal manifest](phase-3-cleanup-removal-manifest.md) is historical and resolved. Phase 3 is **complete** for its scoped acceptance items; Phase 4 is next, and SQLite/Phases 4–5 remain unimplemented. Final clean build: **702 cases / 25 suites**, zero failures/errors/skips, plus **5 passing Node cases**. Historical 914/40 totals included 15 obsolete duplicate suites.
+Media-boundary consumption, central application failures and administrator/scheduled origin separation are implemented. Active replacement regression coverage and full-chain submission→callback→moderation integration are implemented; all obsolete workflow/route sources and duplicate harnesses are physically removed, including the old compatibility exception (52 verified Git deletions). The [removal manifest](phase-3-cleanup-removal-manifest.md) is historical and resolved. Phase 3 is **complete** for its scoped acceptance items; its historical final clean build was **702 cases / 25 suites**, zero failures/errors/skips, plus **5 passing Node cases**. Historical 914/40 totals included 15 obsolete duplicate suites. Phase 4 supersedes the persistence-only-JsonDB statements below where explicitly noted above; Phase 5 remains proposed.
 
 ## Stack and repository layout
 
@@ -14,6 +22,7 @@ Media-boundary consumption, central application failures and administrator/sched
 - Gradle wrapper 8.6, Groovy build configuration; Spring Boot 3.2.3.
 - Spring MVC, Security 6.2, Jakarta validation, Actuator, in-memory Spring Session; Lombok/Jackson.
 - Telegram Bots 6.9.7.1, JsonDB 1.0.115-j11, OpenCSV, Jasypt, Tika, springdoc.
+- Opt-in SQLite: Xerial JDBC 3.53.4.0, Liquibase 4.33.0, Boot-managed Spring JDBC/Hikari.
 - External ImageMagick executable selected by `MAGICK_PATH`.
 
 | Path | Purpose |
@@ -36,11 +45,12 @@ All package paths below are relative to `src/main/java/com/boatarde/regatasimula
 
 | Package / class | Responsibility |
 | --- | --- |
-| `RegataSimulatorApplication` | Boot entry point; conditionally registers the bot through TelegramBotRegistration and creates four JsonDB collections in `@PostConstruct` |
+| `RegataSimulatorApplication` | Boot entry point; conditionally registers the bot and creates four collections only in JsonDB mode |
 | `bots/RegataSimulatorBot` | Telegram long-polling adapter forwarding updates to `adapter.telegram.TelegramRouter` |
 | `adapter/telegram/` | Strict command/upload/callback parsing, creator checks and redacted failures; `BotTelegramGateway` builds Telegram methods |
 | `application/` | Central `ApplicationFailure`, typed Telegram/media/render boundaries and submission origin |
-| `repository/`, `repository/jsondb/` | Domain repository contracts and JsonDB implementations for sources, templates, authors and delivered history |
+| `repository/`, `repository/jsondb/`, `repository/sqlite/` | Domain contracts and conditional JsonDB/SQLite implementations; database-only unit of work |
+| `migration/` | Standalone offline audit/import and post-write rollback export without Spring startup |
 | `adapter/media/` | Persisted media lookup/lifecycle and isolated owned ImageMagick rendering |
 | `service/PingService`, `ReportService`, `BackupService` | Direct pong/statistics/backup orchestration without synthetic Updates |
 | `service/MemeService`, `SubmissionService` | Explicit publication/previews and typed uploads with ordered persistence/cleanup |
@@ -59,7 +69,7 @@ All package paths below are relative to `src/main/java/com/boatarde/regatasimula
 
 There is no workflow runner, enum/action registry, object-valued bag or annotation-driven step graph in production sources. HTTP, Telegram and scheduler adapters call typed application services directly; new work should extend explicit use cases and shared boundaries rather than restore the removed framework.
 
-Preview versus publication is explicit, destinations/origins are typed, and failures use `application.ApplicationFailure`; Telegram senders receive redacted Portuguese messages. Strict callback parsing/ownership/binding and conditional REVIEW writes remain in place. These synchronous services do not provide durable retries or cross-adapter/database/filesystem/Telegram transactions. See [Phase 3 results](phase-3-service-results.md) for current verification and [Phase 1 reliability results](phase-1-reliability-results.md) for historical safety fixes.
+Preview versus publication is explicit, destinations/origins are typed, and failures use `application.ApplicationFailure`; Telegram senders receive redacted Portuguese messages. Strict callback parsing/ownership/binding and conditional REVIEW writes remain in place. SQLite coordinates metadata across repositories, but these synchronous services do not provide durable retries or transactions covering filesystem/Telegram. See [Phase 4 results](phase-4-sqlite-results.md) for current verification and [Phase 1 reliability results](phase-1-reliability-results.md) for historical safety fixes.
 
 ## Persistence and media
 
@@ -70,14 +80,14 @@ Preview versus publication is explicit, destinations/origins are typed, and fail
 | `memes` | `Meme` | UUID, template UUID, ordered source UUID list, Telegram Message |
 | `users` | `Author` | Long Telegram user ID, first/last name, optional username |
 
-JsonDB discovers `@Document` entities under `models`. Review status values are exactly `REVIEW`, `APPROVED`, `REJECTED`; initial source/template weight is 10. Publication through `MemeService` reduces weights toward 1 and the history repository inserts delivered history before trimming to 1000; insertion/trim are not transactional.
+JsonDB discovers `@Document` entities under `models`; SQLite maps the same entities through JDBC. Review status values are exactly `REVIEW`, `APPROVED`, `REJECTED`; initial source/template weight is 10. Publication through `MemeService` reduces weights toward 1 and history inserts before trimming to 1000. SQLite weights/history/retention are one metadata transaction after delivery; JsonDB remains nontransactional.
 
 - Source image layout: configured sources directory / UUID / `source.jpg`, `source.jpeg`, or `source.png`.
 - Template image layout: configured templates directory / UUID / `template.jpg`, `template.jpeg`, or `template.png`.
 - Template geometry stores 1-based area/source numbers, four integer corners, and background flags. The CSV header is exactly `Area,Source,TLx,TLy,TRx,TRy,BRx,BRy,BLx,BLy,Background`.
 - Imported sources have no Telegram origin message. Current entity sorting derives dates from Message or zero.
 - Preview callbacks require the original submitter, REVIEW state, and the exact persisted preview chat/message identity. Successful confirmation consumes the binding without approving the record. Legacy/unbound previews fail closed. Binding metadata is updated with JsonDB field operations; process-local callback locks prevent concurrent successful replays, not all HTTP/multi-process races. See [callback-safety results](phase-1-callback-safety-results.md).
-- Files and JsonDB metadata are separate; neither source deletion nor create operations are application-level atomic across them.
+- Files and metadata remain separate. Deletion stages and restores/retains media on failure; creation retains existing compensation. Neither is a database/filesystem transaction or automatic crash recovery.
 - Rendering scratch is job-local outside persisted media, with owner-only permissions. `ProcessRunner` bounds execution/output and checks exit status; `RenderedImage` transfers final output/job ownership to `MemeService` through delivery/persistence. Upload/import validation uses actual decoded PNG/JPEG bytes and bounded convex geometry/CSV. See [reliability results](phase-1-reliability-results.md) for numeric limits and recovery policies.
 - Moderation updates status and consumes preview bindings only from stored REVIEW state; unrelated current fields are preserved. Notification failure does not undo an applied decision; the existing HTTP 204 carries `X-Notification-Status: failed` when applicable. Null-origin imports receive no notification.
 
@@ -103,7 +113,7 @@ CSRF is enabled using Security 6.2 session/XOR tokens. Existing fetch helpers ac
 - Meme publishing: `0 0,30 * * * *` — at minute 0 and 30 of each hour.
 - Backup: `0 15 12 * * SUN` — Sunday at 12:15.
 - Neither scheduled annotation sets a zone; the scheduler timezone applies. Birthday selection separately uses America/Sao_Paulo.
-- Backups include JsonDB, templates, sources, then a statistics report, delivered to a configured Telegram backup chat. Indivisible items and encoded ZIPs above 40 MiB fail explicitly; ZIP creation/delivery cleans prepared archives on failure. This is not a coherent live database/media snapshot; that remains Phase 5.
+- JsonDB-mode backups include JsonDB, templates, sources, then a statistics report, delivered to a configured Telegram backup chat. Indivisible items and encoded ZIPs above 40 MiB fail explicitly; ZIP creation/delivery cleans prepared archives on failure. SQLite-mode legacy backups fail closed; coherent live SQLite/media snapshots remain Phase 5.
 - Application startup calls the live Telegram API and starts long polling. Registered schedules can publish and send backups. `bootRun` is **not** a harmless startup smoke test.
 - Phase 0 added explicit default-on switches: `telegram.bots.regata-simulator.registration-enabled` and `regata-simulator.scheduling.enabled`. Tests set both false and mock Telegram; disabling these alone does not disable manual operations/remote health calls.
 - `TimeConfig` supplies a Clock for birthday rules; JsonDBUtils offers RandomGenerator overloads, and the shared renderer/ProcessRunner retain injectable process seams. History exclusion preserves required capacity, birthday pools fall back when insufficient, and subprocess execution is bounded.
@@ -119,7 +129,7 @@ Run from repository root with Java 21:
 - `./gradlew test --tests 'com.boatarde.regatasimulator.adapter.telegram.TelegramRouterTest'` — targeted test example.
 - `node --test src/test/js/web-security.test.cjs` — five mocked-fetch browser security tests, separate from Gradle/CI.
 
-The final Phase 3 suite has **702 passing cases across 25 suites**, plus **5 separate passing Node cases**, zero failures/errors/skips, with no runtime secrets, Telegram calls, or ImageMagick dependency. This replaces the intermediate 914/40 total after removing 15 duplicate legacy suites; active migrated regressions and real temporary-storage full-chain tests remain. Historical baselines: Phase 2 735/33, Phase 1 649/29, callbacks 590/24, Phase 0 300/23. Process tests launch safe Java children; validation fixtures use generated ImageIO images. Test reports: `build/reports/tests/test/index.html` and `build/test-results/test/`. Test-only profile YAML, mocked external boundaries and dynamic temporary paths isolate context tests. See [Phase 3 results](phase-3-service-results.md) and the earlier phase reports for verification details. IDE non-project diagnostics should be investigated via Gradle/Java workspace import, not fixed by changing valid package declarations.
+The Phase 4 suite has **725 passing cases across 32 suites**, plus **5 separate passing Node cases**, zero failures/errors/skips, with no runtime secrets, Telegram calls or ImageMagick dependency. Phase 3's historical 702/25 replaced intermediate 914/40 after removing obsolete duplicate suites. Earlier baselines: Phase 2 735/33, Phase 1 649/29, callbacks 590/24, Phase 0 300/23. Process tests launch safe Java children; media fixtures use generated ImageIO images. Tests use real file-backed SQLite and temporary JsonDB, with mocked external boundaries and dynamic temporary paths. Reports: `build/reports/tests/test/index.html`, `build/test-results/test/`. See [Phase 4 results](phase-4-sqlite-results.md). IDE non-project diagnostics are workspace-import issues, not reasons to change valid package declarations.
 
 ## Runtime environment and local safety
 
@@ -148,4 +158,4 @@ Spring Boot does **not** automatically load dotenv files: supply `.env.dev` vari
 - A prior JAR is backed up; startup is detected through log text. No automatic rollback or HTTP readiness smoke check is defined.
 - Actual host layout, environment secrets, reverse proxy, and the external `subprocess` program were not verified.
 
-See [backend improvement plan](backend-improvement-plan.md) for the sequence and [Phase 3 service results](phase-3-service-results.md) for completed repository/service migration and obsolete-source cleanup. Phase 4 SQLite implementation and rehearsed migration are next, not applied yet.
+See [backend improvement plan](backend-improvement-plan.md) for the sequence, [Phase 3 service results](phase-3-service-results.md) for typed services/obsolete-source cleanup and [Phase 4 results](phase-4-sqlite-results.md) for implemented opt-in SQLite/offline rehearsal. Phase 5 is next; production cutover remains unperformed.

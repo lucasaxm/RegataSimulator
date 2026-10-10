@@ -17,10 +17,10 @@ final class OfflineSnapshot {
     private static final String INVALID_RECORD="INVALID_RECORD";
     private static final String INVALID_ID="INVALID_OR_DUPLICATE_ID";
     record Issue(String collection,int row,String id,String code,boolean blocking) { }
-    final List<Source> sources=new ArrayList<>();
-    final List<Template> templates=new ArrayList<>();
-    final List<Author> users=new ArrayList<>();
-    final List<Meme> memes=new ArrayList<>();
+    final List<Source> sourceRecords=new ArrayList<>();
+    final List<Template> templateRecords=new ArrayList<>();
+    final List<Author> authorRecords=new ArrayList<>();
+    final List<Meme> historyRecords=new ArrayList<>();
     final List<Issue> issues=new ArrayList<>();
     final Map<String,Object> manifest=new TreeMap<>();
     private final Map<String,List<Integer>> originalRows=new HashMap<>();
@@ -28,8 +28,8 @@ final class OfflineSnapshot {
     OfflineSnapshot(ObjectMapper mapper) { this.mapper=mapper; }
     void read(Path json,Path sourceMedia,Path templateMedia) throws IOException {
         manifest.put("jsondb",OfflinePaths.hashes(json)); manifest.put(SOURCES,OfflinePaths.hashes(sourceMedia)); manifest.put(TEMPLATES,OfflinePaths.hashes(templateMedia));
-        readCollection(json,SOURCES,Source.class,sources); readCollection(json,TEMPLATES,Template.class,templates);
-        readCollection(json,USERS,Author.class,users); readCollection(json,MEMES,Meme.class,memes);
+        readCollection(json,SOURCES,Source.class,sourceRecords); readCollection(json,TEMPLATES,Template.class,templateRecords);
+        readCollection(json,USERS,Author.class,authorRecords); readCollection(json,MEMES,Meme.class,historyRecords);
         audit(sourceMedia,templateMedia);
     }
     private <T> void readCollection(Path root,String name,Class<T> type,List<T> records) {
@@ -66,8 +66,8 @@ final class OfflineSnapshot {
     }
     private void auditSources(Path sourceMedia,Set<UUID> sourceIds) {
         Set<String> names=new HashSet<>();
-        for(int i=0;i<sources.size();i++) {
-            Source s=sources.get(i); common(SOURCES,i,s,sourceIds);
+        for(int i=0;i<sourceRecords.size();i++) {
+            Source s=sourceRecords.get(i); common(SOURCES,i,s,sourceIds);
             String key=DescriptionKey.of(s.getDescription());
             if(key==null) issue(SOURCES,i,s.getId(),"NULL_DESCRIPTION",false);
             else if(key.isEmpty() || !names.add(key)) issue(SOURCES,i,s.getId(),key.isEmpty()?"EMPTY_DESCRIPTION":"DUPLICATE_DESCRIPTION",true);
@@ -75,8 +75,8 @@ final class OfflineSnapshot {
         }
     }
     private void auditTemplates(Path templateMedia,Set<UUID> templateIds) {
-        for(int i=0;i<templates.size();i++) {
-            Template t=templates.get(i); common(TEMPLATES,i,t,templateIds);
+        for(int i=0;i<templateRecords.size();i++) {
+            Template t=templateRecords.get(i); common(TEMPLATES,i,t,templateIds);
             media(TEMPLATES,i,t.getId(),templateMedia,"template",t.getAreas());
             try { MediaValidation.geometry(t.getAreas(),null); }
             catch(Exception e) { issue(TEMPLATES,i,t.getId(),"INVALID_GEOMETRY",true); }
@@ -84,15 +84,15 @@ final class OfflineSnapshot {
     }
     private void auditUsers() {
         Set<Long> userIds=new HashSet<>();
-        for(int i=0;i<users.size();i++) {
-            Author a=users.get(i);
+        for(int i=0;i<authorRecords.size();i++) {
+            Author a=authorRecords.get(i);
             if(a.getId()==null || !userIds.add(a.getId())) issue(USERS,i,null,INVALID_ID,true);
         }
     }
     private void auditHistory(Set<UUID> sourceIds,Set<UUID> templateIds) {
         Set<UUID> memeIds=new HashSet<>();
-        for(int i=0;i<memes.size();i++) {
-            Meme m=memes.get(i);
+        for(int i=0;i<historyRecords.size();i++) {
+            Meme m=historyRecords.get(i);
             if(m.getId()==null || !memeIds.add(m.getId())) issue(MEMES,i,m.getId(),INVALID_ID,true);
             if(m.getTemplateId()==null || !templateIds.contains(m.getTemplateId())) issue(MEMES,i,m.getId(),"ORPHAN_TEMPLATE",false);
             auditSourceOrder(m,i,sourceIds);
@@ -129,10 +129,10 @@ final class OfflineSnapshot {
         issues.add(new Issue(collection,rows==null?row+2:rows.get(row),id==null?null:id.toString(),code,blocking));
     }
     boolean blocked() { return issues.stream().anyMatch(Issue::blocking); }
-    Map<String,Integer> counts() { return Map.of(SOURCES,sources.size(),TEMPLATES,templates.size(),USERS,users.size(),MEMES,memes.size()); }
+    Map<String,Integer> counts() { return Map.of(SOURCES,sourceRecords.size(),TEMPLATES,templateRecords.size(),USERS,authorRecords.size(),MEMES,historyRecords.size()); }
     void writeJson(Path root) throws IOException {
         Files.createDirectory(root);
-        write(root,SOURCES,sources); write(root,TEMPLATES,templates); write(root,USERS,users); write(root,MEMES,memes);
+        write(root,SOURCES,sourceRecords); write(root,TEMPLATES,templateRecords); write(root,USERS,authorRecords); write(root,MEMES,historyRecords);
     }
     private void write(Path root,String name,List<?> records) throws IOException {
         try(var writer=Files.newBufferedWriter(root.resolve(name+".json"),StandardOpenOption.CREATE_NEW)) {
@@ -142,10 +142,10 @@ final class OfflineSnapshot {
     }
     Map<String,Object> canonical() {
         Map<String,Object> fields=new TreeMap<>();
-        fields.put(SOURCES,sources.stream().sorted(Comparator.comparing(s -> s.getId().toString())).map(mapper::valueToTree).toList());
-        fields.put(TEMPLATES,templates.stream().sorted(Comparator.comparing(t -> t.getId().toString())).map(mapper::valueToTree).toList());
-        fields.put(USERS,users.stream().sorted(Comparator.comparing(Author::getId)).map(mapper::valueToTree).toList());
-        fields.put(MEMES,memes.stream().sorted(Comparator.comparing(m -> m.getId().toString())).map(mapper::valueToTree).toList());
+        fields.put(SOURCES,sourceRecords.stream().sorted(Comparator.comparing(s -> s.getId().toString())).map(mapper::valueToTree).toList());
+        fields.put(TEMPLATES,templateRecords.stream().sorted(Comparator.comparing(t -> t.getId().toString())).map(mapper::valueToTree).toList());
+        fields.put(USERS,authorRecords.stream().sorted(Comparator.comparing(Author::getId)).map(mapper::valueToTree).toList());
+        fields.put(MEMES,historyRecords.stream().sorted(Comparator.comparing(m -> m.getId().toString())).map(mapper::valueToTree).toList());
         return fields;
     }
 }

@@ -49,7 +49,9 @@ class SqliteRepositoryTest {
     }
     @Test void geometryAndForeignKeysRejectInvalidRecordsAndRetainHistoricalIds() {
         var t=RepositoryContractTest.template(); t.getAreas().getFirst().setIndex(2); assertThrows(ApplicationFailure.class,() -> templates.insertSubmission(t));
-        assertThrows(org.springframework.dao.DataAccessException.class,() -> store.jdbc().update("INSERT INTO meme_sources VALUES(?,?,?,?,?)",UUID.randomUUID().toString(),0,null,null,null));
+        var failure=assertThrows(org.springframework.dao.DataAccessException.class,() -> store.jdbc().update("INSERT INTO meme_sources(meme_id,position,source_uuid,source_link) VALUES(?,?,?,?)",UUID.randomUUID().toString(),0,null,null));
+        assertInstanceOf(org.sqlite.SQLiteException.class,failure.getMostSpecificCause());
+        assertEquals(org.sqlite.SQLiteErrorCode.SQLITE_CONSTRAINT_FOREIGNKEY,((org.sqlite.SQLiteException)failure.getMostSpecificCause()).getResultCode());
         assertTrue(store.jdbc().queryForList("PRAGMA foreign_key_check").isEmpty());
     }
     @Test void historyInsertionAndRetentionRollbackTogether() {

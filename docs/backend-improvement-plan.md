@@ -1,10 +1,16 @@
 # Backend improvement plan
 
-Date: 2026-10-06. Updated: 2026-10-09. Status: **Phases 0–3 implemented for their scoped acceptance items**; Phase 4 is next and Phases 4–5 remain proposed. [Phase 0 results](phase-0-results.md), [callback-safety results](phase-1-callback-safety-results.md), [Phase 1 reliability results](phase-1-reliability-results.md), [Phase 2 web security results](phase-2-web-security-results.md), and [Phase 3 service results](phase-3-service-results.md) record implementation, verification, and recovery limits.
+Date: 2026-10-06. Updated: 2026-10-09. Status: **Phases 0–3 and Phase 4's explicitly scoped SQLite implementation/offline rehearsal are implemented**; production cutover is not performed and Phase 5 remains proposed. [Phase 0 results](phase-0-results.md), [callback-safety results](phase-1-callback-safety-results.md), [Phase 1 reliability results](phase-1-reliability-results.md), [Phase 2 web security results](phase-2-web-security-results.md), [Phase 3 service results](phase-3-service-results.md), and [Phase 4 SQLite results](phase-4-sqlite-results.md) record implementation, verification, and recovery limits.
 
 Read [backend review](backend-review.md) for evidence/tradeoffs and [project map](project-map.md) for the current structure. The goal is a simpler, reliable modular monolith, not a rewrite or a distributed system.
 
 ## Progress checkpoint — 2026-10-09
+
+- **Phase 4 offline completion:** patched Xerial JDBC with measured SQLite 3.53.4, Liquibase 4.33.0 versioned schema, four JDBC adapters, literal normalized filters/deterministic SQL paging, per-connection WAL/FK/FULL/busy bounds, coordinated publication/submission metadata transactions, conditional REVIEW writes, immutable ordered history identities and reversible media deletion staging. JsonDB remains the explicit compatibility default; SQLite is opt-in.
+- **Migration/rollback:** standalone no-Spring raw-JSON audit/import into a new file, all-record anomaly reports and hashes, full-field/integrity reconciliation, then read-only SQLite export of post-migration writes into new JsonDB/media bundles. Synthetic ImageIO/TempDir rehearsal reopens actual JsonDB; no user data or deployment settings were touched. See [operator procedure and policies](phase-4-sqlite-results.md).
+- **Current Phase 4 verification:** focused tests, clean build and independently counted XML **725 cases / 32 suites**, zero failures/errors/skips, plus **5 Node cases**. Single-host/local-disk deployment suitability and live cutover remain operator prerequisites, not verified facts. Phase 5 consistent live snapshots/automatic recovery/maintenance is next; SQLite legacy backup fails closed until then.
+
+### Phase 3 checkpoint (historical)
 
 - **Phase 3 completion:** typed JsonDB repositories, shared Telegram/media/render boundaries, central application failures, explicit preview/publication/origins and direct HTTP/Telegram/scheduler services. All 52 obsolete production/test paths are physically removed; active regression replacements and temporary-storage submission→callback→HTTP moderation integration remain. The [removal manifest](phase-3-cleanup-removal-manifest.md) is historical and resolved.
 - **Current verification:** focused services/rendering/process/repository/context tests and `./gradlew clean build` passed on Java 21.0.2 / Gradle 8.6; XML **702 tests / 25 suites**, zero failures/errors/skips; separate Node tests **5/5**. Intermediate 914/40 included 15 removed duplicate suites. Local cleanup only; no environment/data/live effects, push or deployment.
@@ -95,7 +101,7 @@ Risk control: no database engine change in this phase. Logic extraction and beha
 
 ## Phase 4 — SQLite implementation and rehearsed migration
 
-Proceed only after confirming single-host local-disk deployment and product policies for duplicate names, history deletion, nullable legacy metadata, and review transitions.
+Implemented for the requested **offline candidate/rehearsal scope**, not production cutover. [Phase 4 results](phase-4-sqlite-results.md) record schema/configuration/product policies, local commits, synthetic import and post-write rollback verification. JsonDB remains default; no production path is automatically imported. The lists below retain acceptance/cutover guidance, not a claim that live steps 1/2/6/7 were executed. Confirm actual single-host local-disk deployment suitability and approve the documented candidate policies before any live adoption.
 
 ### Implement and test
 
@@ -145,6 +151,6 @@ Acceptance for that first slice:
 4. Add adversarial/replay cases alongside existing valid-owner cases in `ReviewCallbackStepsTest` and route/workflow tests. Update known-failure expectations with their fixes, preserving callback formats and Portuguese messages where compatible.
 5. Pass targeted tests and `./gradlew clean build`; explicitly reanalyze changed Java files for Sonar findings. Do not suppress rules, include production data, migrate storage, or redesign the workflow framework in this slice.
 
-The subsequent rendering, selection, failure-reporting, validation, and recovery slices are implemented; see [reliability results](phase-1-reliability-results.md). Phase 2 CORS/cookie/CSRF/API boundaries and Phase 3 typed services/repository isolation/obsolete-workflow removal are also complete; see [web security results](phase-2-web-security-results.md) and [service results](phase-3-service-results.md). Continue with Phase 4 prerequisites and rehearsed SQLite migration, not an automatic production cutover.
+The subsequent rendering, selection, failure-reporting, validation, and recovery slices are implemented; see [reliability results](phase-1-reliability-results.md). Phase 2 CORS/cookie/CSRF/API boundaries, Phase 3 typed services/repository isolation/obsolete-workflow removal and the explicitly scoped Phase 4 SQLite/offline rehearsal are complete; see [web security results](phase-2-web-security-results.md), [service results](phase-3-service-results.md) and [SQLite results](phase-4-sqlite-results.md). Phase 5 is next; confirm live prerequisites separately and never infer an automatic production cutover.
 
 Each phase is a sequence of small PRs, not one giant PR. Estimates should follow the data audit and required test work; the existing green suite does not justify calling a whole migration low-risk or a two-day task.
