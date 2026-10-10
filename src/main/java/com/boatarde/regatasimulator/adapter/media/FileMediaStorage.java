@@ -35,12 +35,41 @@ public class FileMediaStorage implements MediaStorage {
 
     @Override
     public void delete(Kind kind, UUID id) {
-        Path directory = directory(kind, id);
+        deleteStrict(directory(kind,id));
+    }
+
+    private void deleteStrict(Path directory) {
         try (var paths = Files.walk(directory)) {
             for (Path path : paths.sorted(java.util.Comparator.reverseOrder()).toList()) Files.delete(path);
         } catch (IOException e) {
             throw new ApplicationFailure(ApplicationFailure.Kind.EXECUTION, "Media deletion failed", e);
         }
+    }
+
+    @Override
+    public void deleteAfterMetadata(Kind kind, UUID id, Runnable removeMetadata,
+                                    java.util.function.BooleanSupplier metadataExists) {
+        Path original=directory(kind,id);
+        Path staged=original.resolveSibling(".delete-"+id+"-"+UUID.randomUUID());
+        try { Files.move(original,staged,java.nio.file.StandardCopyOption.ATOMIC_MOVE); }
+        catch(IOException e) { throw new ApplicationFailure(ApplicationFailure.Kind.EXECUTION,"Media staging failed",e); }
+        try { removeMetadata.run(); }
+        catch(RuntimeException failure) {
+            restoreOrRetain(original,staged,metadataExists,failure);
+            throw failure;
+        }
+        // After metadata commit, a purge failure retains the staged copy for reconciliation.
+        deleteStrict(staged);
+    }
+
+    private void restoreOrRetain(Path original,Path staged,java.util.function.BooleanSupplier metadataExists,
+                                 RuntimeException failure) {
+        try {
+            if(metadataExists.getAsBoolean()) {
+                if(Files.exists(original)) throw new IOException("Refusing to overwrite concurrent media");
+                Files.move(staged,original,java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            } else deleteStrict(staged);
+        } catch(IOException | RuntimeException recovery) { failure.addSuppressed(recovery); }
     }
 
     private Path directory(Kind kind, UUID id) { return (kind == Kind.SOURCE ? sources : templates).resolve(id.toString()); }

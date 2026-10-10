@@ -49,11 +49,12 @@ public class TemplateService {
 
     public void deleteTemplate(Template template) {
         try {
-            media.delete(MediaStorage.Kind.TEMPLATE, template.getId());
+            media.deleteAfterMetadata(MediaStorage.Kind.TEMPLATE, template.getId(), () -> {
+                if(!repository.remove(template)) throw new ApplicationFailure(ApplicationFailure.Kind.NOT_FOUND,"Template no longer exists");
+            }, () -> repository.findById(template.getId()).isPresent());
         } catch (ApplicationFailure e) {
             throw new ApplicationFailure(e.getKind(), "Failed to delete template: " + template.getId(), e.getCause());
         }
-        repository.remove(template);
         log.info("Template {} deleted", template.getId());
     }
 

@@ -457,13 +457,15 @@ class SourceAndTemplateServiceTest {
     }
 
     @Test
-    void metadataRemovalFailureCurrentlyOccursAfterMediaDeletionPhase1AtomicityGap() throws Exception {
+    void metadataRemovalFailureRestoresStagedMediaWhenMetadataStillExists() throws Exception {
         // Controlled DB failures are mocked; all filesystem operations are still real and temporary.
         JsonDBTemplate failingDb = mock(JsonDBTemplate.class);
         Source source = source("delete", Status.REVIEW, null);
         Template template = template(Status.REVIEW, null);
         Path sourceFile = media(sourceRoot, source.getId(), "source.jpg");
         Path templateFile = media(templateRoot, template.getId(), "template.jpg");
+        org.mockito.Mockito.when(failingDb.findById(source.getId(),Source.class)).thenReturn(source);
+        org.mockito.Mockito.when(failingDb.findById(template.getId(),Template.class)).thenReturn(template);
         doAnswer(invocation -> {
             assertFalse(Files.exists(sourceFile.getParent()));
             throw new IllegalStateException("metadata removal failed");
@@ -481,8 +483,8 @@ class SourceAndTemplateServiceTest {
 
         verify(failingDb).remove(source, Source.class);
         verify(failingDb).remove(template, Template.class);
-        assertFalse(Files.exists(sourceFile));
-        assertFalse(Files.exists(templateFile));
+        assertTrue(Files.exists(sourceFile));
+        assertTrue(Files.exists(templateFile));
     }
 
     @Test

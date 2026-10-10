@@ -51,11 +51,12 @@ public class SourceService {
 
     public void deleteSource(Source source) {
         try {
-            media.delete(MediaStorage.Kind.SOURCE, source.getId());
+            media.deleteAfterMetadata(MediaStorage.Kind.SOURCE, source.getId(), () -> {
+                if(!repository.remove(source)) throw new ApplicationFailure(ApplicationFailure.Kind.NOT_FOUND,"Source no longer exists");
+            }, () -> repository.findById(source.getId()).isPresent());
         } catch (ApplicationFailure e) {
             throw new ApplicationFailure(e.getKind(), "Failed to delete source: " + source.getId(), e.getCause());
         }
-        repository.remove(source);
         log.info("Source {} deleted", source.getId());
     }
 
