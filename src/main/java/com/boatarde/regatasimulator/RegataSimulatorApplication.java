@@ -48,6 +48,7 @@ public class RegataSimulatorApplication {
         createCollectionIfAbsent("templates");
         createCollectionIfAbsent("sources");
         createCollectionIfAbsent("memes");
+        createCollectionIfAbsent("audits");
         if (registrationEnabled) registerHelloBotAbilities();
     }
 

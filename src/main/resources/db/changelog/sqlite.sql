@@ -47,3 +47,22 @@ CREATE INDEX templates_author ON templates(author_id,origin_date DESC,id DESC);
 CREATE INDEX history_order ON memes(origin_date DESC,id DESC);
 CREATE INDEX history_template_link ON memes(template_link);
 CREATE INDEX history_source_link ON meme_sources(source_link);
+
+--changeset regata:3 dbms:sqlite
+CREATE TABLE moderation_audit (
+    id TEXT PRIMARY KEY NOT NULL CHECK(length(id)=36),
+    item_type TEXT NOT NULL CHECK(item_type IN ('SOURCE','TEMPLATE')),
+    item_uuid TEXT NOT NULL CHECK(length(item_uuid)=36),
+    actor_name TEXT NOT NULL CHECK(length(actor_name) BETWEEN 1 AND 200),
+    actor_telegram_id INTEGER,
+    decided_at INTEGER NOT NULL CHECK(decided_at>=0),
+    decision TEXT NOT NULL CHECK(decision IN ('APPROVED','REJECTED')),
+    notification TEXT CHECK(notification IS NULL OR notification IN ('SENT','SKIPPED','FAILED'))
+);
+CREATE INDEX moderation_audit_item ON moderation_audit(item_type,item_uuid,decided_at);
+CREATE TRIGGER moderation_audit_immutable BEFORE UPDATE OF id,item_type,item_uuid,actor_name,actor_telegram_id,decided_at,decision ON moderation_audit
+BEGIN SELECT RAISE(ABORT,'Immutable moderation audit'); END;
+CREATE TRIGGER moderation_audit_no_delete BEFORE DELETE ON moderation_audit
+BEGIN SELECT RAISE(ABORT,'Immutable moderation audit'); END;
+CREATE TRIGGER moderation_audit_outcome_once BEFORE UPDATE OF notification ON moderation_audit WHEN OLD.notification IS NOT NULL
+BEGIN SELECT RAISE(ABORT,'Audit outcome already recorded'); END;

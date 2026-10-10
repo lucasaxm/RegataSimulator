@@ -19,6 +19,7 @@ import java.nio.file.Path;
 
 /** Explicit local-disk store. Never interprets the legacy JsonDB directory as a file. */
 public final class SqliteStore implements AutoCloseable {
+    public static final int SCHEMA_VERSION=3;
     private final HikariDataSource dataSource;
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transactions;
@@ -105,7 +106,7 @@ public final class SqliteStore implements AutoCloseable {
 
     private void validateSchema() {
         var ids = jdbc.queryForList("SELECT ID FROM DATABASECHANGELOG ORDER BY ORDEREXECUTED", String.class);
-        if (!ids.equals(java.util.List.of("1", "2"))
+        if (!(ids.equals(java.util.List.of("1", "2")) || ids.equals(java.util.List.of("1", "2", "3")))
             || jdbc.queryForObject("SELECT count(*) FROM DATABASECHANGELOG WHERE AUTHOR='regata' AND FILENAME='db/changelog/sqlite.sql'", Integer.class) != ids.size()) {
             throw new IllegalStateException("Unsupported schema for offline export");
         }

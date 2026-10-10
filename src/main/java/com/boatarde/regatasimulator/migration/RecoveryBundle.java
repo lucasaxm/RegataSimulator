@@ -35,7 +35,14 @@ public final class RecoveryBundle {
 
     static OfflineSnapshot load(SqliteStore store) {
         return load(new SqliteSourceRepository(store,MAPPER), new SqliteTemplateRepository(store,MAPPER),
-            new SqliteAuthorRepository(store), new SqliteMemeHistoryRepository(store,MAPPER));
+            new SqliteAuthorRepository(store), new SqliteMemeHistoryRepository(store,MAPPER),new SqliteAuditRepository(store));
+    }
+
+    static OfflineSnapshot load(SourceRepository sources, TemplateRepository templates,AuthorRepository authors,
+                                MemeHistoryRepository history,AuditRepository audits) {
+        var snapshot=load(sources,templates,authors,history);
+        snapshot.auditRecords.addAll(audits.findAll());
+        return snapshot;
     }
 
     /** Stage is private, immutable and already captured under the application barrier. */
@@ -54,7 +61,7 @@ public final class RecoveryBundle {
                 List<Path> archives = FileUtils.zipInChunks(stage.resolve(category).toString(),chunkBytes,destination);
                 for (Path archive : archives) parts.add(new Part(category,archive.getFileName().toString(),OfflinePaths.hash(archive)));
             }
-            var manifest = new Manifest(1,engine,engine.equals("sqlite") ? 2 : 1,
+            var manifest = new Manifest(1,engine,schemaVersion(stage,engine),
                 engine.equals("sqlite") ? "db/store.db" : "jsondb",snapshot.counts(),hashes,List.copyOf(snapshot.issues),parts);
             writePrivate(destination.resolve("manifest.json"),MAPPER.writeValueAsBytes(manifest));
             // Marker is written last. Retention never selects incomplete artifacts.
@@ -84,7 +91,8 @@ public final class RecoveryBundle {
             }
             if (!manifest.hashes().equals(OfflinePaths.hashes(target))) throw new IOException("Restored file manifest mismatch");
             OfflineSnapshot restored = inspect(target,manifest.engine());
-            if (restored.blocked() || !restored.counts().equals(manifest.counts())) throw new IOException("Restored metadata/media invalid");
+            var counts=new HashMap<>(manifest.counts()); counts.putIfAbsent("audits",0);
+            if (restored.blocked() || !restored.counts().equals(counts) || schemaVersion(target,manifest.engine())!=manifest.schemaVersion()) throw new IOException("Restored metadata/media invalid");
             writePrivate(target.resolve("RESTORED_VERIFIED"),OfflinePaths.hash(bundle.resolve("manifest.json")).getBytes(java.nio.charset.StandardCharsets.US_ASCII));
             return target;
         } catch (IOException | RuntimeException e) {
@@ -100,7 +108,7 @@ public final class RecoveryBundle {
             || !Files.readString(bundle.resolve("COMPLETE")).equals(OfflinePaths.hash(file))) throw new IOException("Incomplete bundle");
         Manifest m = MAPPER.readValue(Files.readAllBytes(file),Manifest.class);
         if (m.format()!=1 || !Set.of("sqlite","jsondb").contains(m.engine())
-            || m.schemaVersion()!=(m.engine().equals("sqlite") ? 2 : 1)
+            || !(m.engine().equals("sqlite") ? m.schemaVersion()>=2 && m.schemaVersion()<=SqliteStore.SCHEMA_VERSION : m.schemaVersion()==1)
             || !Objects.equals(m.databaseFile(),m.engine().equals("sqlite") ? "db/store.db" : "jsondb")
             || m.parts()==null || m.parts().size()>10_000 || m.hashes()==null || m.hashes().size()>MAX_FILES) throw new IOException("Unsupported bundle");
         Set<String> allowed = new HashSet<>(List.of("manifest.json","COMPLETE"));
@@ -188,6 +196,13 @@ public final class RecoveryBundle {
             snapshot.read(stage.resolve("jsondb"),stage.resolve("sources"),stage.resolve("templates"));
         } else throw new IOException("Unsupported engine");
         return snapshot;
+    }
+
+    private static int schemaVersion(Path stage,String engine) {
+        if (!engine.equals("sqlite")) return 1;
+        try(var store=new SqliteStore(stage.resolve("db/store.db"),2000,true)) {
+            return store.jdbc().queryForObject("SELECT count(*) FROM DATABASECHANGELOG",Integer.class);
+        }
     }
 
     static void privateDirectory(Path path) throws IOException {

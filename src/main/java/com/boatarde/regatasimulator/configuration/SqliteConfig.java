@@ -16,6 +16,7 @@ public class SqliteConfig {
     @Bean SourceRepository sourceRepository(SqliteStore store,ObjectMapper mapper) { return new SqliteSourceRepository(store,mapper); }
     @Bean TemplateRepository templateRepository(SqliteStore store,ObjectMapper mapper) { return new SqliteTemplateRepository(store,mapper); }
     @Bean AuthorRepository authorRepository(SqliteStore store) { return new SqliteAuthorRepository(store); }
+    @Bean AuditRepository auditRepository(SqliteStore store) { return new SqliteAuditRepository(store); }
     @Bean MemeHistoryRepository memeHistoryRepository(SqliteStore store,ObjectMapper mapper) { return new SqliteMemeHistoryRepository(store,mapper); }
     @Bean MetadataUnitOfWork sqliteMetadataUnitOfWork(SqliteStore store) {
         return writes -> store.transactions().executeWithoutResult(tx -> writes.run());

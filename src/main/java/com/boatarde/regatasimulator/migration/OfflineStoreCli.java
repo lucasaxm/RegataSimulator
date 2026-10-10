@@ -56,6 +56,7 @@ public final class OfflineStoreCli {
             store.transactions().executeWithoutResult(tx -> {
                 snapshot.authorRecords.forEach(users::recordSubmitter); snapshot.sourceRecords.forEach(sources::insertSubmission);
                 snapshot.templateRecords.forEach(templates::insertSubmission); snapshot.historyRecords.forEach(history::importHistory);
+                snapshot.auditRecords.forEach(new SqliteAuditRepository(store)::append);
                 OfflineSnapshot loaded=load(store);
                 if(!snapshot.canonical().equals(loaded.canonical())) throw new IllegalStateException("Field reconciliation failed");
                 integrity(store);
@@ -96,6 +97,7 @@ public final class OfflineStoreCli {
         snapshot.sourceRecords.addAll(new SqliteSourceRepository(store,mapper).find(SourceRepository.Criteria.all()));
         snapshot.templateRecords.addAll(new SqliteTemplateRepository(store,mapper).find(TemplateRepository.Criteria.all()));
         snapshot.authorRecords.addAll(new SqliteAuthorRepository(store).findAll()); snapshot.historyRecords.addAll(new SqliteMemeHistoryRepository(store,mapper).newestFirst());
+        snapshot.auditRecords.addAll(new SqliteAuditRepository(store).findAll());
         return snapshot;
     }
     private void integrity(SqliteStore store) {

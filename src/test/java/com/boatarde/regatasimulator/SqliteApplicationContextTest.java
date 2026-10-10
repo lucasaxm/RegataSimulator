@@ -51,6 +51,7 @@ class SqliteApplicationContextTest {
     @Autowired SubmissionService submissions;
     @Autowired ReviewCallbackService callbacks;
     @Autowired AuthorRepository authors;
+    @Autowired AuditRepository audits;
     @Autowired org.springframework.test.web.servlet.MockMvc mvc;
     @org.junit.jupiter.api.BeforeEach void clearSyntheticMetadata() {
         store.jdbc().update("DELETE FROM memes"); store.jdbc().update("DELETE FROM sources");
@@ -130,6 +131,8 @@ class SqliteApplicationContextTest {
             .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isNoContent())
             .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("X-Notification-Status","failed"));
         assertEquals(Status.APPROVED,sources.findById(submitted.id()).orElseThrow().getStatus());
+        var audit=audits.findAll().stream().filter(a -> a.getItemId().equals(submitted.id())).findFirst().orElseThrow();
+        assertEquals("admin",audit.getActorName()); assertEquals("FAILED",audit.getNotification()); assertTrue(audit.getDecidedAt()>0);
         assertTrue(Files.exists(temp.resolve("sources").resolve(submitted.id().toString()).resolve("source.png"))); verifyNoInteractions(bot,registration);
     }
 }

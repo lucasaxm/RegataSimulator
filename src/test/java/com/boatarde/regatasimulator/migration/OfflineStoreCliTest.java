@@ -31,6 +31,9 @@ class OfflineStoreCliTest {
         template.setAreas(List.of(TemplateArea.builder().index(1).source(1).topLeft(new AreaCorner(0,0)).topRight(new AreaCorner(20,0)).bottomRight(new AreaCorner(20,20)).bottomLeft(new AreaCorner(0,20)).background(true).build())); db.insert(template);
         meme=Meme.builder().id(UUID.randomUUID()).templateId(UUID.randomUUID()).sourceIds(Arrays.asList(source.getId(),UUID.randomUUID(),source.getId(),null)).message(null).build(); db.insert(meme);
         db.insert(Author.builder().id(9_000_000_000L).firstName("Synthetic").build());
+        db.createCollection("audits");
+        db.insert(ModerationAudit.builder().id(UUID.randomUUID()).itemId(source.getId()).itemType("SOURCE").actorName("fixture-admin")
+            .actorTelegramId(9_000_000_000L).decidedAt(1000L).decision(Status.REJECTED).notification("FAILED").build());
         for(Source s:List.of(source,imported)) ImageTestFactory.image(Files.createDirectory(sources.resolve(s.getId().toString())).resolve("source.png"));
         ImageTestFactory.image(Files.createDirectory(templates.resolve(template.getId().toString())).resolve("template.png"));
     }
@@ -60,6 +63,7 @@ class OfflineStoreCliTest {
         assertEquals(mapper.valueToTree(source.getMessage()),mapper.valueToTree(restored.getMessage()));
         assertEquals(mapper.valueToTree(template),mapper.valueToTree(reopened.findById(template.getId(),Template.class)));
         assertEquals(mapper.valueToTree(meme),mapper.valueToTree(reopened.findById(meme.getId(),Meme.class)));
+        var audit=reopened.findAll(ModerationAudit.class).getFirst(); assertEquals(9_000_000_000L,audit.getActorTelegramId()); assertEquals("FAILED",audit.getNotification());
         assertEquals(OfflinePaths.hashes(sources),OfflinePaths.hashes(rollback.resolve("sources")));
         assertEquals(OfflinePaths.hashes(templates),OfflinePaths.hashes(rollback.resolve("templates")));
         assertThrows(java.io.IOException.class,() -> cli.run(args("import",json,candidate,temp.resolve("repeat-report.json"))));

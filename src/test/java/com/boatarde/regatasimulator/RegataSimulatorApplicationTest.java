@@ -26,21 +26,21 @@ class RegataSimulatorApplicationTest {
         new RegataSimulatorApplication(bot, database, registration, false).onStartUpInit();
 
         verifyNoInteractions(registration, bot);
-        for (String collection : new String[]{"users", "templates", "sources", "memes"}) {
+        for (String collection : new String[]{"users", "templates", "sources", "memes", "audits"}) {
             verify(database).createCollection(collection);
         }
     }
 
     @Test
     void registersAndRetainsExistingCollectionsWhenEnabled() throws Exception {
-        for (String collection : new String[]{"users", "templates", "sources", "memes"}) {
+        for (String collection : new String[]{"users", "templates", "sources", "memes", "audits"}) {
             when(database.collectionExists(collection)).thenReturn(true);
         }
 
         new RegataSimulatorApplication(bot, database, registration, true).onStartUpInit();
 
         verify(registration).register(bot);
-        for (String collection : new String[]{"users", "templates", "sources", "memes"}) {
+        for (String collection : new String[]{"users", "templates", "sources", "memes", "audits"}) {
             verify(database, org.mockito.Mockito.never()).createCollection(collection);
         }
     }
@@ -52,7 +52,7 @@ class RegataSimulatorApplicationTest {
             () -> new RegataSimulatorApplication(bot, database, registration, true).onStartUpInit());
         org.junit.jupiter.api.Assertions.assertNull(failure.getCause());
         var order=org.mockito.Mockito.inOrder(database,registration);
-        for(String name:new String[]{"users","templates","sources","memes"}) {
+        for(String name:new String[]{"users","templates","sources","memes","audits"}) {
             order.verify(database).collectionExists(name); order.verify(database).createCollection(name);
         }
         order.verify(registration).register(bot);

@@ -19,6 +19,8 @@ public class RecoverySnapshotService {
     private final TemplateRepository templates;
     private final AuthorRepository authors;
     private final MemeHistoryRepository history;
+    @org.springframework.beans.factory.annotation.Autowired
+    private AuditRepository audits;
     private final ObjectProvider<SqliteStore> sqlite;
     private final Path sourceMedia;
     private final Path templateMedia;
@@ -48,7 +50,11 @@ public class RecoverySnapshotService {
             try (var lease=guard.snapshot()) {
                 SqliteStore store=sqlite.getIfAvailable();
                 engine=store==null ? "jsondb" : "sqlite";
-                if (store==null) RecoveryBundle.load(sources,templates,authors,history).writeJson(stage.resolve("jsondb"));
+                if (store==null) {
+                    var snapshot=audits==null ? RecoveryBundle.load(sources,templates,authors,history)
+                        : RecoveryBundle.load(sources,templates,authors,history,audits);
+                    snapshot.writeJson(stage.resolve("jsondb"));
+                }
                 else { RecoveryBundle.privateDirectory(stage.resolve("db")); store.snapshot(stage.resolve("db/store.db")); }
                 OfflinePaths.copyTree(sourceMedia,stage.resolve("sources"));
                 OfflinePaths.copyTree(templateMedia,stage.resolve("templates"));

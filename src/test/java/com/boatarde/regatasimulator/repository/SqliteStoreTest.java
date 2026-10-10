@@ -13,7 +13,7 @@ class SqliteStoreTest {
         Path file = temp.resolve("candidate.db");
         try (var store = new SqliteStore(file, 150)) {
             assertEquals("3.53.4", store.jdbc().queryForObject("SELECT sqlite_version()", String.class));
-            assertEquals(2, store.jdbc().queryForObject("SELECT count(*) FROM DATABASECHANGELOG", Integer.class));
+            assertEquals(3, store.jdbc().queryForObject("SELECT count(*) FROM DATABASECHANGELOG", Integer.class));
             try (var first = store.dataSource().getConnection(); var second = store.dataSource().getConnection()) {
             for (var connection : java.util.List.of(first, second)) {
                 try (var statement = connection.createStatement()) {
@@ -28,7 +28,7 @@ class SqliteStoreTest {
             }
         }
         try (var store = new SqliteStore(file, 150)) {
-            assertEquals(2, store.jdbc().queryForObject("SELECT count(*) FROM DATABASECHANGELOG", Integer.class));
+            assertEquals(3, store.jdbc().queryForObject("SELECT count(*) FROM DATABASECHANGELOG", Integer.class));
             assertEquals("ok", store.jdbc().queryForObject("PRAGMA integrity_check", String.class));
         }
     }
@@ -55,9 +55,25 @@ class SqliteStoreTest {
             statement.setString(1,"00000000-0000-0000-0000-000000000001"); statement.executeUpdate();
         }
         try(var store=new SqliteStore(file,100)) {
-            assertEquals(2,store.jdbc().queryForObject("SELECT count(*) FROM DATABASECHANGELOG",Integer.class));
+            assertEquals(3,store.jdbc().queryForObject("SELECT count(*) FROM DATABASECHANGELOG",Integer.class));
             assertEquals(7,store.jdbc().queryForObject("SELECT weight FROM sources",Integer.class));
             assertEquals(1,store.jdbc().queryForObject("SELECT count(*) FROM sqlite_master WHERE name='sources_gallery'",Integer.class));
+        }
+    }
+
+    @Test void readsHistoricalSchemaTwoWithoutMigratingOrInventingAuditsThenUpgradesExplicitly() throws Exception {
+        Path file=temp.resolve("phase-four.db");
+        try(var connection=java.sql.DriverManager.getConnection("jdbc:sqlite:"+file);var resources=new liquibase.resource.ClassLoaderResourceAccessor()) {
+            var database=new liquibase.database.core.SQLiteDatabase(); database.setConnection(new liquibase.database.jvm.JdbcConnection(connection));
+            try(var migrations=new liquibase.Liquibase("db/changelog/sqlite.sql",resources,database)) { migrations.update(2,new liquibase.Contexts(),new liquibase.LabelExpression()); }
+        }
+        try(var store=new SqliteStore(file,100,true)) {
+            assertEquals(2,store.jdbc().queryForObject("SELECT count(*) FROM DATABASECHANGELOG",Integer.class));
+            assertTrue(new com.boatarde.regatasimulator.repository.sqlite.SqliteAuditRepository(store).findAll().isEmpty());
+        }
+        try(var store=new SqliteStore(file,100)) {
+            assertEquals(3,store.jdbc().queryForObject("SELECT count(*) FROM DATABASECHANGELOG",Integer.class));
+            assertTrue(new com.boatarde.regatasimulator.repository.sqlite.SqliteAuditRepository(store).findAll().isEmpty());
         }
     }
 }

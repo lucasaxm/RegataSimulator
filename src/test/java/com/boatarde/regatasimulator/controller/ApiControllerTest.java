@@ -62,6 +62,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest({SourceController.class, TemplateController.class})
 @ContextConfiguration(classes = {SourceController.class, TemplateController.class, ApiExceptionHandler.class,
     SecurityConfig.class, CorsConfig.class, SessionConfig.class, ModerationService.class})
+@org.springframework.context.annotation.Import(ApiControllerTest.AuditTestConfiguration.class)
 @ActiveProfiles("test")
 class ApiControllerTest {
     @Autowired private MockMvc mvc;
@@ -71,7 +72,16 @@ class ApiControllerTest {
     @MockBean private TelegramRouter router;
     @MockBean private RegataSimulatorBot bot;
     @MockBean private TelegramGateway telegram;
+    @MockBean private com.boatarde.regatasimulator.repository.AuditRepository audits;
     @TempDir private Path storage;
+
+    @org.springframework.boot.test.context.TestConfiguration
+    static class AuditTestConfiguration {
+        @org.springframework.context.annotation.Bean
+        com.boatarde.regatasimulator.repository.MetadataUnitOfWork metadata() { return Runnable::run; }
+        @org.springframework.context.annotation.Bean
+        java.time.Clock clock() { return java.time.Clock.systemUTC(); }
+    }
 
     @ParameterizedTest
     @ValueSource(strings = {"page=0", "page=-1", "page=abc", "page=2147483648", "perPage=0", "perPage=-1",

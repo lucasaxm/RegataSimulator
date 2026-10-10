@@ -21,6 +21,7 @@ final class OfflineSnapshot {
     final List<Template> templateRecords=new ArrayList<>();
     final List<Author> authorRecords=new ArrayList<>();
     final List<Meme> historyRecords=new ArrayList<>();
+    final List<ModerationAudit> auditRecords=new ArrayList<>();
     final List<Issue> issues=new ArrayList<>();
     final Map<String,Object> manifest=new TreeMap<>();
     private final Map<String,List<Integer>> originalRows=new HashMap<>();
@@ -30,6 +31,7 @@ final class OfflineSnapshot {
         manifest.put("jsondb",OfflinePaths.hashes(json)); manifest.put(SOURCES,OfflinePaths.hashes(sourceMedia)); manifest.put(TEMPLATES,OfflinePaths.hashes(templateMedia));
         readCollection(json,SOURCES,Source.class,sourceRecords); readCollection(json,TEMPLATES,Template.class,templateRecords);
         readCollection(json,USERS,Author.class,authorRecords); readCollection(json,MEMES,Meme.class,historyRecords);
+        if (Files.exists(json.resolve("audits.json"))) readCollection(json,"audits",ModerationAudit.class,auditRecords);
         audit(sourceMedia,templateMedia);
     }
     private <T> void readCollection(Path root,String name,Class<T> type,List<T> records) {
@@ -63,6 +65,14 @@ final class OfflineSnapshot {
         auditTemplates(templateMedia,templateIds);
         auditUsers();
         auditHistory(sourceIds,templateIds);
+        Set<UUID> auditIds=new HashSet<>();
+        for (int i=0;i<auditRecords.size();i++) {
+            var record=auditRecords.get(i);
+            try {
+                com.boatarde.regatasimulator.repository.AuditRepository.validate(record);
+                if (!auditIds.add(record.getId())) throw new IllegalArgumentException("Duplicate audit");
+            } catch(RuntimeException e) { issue("audits",i,record.getId(),"INVALID_AUDIT",true); }
+        }
     }
     private void auditSources(Path sourceMedia,Set<UUID> sourceIds) {
         Set<String> names=new HashSet<>();
@@ -129,10 +139,11 @@ final class OfflineSnapshot {
         issues.add(new Issue(collection,rows==null?row+2:rows.get(row),id==null?null:id.toString(),code,blocking));
     }
     boolean blocked() { return issues.stream().anyMatch(Issue::blocking); }
-    Map<String,Integer> counts() { return Map.of(SOURCES,sourceRecords.size(),TEMPLATES,templateRecords.size(),USERS,authorRecords.size(),MEMES,historyRecords.size()); }
+    Map<String,Integer> counts() { return Map.of(SOURCES,sourceRecords.size(),TEMPLATES,templateRecords.size(),USERS,authorRecords.size(),MEMES,historyRecords.size(),"audits",auditRecords.size()); }
     void writeJson(Path root) throws IOException {
         Files.createDirectory(root);
         write(root,SOURCES,sourceRecords); write(root,TEMPLATES,templateRecords); write(root,USERS,authorRecords); write(root,MEMES,historyRecords);
+        write(root,"audits",auditRecords);
     }
     private void write(Path root,String name,List<?> records) throws IOException {
         try(var writer=Files.newBufferedWriter(root.resolve(name+".json"),StandardOpenOption.CREATE_NEW)) {
@@ -146,6 +157,7 @@ final class OfflineSnapshot {
         fields.put(TEMPLATES,templateRecords.stream().sorted(Comparator.comparing(t -> t.getId().toString())).map(mapper::valueToTree).toList());
         fields.put(USERS,authorRecords.stream().sorted(Comparator.comparing(Author::getId)).map(mapper::valueToTree).toList());
         fields.put(MEMES,historyRecords.stream().sorted(Comparator.comparing(m -> m.getId().toString())).map(mapper::valueToTree).toList());
+        fields.put("audits",auditRecords.stream().sorted(Comparator.comparing(a -> a.getId().toString())).map(mapper::valueToTree).toList());
         return fields;
     }
 }

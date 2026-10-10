@@ -38,6 +38,8 @@ class RecoveryBundleTest {
         Path live=temp.resolve("live.db");
         try (var store=new SqliteStore(live,100)) {
             new SqliteSourceRepository(store,mapper).insertSubmission(source);
+            new SqliteAuditRepository(store).append(ModerationAudit.builder().id(UUID.randomUUID()).itemType("SOURCE").itemId(source.getId())
+                .actorName("synthetic-admin").actorTelegramId(9_000_000_000L).decidedAt(1234L).decision(Status.APPROVED).notification("FAILED").build());
             store.snapshot(stage.resolve("db/store.db"));
             new SqliteSourceRepository(store,mapper).decreaseWeight(source.getId());
         }
@@ -46,6 +48,7 @@ class RecoveryBundleTest {
         assertTrue(Files.exists(restored.resolve("RESTORED_VERIFIED")));
         try (var copy=new SqliteStore(restored.resolve("db/store.db"),100,true)) {
             assertEquals(mapper.valueToTree(source),mapper.valueToTree(new SqliteSourceRepository(copy,mapper).findById(source.getId()).orElseThrow()));
+            assertEquals(9_000_000_000L,new SqliteAuditRepository(copy).findAll().getFirst().getActorTelegramId());
         }
         assertEquals(OfflinePaths.hashes(stage.resolve("sources")),OfflinePaths.hashes(restored.resolve("sources")));
         var decoded=javax.imageio.ImageIO.read(restored.resolve("sources").resolve(source.getId().toString()).resolve("source.png").toFile());
