@@ -30,23 +30,44 @@ public class BackupService {
     public void zipToTelegram(RegataSimulatorBot bot, String backupDirPath, String filePrefix)
         throws IOException, TelegramApiException {
         log.info("Running backup of {}.", filePrefix);
-        List<Path> zipFiles = FileUtils.zipInChunks(backupDirPath, MAX_CHUNK_SIZE);
-        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        try (var archives = new Archives(FileUtils.zipInChunks(backupDirPath, MAX_CHUNK_SIZE))) {
+            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+            for (int i = 0; i < archives.paths().size(); i++) {
+                Path zipFilePath = archives.paths().get(i);
+                if (Files.size(zipFilePath) > MAX_CHUNK_SIZE) {
+                    throw new IOException("Backup archive exceeds delivery limit");
+                }
+                String fileName = filePrefix + "-" + timestamp + "-" + i + ".zip";
+                String caption = (archives.paths().size() > 1)
+                    ? filePrefix + " backup (" + (i + 1) + "/" + archives.paths().size() + ")"
+                    : filePrefix + " backup";
+                SendDocument sendDocument = SendDocument.builder()
+                    .chatId(backupChatId.toString())
+                    .caption(caption)
+                    .document(new InputFile(zipFilePath.toFile(), fileName))
+                    .build();
+                bot.execute(sendDocument);
+                Files.delete(zipFilePath);
+                log.info("Sent backup file: {}", fileName);
+            }
+        }
+    }
 
-        for (int i = 0; i < zipFiles.size(); i++) {
-            Path zipFilePath = zipFiles.get(i);
-            String fileName = filePrefix + "-" + timestamp + "-" + i + ".zip";
-            String caption = (zipFiles.size() > 1)
-                ? filePrefix + " backup (" + (i + 1) + "/" + zipFiles.size() + ")"
-                : filePrefix + " backup";
-            SendDocument sendDocument = SendDocument.builder()
-                .chatId(backupChatId.toString())
-                .caption(caption)
-                .document(new InputFile(zipFilePath.toFile(), fileName))
-                .build();
-            bot.execute(sendDocument);
-            Files.delete(zipFilePath);
-            log.info("Sent backup file: {}", fileName);
+    private record Archives(List<Path> paths) implements AutoCloseable {
+        @Override
+        public void close() throws IOException {
+            IOException cleanupFailure = null;
+            for (Path zip : paths) {
+                try {
+                    Files.deleteIfExists(zip);
+                } catch (IOException e) {
+                    if (cleanupFailure == null) cleanupFailure = e;
+                    else cleanupFailure.addSuppressed(e);
+                }
+            }
+            if (cleanupFailure != null) {
+                throw cleanupFailure;
+            }
         }
     }
 }

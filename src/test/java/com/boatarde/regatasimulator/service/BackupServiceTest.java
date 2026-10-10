@@ -126,8 +126,8 @@ class BackupServiceTest {
 
         verify(bot).execute(any(SendDocument.class));
         verifyNoMoreInteractions(bot);
-        assertTrue(Files.exists(first));
-        assertTrue(Files.exists(second));
+        assertFalse(Files.exists(first));
+        assertFalse(Files.exists(second));
     }
 
     @Test
@@ -152,8 +152,8 @@ class BackupServiceTest {
             .map(document -> document.getDocument().getNewMediaFile().toPath()).toList());
         verifyNoMoreInteractions(bot);
         assertFalse(Files.exists(first));
-        assertTrue(Files.exists(second));
-        assertTrue(Files.exists(third));
+        assertFalse(Files.exists(second));
+        assertFalse(Files.exists(third));
     }
 
     @Test

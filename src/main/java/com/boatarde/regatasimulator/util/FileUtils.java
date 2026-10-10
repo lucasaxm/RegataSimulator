@@ -3,7 +3,6 @@ package com.boatarde.regatasimulator.util;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -12,7 +11,6 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -61,6 +59,13 @@ public class FileUtils {
      * @throws IOException if an I/O error occurs.
      */
     public static List<Path> zipInChunks(String sourceDirPath, long chunkSize) throws IOException {
+        return zipInChunks(sourceDirPath, chunkSize, null);
+    }
+
+    public static List<Path> zipInChunks(String sourceDirPath, long chunkSize, Path archiveDirectory) throws IOException {
+        if (chunkSize <= 0) {
+            throw new IOException("Archive chunk limit must be positive");
+        }
         List<Path> zipFiles = new ArrayList<>();
         Path baseDir = Paths.get(sourceDirPath);
 
@@ -72,48 +77,64 @@ public class FileUtils {
             }
         }
 
-        long currentChunkSize = 0;
-        ZipOutputStream zos = null;
-
-        for (Path item : items) {
-            long itemSize;
-            if (Files.isDirectory(item)) {
-                // Calculate the total size for all files in the directory.
-                itemSize = calculateDirectorySize(item);
-            } else {
-                itemSize = Files.size(item);
+        items.sort(java.util.Comparator.naturalOrder());
+        List<List<Path>> chunks = groupItems(items, chunkSize);
+        try {
+            for (List<Path> chunk : chunks) {
+                var permissions = java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
+                    java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+                Path zip = archiveDirectory == null ? Files.createTempFile("regata-backup-", ".zip", permissions)
+                    : Files.createTempFile(archiveDirectory, "regata-backup-", ".zip", permissions);
+                zipFiles.add(zip);
+                writeChunk(zip, chunk, baseDir, chunkSize);
             }
-
-            // If adding this item would exceed the chunkSize and we already have something in the current zip,
-            // then close the current zip and start a new one.
-            if (zos != null && (currentChunkSize + itemSize > chunkSize)) {
-                zos.close();
-                zos = null;
+        } catch (IOException | RuntimeException e) {
+            for (Path zip : zipFiles) {
+                try {
+                    Files.deleteIfExists(zip);
+                } catch (IOException cleanup) {
+                    e.addSuppressed(cleanup);
+                }
             }
-
-            // If there is no current zip, create one.
-            if (zos == null) {
-                Path currentZipPath = Files.createTempFile(UUID.randomUUID().toString(), ".zip");
-                zos = new ZipOutputStream(new FileOutputStream(currentZipPath.toFile()));
-                zipFiles.add(currentZipPath);
-                currentChunkSize = 0;
-            }
-
-            // Add the item to the zip; preserve the relative path (so for subdirectories, the entire directory
-            // structure is maintained).
-            if (Files.isDirectory(item)) {
-                addDirectoryToZip(item, baseDir, zos);
-            } else {
-                addFileToZip(item, baseDir, zos);
-            }
-            currentChunkSize += itemSize;
-        }
-
-        // Close any open zip stream at the end.
-        if (zos != null) {
-            zos.close();
+            throw e;
         }
         return zipFiles;
+    }
+
+    private static List<List<Path>> groupItems(List<Path> items, long chunkSize) throws IOException {
+        List<List<Path>> chunks = new ArrayList<>();
+        List<Path> current = new ArrayList<>();
+        long currentSize = 0;
+        for (Path item : items) {
+            if (Files.isSymbolicLink(item)) {
+                throw new IOException("Backup does not follow symbolic links");
+            }
+            long size = Files.isDirectory(item) ? calculateDirectorySize(item) : Files.size(item);
+            if (size > chunkSize) {
+                throw new IOException("Backup item exceeds archive limit; items are not split");
+            }
+            if (!current.isEmpty() && size > chunkSize - currentSize) {
+                chunks.add(current);
+                current = new ArrayList<>();
+                currentSize = 0;
+            }
+            current.add(item);
+            currentSize += size;
+        }
+        if (!current.isEmpty()) chunks.add(current);
+        return chunks;
+    }
+
+    private static void writeChunk(Path zip, List<Path> chunk, Path baseDir, long chunkSize) throws IOException {
+        try (var output = new ZipOutputStream(Files.newOutputStream(zip))) {
+            for (Path item : chunk) {
+                if (Files.isDirectory(item)) addDirectoryToZip(item, baseDir, output);
+                else addFileToZip(item, baseDir, output);
+            }
+        }
+        if (Files.size(zip) > chunkSize) {
+            throw new IOException("Encoded archive exceeds limit");
+        }
     }
 
     /**
@@ -125,16 +146,12 @@ public class FileUtils {
      */
     private static long calculateDirectorySize(Path dir) throws IOException {
         try (Stream<Path> files = Files.walk(dir)) {
-            return files.filter(Files::isRegularFile)
-                .mapToLong(path -> {
-                    try {
-                        return Files.size(path);
-                    } catch (IOException e) {
-                        log.error("Error reading file size: {}", path, e);
-                        return 0L;
-                    }
-                })
-                .sum();
+            long size = 0;
+            for (Path path : files.toList()) {
+                if (Files.isSymbolicLink(path)) throw new IOException("Backup does not follow symbolic links");
+                if (Files.isRegularFile(path)) size = Math.addExact(size, Files.size(path));
+            }
+            return size;
         }
     }
 
@@ -151,6 +168,7 @@ public class FileUtils {
         // Walk the directory recursively.
         try (Stream<Path> paths = Files.walk(dir)) {
             for (Path path : (Iterable<Path>) paths::iterator) {
+                if (Files.isSymbolicLink(path)) throw new IOException("Backup does not follow symbolic links");
                 String entryName = basePath.relativize(path).toString();
                 if (Files.isDirectory(path)) {
                     // Ensure directory entry ends with a slash.
