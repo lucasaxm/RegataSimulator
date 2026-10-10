@@ -12,8 +12,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 @SpringBootApplication(exclude = {
-    org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration.class,
-    org.springframework.boot.autoconfigure.liquibase.LiquibaseAutoConfiguration.class
+    org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration.class
 })
 @Slf4j
 public class RegataSimulatorApplication {

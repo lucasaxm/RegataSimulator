@@ -1,16 +1,16 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '3.5.16'
+    id 'org.springframework.boot' version '4.1.1'
     id 'io.spring.dependency-management' version '1.1.7'
 }
 
 group = 'com.boatarde'
 version = '0.0.1'
 
-// Cohesive BOM-family overrides for verified OSV fixes newer than Boot 3.5.16.
-ext['jackson-bom.version'] = '2.21.7'
-// 10.1.58 is the advisory fix but its public artifact returned 404 on verification.
-ext['tomcat.version'] = '10.1.57'
+// Patch both JSON families coherently; Jackson 2 retains persistence/Telegram compatibility.
+ext['jackson-2-bom.version'] = '2.21.7'
+ext['jackson-bom.version'] = '3.1.7'
+ext['tomcat.version'] = '11.0.26'
 ext['log4j2.version'] = '2.25.5'
 ext['commons-lang3.version'] = '3.21.0'
 
@@ -42,8 +42,8 @@ dependencies {
     implementation 'com.google.guava:guava:33.7.2-jre'
     implementation 'commons-jxpath:commons-jxpath:1.4.0'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
-    implementation 'org.springframework.boot:spring-boot-starter-aop'
-    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-aspectj'
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-jdbc'
@@ -51,13 +51,16 @@ dependencies {
     implementation 'org.liquibase:liquibase-core:4.33.0'
     implementation 'org.springframework.session:spring-session-core'
     implementation 'com.fasterxml.jackson.core:jackson-databind'
+    implementation 'org.springframework.boot:spring-boot-jackson2'
     implementation 'org.telegram:telegrambots:6.9.7.1'
-    implementation 'com.github.ulisesbocchio:jasypt-spring-boot-starter:3.0.5'
+    implementation 'org.jasypt:jasypt:1.9.3'
     implementation 'org.apache.tika:tika-core:3.3.2'
-    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.17'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1'
     implementation 'io.jsondb:jsondb-core:1.0.115-j11'
     implementation 'com.opencsv:opencsv:5.12.0'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
     testImplementation 'org.springframework.security:spring-security-test'
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
@@ -82,6 +85,12 @@ tasks.register('restoreBundle', JavaExec) {
     description = 'Offline recovery into new directories only; never starts Spring'
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'com.boatarde.regatasimulator.migration.RestoreCli'
+}
+
+tasks.register('inspectRecoveryStages', JavaExec) {
+    description = 'Read-only stopped-copy stage inspection; never restores or purges automatically'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.boatarde.regatasimulator.migration.ReconciliationCli'
 }
 
 tasks.register('dependencyInventory') {

@@ -24,8 +24,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
@@ -66,13 +66,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 class ApiControllerTest {
     @Autowired private MockMvc mvc;
-    @MockBean private SourceService sources;
-    @MockBean private TemplateService templates;
-    @MockBean private SourceImporterService importer;
-    @MockBean private TelegramRouter router;
-    @MockBean private RegataSimulatorBot bot;
-    @MockBean private TelegramGateway telegram;
-    @MockBean private com.boatarde.regatasimulator.repository.AuditRepository audits;
+    @MockitoBean private SourceService sources;
+    @MockitoBean private TemplateService templates;
+    @MockitoBean private SourceImporterService importer;
+    @MockitoBean private TelegramRouter router;
+    @MockitoBean private RegataSimulatorBot bot;
+    @MockitoBean private TelegramGateway telegram;
+    @MockitoBean private com.boatarde.regatasimulator.repository.AuditRepository audits;
     @TempDir private Path storage;
 
     @org.springframework.boot.test.context.TestConfiguration

@@ -1,6 +1,9 @@
 spring:
   application:
     name: bilubot
+  http:
+    converters:
+      preferred-json-mapper: jackson2
   lifecycle:
     timeout-per-shutdown-phase: 30s
 server:

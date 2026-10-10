@@ -2,7 +2,7 @@ package com.boatarde.regatasimulator.configuration;
 
 import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.actuate.health.Status;
+import org.springframework.boot.health.contributor.Status;
 import org.telegram.telegrambots.meta.api.objects.User;
 import java.time.*;
 import java.util.concurrent.*;

@@ -19,9 +19,9 @@ import io.jsondb.JsonDBTemplate;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.ApplicationContext;
 import org.springframework.http.MediaType;
 import org.springframework.test.annotation.DirtiesContext;
@@ -55,10 +55,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class RegataSimulatorApplicationContextTest {
 
     @TempDir static Path storage;
-    @MockBean private RegataSimulatorBot bot;
-    @MockBean private TelegramBotRegistration registration;
-    @MockBean private TelegramGateway telegram;
-    @MockBean private ImageRenderer renderer;
+    @MockitoBean private RegataSimulatorBot bot;
+    @MockitoBean private TelegramBotRegistration registration;
+    @MockitoBean private TelegramGateway telegram;
+    @MockitoBean private ImageRenderer renderer;
     @Autowired private SubmissionService submissions;
     @Autowired private TelegramRouter router;
     @Autowired private ApplicationContext context;
@@ -86,7 +86,7 @@ class RegataSimulatorApplicationContextTest {
         for (String collection : new String[]{"users", "templates", "sources", "memes"}) {
             assertThat(database.collectionExists(collection)).isTrue();
         }
-        assertThat(context.containsBean("org.springframework.context.annotation.internalScheduledAnnotationProcessor"))
+        assertThat(context.containsBean(org.springframework.scheduling.config.TaskManagementConfigUtils.SCHEDULED_ANNOTATION_PROCESSOR_BEAN_NAME))
             .isFalse();
         assertThat(context.containsBean("workflowManager")).isFalse();
         assertThat(context.containsBean("routerService")).isFalse();

@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.ApplicationContext;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
@@ -27,20 +27,26 @@ import static org.mockito.Mockito.*;
 
 @SpringBootTest(properties={"regata-simulator.database.engine=sqlite", "telegram.bots.regata-simulator.registration-enabled=false", "regata-simulator.scheduling.enabled=false"})
 @ActiveProfiles("test")
-@org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
+@org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 @DirtiesContext(classMode=DirtiesContext.ClassMode.AFTER_CLASS)
 class SqliteApplicationContextTest {
     @TempDir static Path temp;
     @DynamicPropertySource static void properties(DynamicPropertyRegistry r) {
-        r.add("regata-simulator.database.sqlite-file",() -> temp.resolve("candidate.db").toString());
-        r.add("regata-simulator.database.path",() -> temp.resolve("unused-json").toString());
-        r.add("regata-simulator.sources.path",() -> temp.resolve("sources").toString());
-        r.add("regata-simulator.templates.path",() -> temp.resolve("templates").toString());
+        r.add("regata-simulator.database.sqlite-file",() -> canonicalTemp().resolve("candidate.db").toString());
+        r.add("regata-simulator.database.path",() -> canonicalTemp().resolve("unused-json").toString());
+        r.add("regata-simulator.sources.path",() -> canonicalTemp().resolve("sources").toString());
+        r.add("regata-simulator.templates.path",() -> canonicalTemp().resolve("templates").toString());
+        r.add("regata-simulator.backup.local-directory",() -> {
+            try { return temp.toRealPath().resolve("backups").toString(); } catch(java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
+        });
     }
-    @MockBean RegataSimulatorBot bot;
-    @MockBean TelegramBotRegistration registration;
-    @MockBean TelegramGateway telegram;
-    @MockBean ImageRenderer renderer;
+    private static Path canonicalTemp() {
+        try { return temp.toRealPath(); } catch(java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
+    }
+    @MockitoBean RegataSimulatorBot bot;
+    @MockitoBean TelegramBotRegistration registration;
+    @MockitoBean TelegramGateway telegram;
+    @MockitoBean ImageRenderer renderer;
     @Autowired ApplicationContext context;
     @Autowired SqliteStore store;
     @Autowired SourceRepository sources;
@@ -52,6 +58,8 @@ class SqliteApplicationContextTest {
     @Autowired ReviewCallbackService callbacks;
     @Autowired AuthorRepository authors;
     @Autowired AuditRepository audits;
+    @Autowired MediaMutationGuard mutationGuard;
+    @Autowired BackupService backups;
     @Autowired org.springframework.test.web.servlet.MockMvc mvc;
     @org.junit.jupiter.api.BeforeEach void clearSyntheticMetadata() {
         store.jdbc().update("DELETE FROM memes"); store.jdbc().update("DELETE FROM sources");
@@ -60,7 +68,7 @@ class SqliteApplicationContextTest {
     @Test void optsInWithoutJsonDbAndRollsBackPublicationMetadataAfterExternalDelivery() throws Exception {
         assertTrue(context.getBeansOfType(io.jsondb.JsonDBTemplate.class).isEmpty());
         assertFalse(Files.exists(temp.resolve("unused-json")));
-        assertFalse(context.containsBean("org.springframework.context.annotation.internalScheduledAnnotationProcessor"));
+        assertFalse(context.containsBean(org.springframework.scheduling.config.TaskManagementConfigUtils.SCHEDULED_ANNOTATION_PROCESSOR_BEAN_NAME));
         Source source=new Source(); source.setId(UUID.randomUUID()); source.setDescription("synthetic"); source.setWeight(10); source.setStatus(Status.APPROVED); sources.insertSubmission(source);
         Template template=new Template(); template.setId(UUID.randomUUID()); template.setWeight(10); template.setStatus(Status.APPROVED);
         template.setAreas(List.of(TemplateArea.builder().index(1).source(1).topLeft(new AreaCorner(0,0)).topRight(new AreaCorner(20,0)).bottomRight(new AreaCorner(20,20)).bottomLeft(new AreaCorner(0,20)).build())); templates.insertSubmission(template);
@@ -134,5 +142,46 @@ class SqliteApplicationContextTest {
         var audit=audits.findAll().stream().filter(a -> a.getItemId().equals(submitted.id())).findFirst().orElseThrow();
         assertEquals("admin",audit.getActorName()); assertEquals("FAILED",audit.getNotification()); assertTrue(audit.getDecidedAt()>0);
         assertTrue(Files.exists(temp.resolve("sources").resolve(submitted.id().toString()).resolve("source.png"))); verifyNoInteractions(bot,registration);
+    }
+
+    @Test void realCaptureRestorePreservesNewWritesAndAllServiceWritersUseSnapshotBoundary() throws Exception {
+        Path root=temp.toRealPath();
+        Files.createDirectories(root.resolve("sources")); Files.createDirectories(root.resolve("templates"));
+        Files.createDirectories(root.resolve("backups")); Files.setPosixFilePermissions(root.resolve("backups"),java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"));
+        for(Class<?> type:List.of(SourceService.class,TemplateService.class,SubmissionService.class,SourceImporterService.class,MemeService.class,ModerationService.class,ReviewCallbackService.class)) {
+            assertTrue(org.springframework.aop.support.AopUtils.isAopProxy(context.getBean(type)),type.getSimpleName());
+            var proxy=(org.springframework.aop.framework.Advised)context.getBean(type);
+            for(var method:type.getDeclaredMethods()) if(java.lang.reflect.Modifier.isPublic(method.getModifiers()) && !java.lang.reflect.Modifier.isStatic(method.getModifiers())) {
+                assertTrue(Arrays.stream(proxy.getAdvisors()).filter(a -> a instanceof org.springframework.aop.PointcutAdvisor)
+                    .map(a -> (org.springframework.aop.PointcutAdvisor)a)
+                    .anyMatch(a -> a.getAdvice() instanceof org.springframework.aop.aspectj.AbstractAspectJAdvice advice
+                        && advice.getAspectName().equals("mediaMutationBoundary") && a.getPointcut().getMethodMatcher().matches(method,type)),type.getSimpleName()+"."+method.getName());
+            }
+        }
+        Source source=new Source(); source.setId(UUID.randomUUID()); source.setDescription("captured new write"); source.setStatus(Status.APPROVED); source.setWeight(8); sources.insertSubmission(source);
+        ImageTestFactory.image(Files.createDirectories(root.resolve("sources").resolve(source.getId().toString())).resolve("source.png"));
+        try(var pool=java.util.concurrent.Executors.newSingleThreadExecutor()) {
+            var snapshot=mutationGuard.snapshot(); java.util.concurrent.Future<?> reset;
+            try {
+                reset=pool.submit(()->context.getBean(SourceService.class).resetAllWeights());
+                assertThrows(java.util.concurrent.TimeoutException.class,()->reset.get(50,java.util.concurrent.TimeUnit.MILLISECONDS));
+            } finally { snapshot.close(); }
+            reset.get(3,java.util.concurrent.TimeUnit.SECONDS);
+            sources.decreaseWeight(source.getId()); // Explicit synthetic repository maintenance, not a production adapter.
+            doAnswer(call -> {
+                var writer=pool.submit(()->context.getBean(SourceService.class).resetAllWeights());
+                writer.get(3,java.util.concurrent.TimeUnit.SECONDS); // Delivery happens after exclusive snapshot lease is released.
+                return null;
+            }).when(telegram).sendDocument(any());
+            backups.create();
+        }
+        Path bundle;
+        try(var paths=Files.list(root.resolve("backups"))) { bundle=paths.filter(Files::isDirectory).findFirst().orElseThrow(); }
+        Path restored=com.boatarde.regatasimulator.migration.RecoveryBundle.restore(bundle,root.resolve("restored-"+UUID.randomUUID()));
+        try(var copy=new SqliteStore(restored.resolve("db/store.db"),100,true)) {
+            assertEquals(9,new com.boatarde.regatasimulator.repository.sqlite.SqliteSourceRepository(copy,new com.fasterxml.jackson.databind.ObjectMapper()).findById(source.getId()).orElseThrow().getWeight());
+        }
+        assertNotNull(javax.imageio.ImageIO.read(restored.resolve("sources").resolve(source.getId().toString()).resolve("source.png").toFile()));
+        verifyNoInteractions(bot,registration);
     }
 }
