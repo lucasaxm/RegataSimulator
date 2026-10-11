@@ -19,7 +19,9 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
-import java.util.stream.Collectors;
+import java.util.random.RandomGenerator;
+import java.util.UUID;
+import java.util.stream.Stream;
 import java.util.stream.IntStream;
 
 @Slf4j
@@ -29,6 +31,17 @@ public class JsonDBUtils {
 
     public static JxQueryBuilder jxQuery() {
         return new JxQueryBuilder();
+    }
+
+    public static <T extends CommonEntity> void excludeRecent(List<T> candidates, Stream<UUID> recent, int required) {
+        int budget = Math.min((int) Math.ceil(candidates.size() * 0.75), candidates.size() - required);
+        if (budget <= 0) {
+            return;
+        }
+        List<UUID> excluded = recent.distinct()
+            .filter(id -> candidates.stream().anyMatch(item -> item.getId().equals(id)))
+            .limit(budget).toList();
+        candidates.removeIf(item -> excluded.contains(item.getId()));
     }
 
     public static Comparator<CommonEntity> getComparator() {
@@ -42,40 +55,46 @@ public class JsonDBUtils {
     }
 
     public static List<Source> selectSourcesWithWeight(List<Source> sources, int amount) {
-        return selectWithWeight(sources, amount).stream()
-            .filter(Source.class::isInstance)
-            .map(Source.class::cast)
-            .collect(Collectors.toList());
+        return selectSourcesWithWeight(sources, amount, new Random());
+    }
+
+    public static List<Source> selectSourcesWithWeight(List<Source> sources, int amount, RandomGenerator random) {
+        return selectWithWeight(sources, amount, random);
     }
 
     public static List<Template> selectTemplatesWithWeight(List<Template> templates, int amount) {
-        return selectWithWeight(templates, amount).stream()
-            .filter(Template.class::isInstance)
-            .map(Template.class::cast)
-            .collect(Collectors.toList());
+        return selectTemplatesWithWeight(templates, amount, new Random());
+    }
+
+    public static List<Template> selectTemplatesWithWeight(List<Template> templates, int amount,
+                                                          RandomGenerator random) {
+        return selectWithWeight(templates, amount, random);
     }
 
     public static Template selectRandomSingleAreaTemplate(List<Template> templates) {
+        return selectRandomSingleAreaTemplate(templates, new Random());
+    }
+
+    public static Template selectRandomSingleAreaTemplate(List<Template> templates, RandomGenerator random) {
         List<Template> filteredTemplates = templates.stream()
             .filter(template -> template.getAreas().size() == 1)
             .toList();
 
         if (filteredTemplates.isEmpty()) {
-            throw new RuntimeException("No single area templates found");
+            throw new IllegalStateException("No single area templates found");
         }
 
-        Random random = new Random();
         return filteredTemplates.get(random.nextInt(filteredTemplates.size()));
     }
 
-    private static List<? extends CommonEntity> selectWithWeight(List<? extends CommonEntity> entities, int amount) {
+    private static <T extends CommonEntity> List<T> selectWithWeight(List<T> entities, int amount,
+                                                                  RandomGenerator random) {
         if (entities.size() < amount) {
-            throw new RuntimeException(
+            throw new IllegalArgumentException(
                 "Not enough entities to select from. Amount requested: %d, entities available: %d".formatted(amount,
                     entities.size()));
         }
-        List<CommonEntity> selectedEntities = new ArrayList<>(); // List to store selected entities
-        Random random = new Random(); // Random object for generating random numbers
+        List<T> selectedEntities = new ArrayList<>(); // List to store selected entities
 
         for (int j = 0; j < amount && !entities.isEmpty(); j++) {
             int[] cumulativeWeights = new int[entities.size()]; // Array to store cumulative weights
@@ -95,14 +114,17 @@ public class JsonDBUtils {
                 .orElse(
                     cumulativeWeights.length - 1); // Find the index of the selected source based on the random number
 
-            selectedEntities.add(entities.get(selectedIndex)); // Add the selected source to the list
-            entities.remove(selectedIndex); // Remove the selected source from the original list
+            // Move the candidate at this position out of the pool to select without replacement.
+            selectedEntities.add(entities.remove(selectedIndex));
         }
 
         return selectedEntities; // Return the list of selected entities
     }
 
     public static List<TemplateArea> parseTemplateCsv(String csv) throws IOException {
+        if (csv == null || csv.length() > 64 * 1024) {
+            throw new IOException("CSV content exceeds limits or is absent");
+        }
         List<TemplateArea> areas = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(new StringReader(csv))) {
             String line = reader.readLine(); // header
@@ -110,9 +132,16 @@ public class JsonDBUtils {
                 throw new IOException("Invalid CSV header");
             }
             while ((line = reader.readLine()) != null) {
-                String[] fields = line.split(",");
-                if (fields.length != 11) {
+                if (areas.size() >= MediaValidation.MAX_AREAS) {
+                    throw new IOException("Too many template areas");
+                }
+                String[] fields = line.split(",", -1);
+                if (fields.length != 11 || java.util.Arrays.stream(fields).anyMatch(String::isBlank)) {
                     throw new IOException("Invalid CSV format");
+                }
+                int background = Integer.parseInt(fields[10]);
+                if (background != 0 && background != 1) {
+                    throw new IOException("Background must be 0 or 1");
                 }
 
                 areas.add(TemplateArea.builder()
@@ -134,10 +163,13 @@ public class JsonDBUtils {
                         .x(Integer.parseInt(fields[8]))
                         .y(Integer.parseInt(fields[9]))
                         .build())
-                    .background(Integer.parseInt(fields[10]) == 1)
+                    .background(background == 1)
                     .build());
             }
+        } catch (NumberFormatException e) {
+            throw new IOException("Invalid CSV number", e);
         }
+        MediaValidation.geometry(areas, null);
         return areas;
     }
 

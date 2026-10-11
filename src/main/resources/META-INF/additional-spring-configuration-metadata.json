@@ -4,6 +4,18 @@
       "name": "telegram.creator.id",
       "type": "java.lang.String",
       "description": "Telegram ID for the bot creator."
+    },
+    {
+      "name": "telegram.bots.regata-simulator.registration-enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": true,
+      "description": "Register the Telegram long-polling bot at startup. Disable for isolated tests."
+    },
+    {
+      "name": "regata-simulator.scheduling.enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": true,
+      "description": "Enable automatic scheduled publishing and backups. Manual operations are unaffected."
     }
   ]
 }

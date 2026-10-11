@@ -1,10 +1,28 @@
 spring:
   application:
     name: bilubot
+  http:
+    converters:
+      preferred-json-mapper: jackson2
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+server:
+  shutdown: graceful
+  forward-headers-strategy: none
 management:
   endpoint:
     health:
-      show-details: always
+      show-details: when_authorized
+      roles: ADMIN
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState
+        external:
+          include: telegramBot
   endpoints:
     web:
       exposure:

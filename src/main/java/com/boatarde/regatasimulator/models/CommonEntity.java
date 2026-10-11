@@ -15,4 +15,6 @@ public abstract class CommonEntity {
     private int weight;
     private Message message;
     private Status status;
+    private Long previewChatId;
+    private Integer previewMessageId;
 }

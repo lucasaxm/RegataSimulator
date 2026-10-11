@@ -1,39 +1,33 @@
 package com.boatarde.regatasimulator.service;
 
-import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
-import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.application.TelegramGateway;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.telegram.telegrambots.meta.api.objects.Chat;
-import org.telegram.telegrambots.meta.api.objects.Message;
-import org.telegram.telegrambots.meta.api.objects.Update;
 
 @Service
 public class ScheduledTaskService {
 
-    private final RegataSimulatorBot bot;
-    private final RouterService routerService;
-    private final Long backupChatId;
+    private final MemeService memes;
+    private final BackupService backups;
+    private final Long channelId;
 
-    public ScheduledTaskService(RegataSimulatorBot bot, RouterService routerService,
-                                @Value("${telegram.bots.regata-simulator.backup-chat}") Long backupChatId) {
-        this.bot = bot;
-        this.routerService = routerService;
-        this.backupChatId = backupChatId;
+    public ScheduledTaskService(MemeService memes, BackupService backups,
+                                @Value("${telegram.bots.regata-simulator.channel}") Long channelId) {
+        this.memes = memes; this.backups = backups; this.channelId = channelId;
     }
 
-    @Scheduled(cron = "0 0,30 * * * *")
+    @Scheduled(cron = "${regata-simulator.scheduling.publish-cron:0 0,30 * * * *}", zone = "${regata-simulator.scheduling.zone:America/Sao_Paulo}")
     public void generateMeme() {
-        routerService.startFlow(null, bot, WorkflowAction.GET_RANDOM_TEMPLATE);
+        memes.publish(new MemeService.Publish(MemeService.Origin.SCHEDULED, TelegramGateway.Destination.chat(channelId)));
     }
 
-    @Scheduled(cron = "0 15 12 * * SUN")
+    public void generateAdminMeme() {
+        memes.publish(new MemeService.Publish(MemeService.Origin.ADMIN, TelegramGateway.Destination.chat(channelId)));
+    }
+
+    @Scheduled(cron = "${regata-simulator.scheduling.backup-cron:0 15 12 * * SUN}", zone = "${regata-simulator.scheduling.zone:America/Sao_Paulo}")
     public void createBackup() {
-        Update update = new Update();
-        update.setMessage(new Message());
-        update.getMessage().setChat(new Chat());
-        update.getMessage().getChat().setId(backupChatId);
-        routerService.startFlow(update, bot, WorkflowAction.BACKUP_JSON_DB_STEP);
+        backups.create();
     }
 }

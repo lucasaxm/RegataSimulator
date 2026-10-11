@@ -1,0 +1,5 @@
+org.springframework.boot.EnvironmentPostProcessor=\
+com.boatarde.regatasimulator.configuration.LegacyEncryptedEnvironmentPostProcessor
+
+org.springframework.context.ApplicationContextInitializer=\
+com.boatarde.regatasimulator.configuration.LegacyEncryptedPropertyInitializer

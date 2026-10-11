@@ -1,6 +1,35 @@
+const webSecurity = {
+    async refresh() {
+        const response = await fetch('/api/csrf', { credentials: 'same-origin', cache: 'no-store' });
+        if (!response.ok) throw new Error('Não foi possível obter o token de segurança.');
+        return response.json();
+    },
+
+    async request(url, options = {}) {
+        const headers = new Headers(options.headers || {});
+        headers.set('X-Requested-With', 'XMLHttpRequest');
+        const method = (options.method || 'GET').toUpperCase();
+        if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+            const token = await this.refresh();
+            headers.set(token.headerName, token.token);
+        }
+        const response = await fetch(url, { ...options, headers, credentials: 'same-origin' });
+        // Do not replay mutations automatically after authentication/CSRF failures.
+        if (response.status === 401 && url !== '/api/login') window.location.href = '/login.html';
+        return response;
+    },
+
+    async logout() {
+        const response = await this.request('/api/logout', { method: 'POST' });
+        if (!response.ok) throw new Error('Não foi possível sair.');
+        await this.refresh();
+        window.location.href = '/login.html';
+    }
+};
+
 const api = {
     async searchSourcesPOST(criteria) {
-        const response = await fetch('/api/sources/search', {
+        const response = await webSecurity.request('/api/sources/search', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(criteria)
@@ -18,7 +47,7 @@ const api = {
         if (status) {
             url.searchParams.append('status', status);
         }
-        const response = await fetch(url);
+        const response = await webSecurity.request(url);
         if (!response.ok) {
             throw new Error('Failed to fetch items');
         }
@@ -26,14 +55,14 @@ const api = {
     },
 
     async deleteItem(type, id) {
-        const response = await fetch(`/api/${type}/${id}`, { method: 'DELETE' });
+        const response = await webSecurity.request(`/api/${type}/${id}`, { method: 'DELETE' });
         if (!response.ok) {
             throw new Error('Failed to delete item');
         }
     },
 
     async sendReviewTemplate(id, approved, reason) {
-        const response = await fetch(`/api/templates/review`, {
+        const response = await webSecurity.request(`/api/templates/review`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -46,7 +75,7 @@ const api = {
     },
 
     async sendReviewSource(id, approved, reason) {
-        const response = await fetch(`/api/sources/review`, {
+        const response = await webSecurity.request(`/api/sources/review`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'

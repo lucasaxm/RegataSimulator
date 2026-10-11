@@ -1,13 +1,16 @@
 package com.boatarde.regatasimulator.controller;
 
-import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.dto.SearchCriteria;
-import com.boatarde.regatasimulator.flows.WorkflowAction;
+import com.boatarde.regatasimulator.dto.GalleryDtos;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Max;
+import com.boatarde.regatasimulator.application.ApplicationFailure;
 import com.boatarde.regatasimulator.models.GalleryResponse;
 import com.boatarde.regatasimulator.models.ReviewSourceBody;
 import com.boatarde.regatasimulator.models.Source;
 import com.boatarde.regatasimulator.models.Status;
-import com.boatarde.regatasimulator.service.RouterService;
+import com.boatarde.regatasimulator.service.ModerationService;
 import com.boatarde.regatasimulator.service.SourceImporterService;
 import com.boatarde.regatasimulator.service.SourceService;
 import lombok.extern.slf4j.Slf4j;
@@ -22,8 +25,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.telegram.telegrambots.meta.api.objects.Message;
-import org.telegram.telegrambots.meta.api.objects.Update;
 
 import java.util.List;
 import java.util.UUID;
@@ -35,37 +36,35 @@ public class SourceController {
 
     private final SourceService sourceService;
     private final SourceImporterService sourceImporterService;
-    private final RegataSimulatorBot bot;
-    private final RouterService routerService;
+    private final ModerationService moderation;
 
     public SourceController(SourceService sourceService, SourceImporterService sourceImporterService,
-                            RegataSimulatorBot bot, RouterService routerService) {
+                            ModerationService moderation) {
         this.sourceService = sourceService;
         this.sourceImporterService = sourceImporterService;
-        this.bot = bot;
-        this.routerService = routerService;
+        this.moderation = moderation;
     }
 
     @GetMapping
-    public ResponseEntity<GalleryResponse<Source>> getAllSources(@RequestParam(defaultValue = "1") int page,
-                                                                 @RequestParam(defaultValue = "12") int perPage,
+    public ResponseEntity<GalleryResponse<GalleryDtos.SourceItem>> getAllSources(@RequestParam(defaultValue = "1") @Min(1) int page,
+                                                                 @RequestParam(defaultValue = "12") @Min(1) @Max(100) int perPage,
                                                                  @RequestParam(required = false) Status status,
                                                                  @RequestParam(required = false) Long userId) {
         GalleryResponse<Source> response = sourceService.getSources(page, perPage, status, userId);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(GalleryDtos.sources(response));
     }
 
     @GetMapping("/{id}.png")
     public ResponseEntity<Resource> getSourceImage(@PathVariable UUID id) {
         Source source = getSource(id);
         Resource file = sourceService.loadSourceAsResource(source);
-        return ResponseEntity.ok().contentType(MediaType.IMAGE_PNG).body(file);
+        return ImageResponse.of(file);
     }
 
     @GetMapping("/{id}.json")
-    public ResponseEntity<Source> getSourceJson(@PathVariable UUID id) {
+    public ResponseEntity<GalleryDtos.SourceItem> getSourceJson(@PathVariable UUID id) {
         Source source = getSource(id);
-        return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(source);
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(GalleryDtos.source(source));
     }
 
 
@@ -76,46 +75,25 @@ public class SourceController {
     }
 
     @PostMapping("/review")
-    public ResponseEntity<Void> reviewSource(@RequestBody ReviewSourceBody reviewSourceBody) {
-        Source source = sourceService.getSource(reviewSourceBody.getSourceId())
-            .orElseThrow(() -> new RuntimeException("Source not found: " + reviewSourceBody.getSourceId()));
-
-        if (source.getStatus() == Status.APPROVED) {
-            throw new RuntimeException("Source already approved: " + reviewSourceBody.getSourceId());
-        }
-
-        // Build an Update object from the source's message for workflow steps
-        Update update = new Update();
-        update.setMessage(source.getMessage());
-
-        if (reviewSourceBody.isApproved()) {
-            sourceService.approveSource(source);
-            if (source.getMessage() != null) {
-                routerService.startFlow(update, bot, WorkflowAction.SEND_SOURCE_APPROVED_MESSAGE_STEP);
-            }
-        } else {
-            sourceService.rejectSource(source);
-
-            if (source.getMessage() != null) {
-                Message reasonMessage = new Message();
-                reasonMessage.setText(reviewSourceBody.getReason());
-                update.setChannelPost(reasonMessage);
-                routerService.startFlow(update, bot, WorkflowAction.SEND_SOURCE_REJECTED_MESSAGE);
-            }
-
-        }
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<Void> reviewSource(@Valid @RequestBody ReviewSourceBody reviewSourceBody) {
+        var result = moderation.decide(new ModerationService.Decision(ModerationService.ItemType.SOURCE,
+            reviewSourceBody.getSourceId(), reviewSourceBody.isApproved() ? Status.APPROVED : Status.REJECTED,
+            reviewSourceBody.getReason(), new ModerationService.Actor(
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName())));
+        return result.notification() == ModerationService.Notification.FAILED
+            ? ResponseEntity.noContent().header("X-Notification-Status", "failed").build()
+            : ResponseEntity.noContent().build();
     }
 
     @PostMapping("/import")
-    public ResponseEntity<List<Source>> importSourcesFromCsv(@RequestBody String csv) {
-        try {
-            List<Source> createdSources = sourceImporterService.importFromCsv(csv);
-            return ResponseEntity.ok(createdSources);
-        } catch (Exception e) {
-            log.error("Import failed: {}", e.getMessage(), e);
-            return ResponseEntity.badRequest().build();
-        }
+    public ResponseEntity<List<GalleryDtos.SourceItem>> importSourcesFromCsv(@RequestBody String csv) throws Exception {
+        List<Source> createdSources = sourceImporterService.importFromCsv(csv);
+        return ResponseEntity.ok(createdSources.stream().map(GalleryDtos::source).toList());
+    }
+
+    @PostMapping("/import/report")
+    public ResponseEntity<GalleryDtos.ImportReport> importReport(@RequestBody String csv) throws Exception {
+        return ResponseEntity.ok(GalleryDtos.report(sourceImporterService.importReport(csv)));
     }
 
     @PostMapping("/reset_weights")
@@ -125,13 +103,13 @@ public class SourceController {
     }
 
     @PostMapping("/search")
-    public ResponseEntity<GalleryResponse<Source>> searchSources(@RequestBody SearchCriteria criteria) {
+    public ResponseEntity<GalleryResponse<GalleryDtos.SourceItem>> searchSources(@Valid @RequestBody SearchCriteria criteria) {
         GalleryResponse<Source> response = sourceService.search(criteria);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(GalleryDtos.sources(response));
     }
 
     private Source getSource(UUID id) {
         return sourceService.getSource(id)
-            .orElseThrow(() -> new RuntimeException("Source not found: " + id));
+            .orElseThrow(() -> new ApplicationFailure(ApplicationFailure.Kind.NOT_FOUND, "Source not found: " + id));
     }
 }

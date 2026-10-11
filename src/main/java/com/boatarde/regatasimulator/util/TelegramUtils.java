@@ -199,7 +199,7 @@ public class TelegramUtils {
             tmpFilePath = file.toPath();
             return Files.copy(tmpFilePath, newFile);
         } catch (TelegramApiException | IOException e) {
-            log.error("Failed to download file {} from Telegram", fileId, e);
+            log.error("Telegram file download failed; details redacted");
             throw e;
         } finally {
             if (tmpFilePath != null) {
@@ -218,10 +218,9 @@ public class TelegramUtils {
             }
             return mapper.writeValueAsString(o);
         } catch (JsonProcessingException e) {
-            log.error(e.getLocalizedMessage(), e);
+            log.error("Telegram metadata serialization failed; details redacted");
         }
-        // fallback to string
-        return o.toString();
+        throw new IllegalArgumentException("Cannot serialize Telegram metadata");
     }
 
     public static String toJson(Object o) {

@@ -1,0 +1,23 @@
+telegram:
+  creator:
+    id: 1234
+  bots:
+    regata-simulator:
+      registration-enabled: false
+      token: phase0-test-token-never-used
+      username: phase0_test_bot
+      channel: 1234
+      backup-chat: 1234
+    bilu-tags:
+      token: phase0-import-test-token-never-used
+regata-simulator:
+  scheduling:
+    enabled: false
+web-admin:
+  username: phase0-admin
+  password: phase0-test-password
+jasypt:
+  encryptor:
+    password: phase0-test-key-not-used-for-decryption
+magick:
+  path: phase0-no-external-process

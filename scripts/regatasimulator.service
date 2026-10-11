@@ -1,0 +1,29 @@
+[Unit]
+Description=Regata Simulator (single writer host)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/regata
+EnvironmentFile=%h/.config/regata/runtime.env
+ExecStart=/usr/bin/java -Xms128m -Xmx512m -jar %h/.local/share/regata/current/app.jar
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+KillMode=control-group
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=%h/.local/share/regata %h/.local/share/regata-data %h/.local/share/regata-backups
+MemoryMax=768M
+TasksMax=256
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
