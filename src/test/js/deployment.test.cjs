@@ -85,3 +85,13 @@ test('release workflow uses configured pinned host keys, bounded SSH and checked
     'vars.SERVER_JAVA_BIN', 'java_bin=${SERVER_JAVA_BIN:-/usr/bin/java}', "JAVA_BIN='$java_bin'"]) assert.ok(workflow.includes(text), text);
   for (const text of ['ssh-keyscan', 'subprocess', 'nohup', 'pgrep', 'secrets.REGATA_SIMULATOR_ENC_PASSWORD']) assert.equal(workflow.includes(text), false, text);
 });
+
+test('both CI workflows verify the exact maintenance JDK archive instead of unsupported four-part SemVer', () => {
+  for (const file of ['build-and-test-pull-request.yml', 'release-and-deploy.yml']) {
+    const workflow = fs.readFileSync('.github/workflows/' + file, 'utf8');
+    for (const text of ['jdkfile', 'jdkFile:', "java-version: '21.0.12+101'", 'sha256sum --check --strict',
+      'ce79869e1307ed8ee1e2baa86a412b1eb5b75d10a01006d788a6f968bcfaee94',
+      'OpenJDK21U-jdk_x64_linux_hotspot_21.0.12.1_1.tar.gz', 'verifyMaintenanceJava']) assert.ok(workflow.includes(text), text);
+    assert.equal(workflow.includes("java-version: '21.0.12.1+1'"), false);
+  }
+});
