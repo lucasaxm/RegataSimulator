@@ -1,8 +1,8 @@
 # Morning deployment review — 2026-10-11
 
-## Decision: hold approval until remaining checks are verified
+## Decision: preparation complete; owner review and latest green CI before merge
 
-Overnight preparation is authorized; **main merge, production registration, scheduled publishing and release deployment are not**. PR **#24** is draft on `refactor`. Do not mark it ready or approve a production run solely because the branch is mergeable. This handoff distinguishes verified preparation from still-running checks.
+Overnight preparation is complete; **no main merge, production registration, scheduled publishing or release deployment was performed**. PR **#24** remains draft on `refactor` for the owner's morning review. Verify latest-head CI is green, review the resource/recovery caveats below, then mark ready and merge only when intentionally proceeding. GitHub `stage` deployment still requires separate owner approval. This is preparation for a controlled first rollout, not proof that the unstarted production bot/HTTPS session or Actions SSH credentials work end-to-end.
 
 ## Completed preparation
 
@@ -22,13 +22,16 @@ Overnight preparation is authorized; **main merge, production registration, sche
 - Local full build: **845 JUnit / 42 suites**, zero failures/errors/skips. Final separate Node suite **19 passed**, zero failures/cancellations/skips. Fresh OSV **COMPLETE / 138 coordinates / zero findings**, `2026-10-11T04:47:46.413Z`; Maven scope only.
 - Actual PR CI caught an invalid setup-java four-component SemVer input before compilation. Both workflows now download the exact official Linux JDK, validate SHA256 and use documented `jdkfile` installation with valid cache identifier `21.0.12+101`. Fix pushed as `d2a271f`; PR #24 subsequently reported **all checks passed / one successful check** on the pushed preparation branch. Any later push must have its own green latest-head check before merge.
 - Successfully restored full-dataset SQLite bundle is also retained off-host at `/Users/lucas.xavier/regsim-recovery/2026-10-10/verified-sqlite-bundle.tar.gz`, matching VPS archive SHA-256 **`2163d28906be21679d283f35dbbaa949aed19379e499805fcc1c8b295ecb405c`**. The archive contains the complete bundle, not merely a database copy.
+- Follow-up **passed / exit 0**: a synthetic new user written only to a separate SQLite database survived `EXPORTED_VERIFIED` JsonDB/media export. Export counts: 1,023 sources / 349 templates / 1,000 memes / eight users (seven real plus synthetic rehearsal user). The actual deployment candidate still contains seven users and its database hash is unchanged. No synthetic record was inserted into the production candidate.
+- Hardened transient stage-profile check **passed / exit 0** with the private systemd EnvironmentFile, registration/schedules disabled, copied SQLite/media and the unit's filesystem hardening. Actual production credential/property binding and configured login/CSRF passed; Secure cookie presence was verified. Private in-memory cookie replay over loopback was intentional and is **not** browser/HTTPS proxy acceptance proof. No production Telegram calls were made.
+- Final cleanup verified `regata-followup-20261011` and `regata-stage-binding-20261011` inactive with MainPID 0 and success; production service inactive/disabled, no release selected, ports 8080/18080 closed. Private test/recovery outputs are retained for inspection.
 
-## Pending evidence — do not approve deployment yet
+## Owner review / first-release checks
 
-1. `regata-ready-check-20261011` is complete and passed, with the memory-pressure caveat above. Its complete bundle is preserved off-host with matching checksum.
-2. `regata-followup-20261011` waits for that success before running synthetic-new-write SQLite-to-JsonDB rollback export and hardened stage binding/login with real private configuration but **registration disabled/no external requests**. Failures or missing final markers remain blockers.
-3. Repaired PR CI passed. Reconfirm green for any newly pushed documentation/latest head. PR stays draft; no auto-merge enabled.
-4. Confirm transient test units have finished; production port8080/service remain inactive, and original/candidate hashes are unchanged. Retain complete migration/recovery evidence off-host.
+1. Inspect this handoff and PR #24. Reconfirm green CI for the **latest pushed head**, including this final documentation update. PR is draft; no auto-merge enabled.
+2. Review the 448 MiB ceiling/reclaim pressure. Successful sequential rehearsal does not prove concurrent render/backup safety or long-running stability. Keep schedules off initially and observe actual first-rollout resource events.
+3. Actions SSH key authentication and actual live production bot/HTTPS browser login remain first-release checks. Local SSH and protected stage binding do not establish these external paths. Keep deployment approval separate from merge.
+4. Verify the stopped candidate and private environment still match this checkpoint before approving release. The deployment candidate is `/home/ubuntu/.local/share/regata-data`, not any synthetic rollback or restored rehearsal directory.
 
 ## Tomorrow's controlled first rollout
 
