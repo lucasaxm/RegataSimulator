@@ -81,6 +81,7 @@ test('service definition supervises cgroup, bounds shutdown and references only 
 test('release workflow uses configured pinned host keys, bounded SSH and checked-in security-gated logic', () => {
   const workflow = fs.readFileSync('.github/workflows/release-and-deploy.yml', 'utf8');
   for (const text of ['vars.SERVER_KNOWN_HOSTS', '-n "$SERVER_KNOWN_HOSTS"', 'StrictHostKeyChecking=yes',
-    'ConnectTimeout=10', 'dependencyScan', 'scripts/deploy-release.sh', 'verifyMaintenanceJava']) assert.ok(workflow.includes(text), text);
+    'ConnectTimeout=10', 'dependencyScan', 'scripts/deploy-release.sh', 'verifyMaintenanceJava',
+    'vars.SERVER_JAVA_BIN', 'java_bin=${SERVER_JAVA_BIN:-/usr/bin/java}', "JAVA_BIN='$java_bin'"]) assert.ok(workflow.includes(text), text);
   for (const text of ['ssh-keyscan', 'subprocess', 'nohup', 'pgrep', 'secrets.REGATA_SIMULATOR_ENC_PASSWORD']) assert.equal(workflow.includes(text), false, text);
 });

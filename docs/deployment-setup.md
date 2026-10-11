@@ -10,6 +10,8 @@ Date: 2026-10-10. The user has local development and one production VPS; the his
 - Runtime secrets, the service unit, Java and ImageMagick are **not installed/transmitted by Actions**. Environment name does not automatically select a Spring profile.
 - Changes are currently local on `refactor`; no push/deployment has occurred. Do not merge/push to `main` until the production environment and VPS are provisioned. A main push triggers deployment, not only CI. Optional environment approval protects this production gate where the repository plan supports it.
 
+**October 11 preparation update:** `stage` now requires reviewer `lucasaxm`, self-review is allowed, and administrator bypass is disabled. A merge queues CI and deployment but does not bypass that approval. The user pushed the earlier branch; subsequent preparation commits must be pushed to `refactor` before merge. No main merge or production startup is authorized during overnight preparation.
+
 ## 2. GitHub environment setup
 
 In Settings → Environments → **stage**, configure exactly these entries:
@@ -21,6 +23,7 @@ In Settings → Environments → **stage**, configure exactly these entries:
 | Variable | `SERVER_USERNAME` | Copy the existing SSH user value into a variable; the workflow reads `vars.SERVER_USERNAME`, not the current secret. |
 | Variable | `SERVER_ROOT` | **New.** Canonical absolute deployment root matching the unit: `/home/<deploy-user>/.local/share/regata` for a normal home layout. Resolve the actual home path; do not put `$HOME`, `~` or placeholders in the variable. |
 | Variable | `SERVER_KNOWN_HOSTS` | **New.** Complete trusted OpenSSH known_hosts line(s) for this host, not just a SHA256 fingerprint. Obtain/verify against the VPS/provider console or another trusted channel. SSH checks are strict; do not disable them or trust a just-discovered key blindly. |
+| Variable | `SERVER_JAVA_BIN` | Optional validated absolute executable, default `/usr/bin/java`. On `bots2`, use `/home/ubuntu/.local/share/regata-tools/jdk-21.0.12.1+1/bin/java`, matching its provisioned unit without modifying other bots' Java. |
 
 No newly generated application secret, Telegram token or OSV API key is required. The pictured application secrets (`REGATA_SIMULATOR_ENC_PASSWORD`, database/media paths and `MAGICK_PATH`) are no longer consumed by the workflow. Keep them until the VPS runtime environment is verified; their existing correct values can be reused there. Existing host/user secrets can remain temporarily but do not satisfy the new `vars.*` references. Do not paste secret values into chat or commit them.
 
@@ -37,6 +40,8 @@ Use the **same non-root account as `SERVER_USERNAME`** for the deployment root, 
 3. Provide Bash, OpenSSH, curl, GNU coreutils (`timeout`, `mv -Tf`), `shasum`, sed/grep and a working systemd user manager. Gradle and Node are not needed on the VPS for normal JAR deployment.
 4. Arrange that the user's manager starts at boot and remains available over noninteractive SSH, commonly via administrator-provisioned `loginctl enable-linger <deploy-user>`. Verify `systemctl --user` works for that actual SSH user, not just root.
 5. Check host support for the unit's sandboxing/cgroup limits. Its 768 MiB memory limit covers Java **and ImageMagick child processes**, not only the 512 MiB JVM heap; ensure capacity or provision a reviewed override. Do not blindly remove hardening after a namespace/permission failure.
+
+On `bots2`, patched Java is privately installed/checksum-verified; ImageMagick 7 is `/home/ubuntu/tools/bin/magick`; `ubuntu` lingering is enabled. The installed unit uses `-Xms64m -Xmx256m`, MemoryMax 448M and MemorySwapMax 64M. It remains **disabled/inactive** with no selected `current` during preparation. Enable boot persistence explicitly after tomorrow's approval; the Actions `start` can run a disabled unit for the first release. Neutral Linux capacity passed; production-sized rehearsal is a separate gate.
 
 ### Directories and unit
 
@@ -59,7 +64,9 @@ Create **`~/.config/regata/runtime.env`**, owned by the deployment user, mode **
 | --- | --- |
 | `SPRING_PROFILES_ACTIVE` | `stage` to retain the existing intended stage/production configuration, after verifying its bot identity/destinations. Do not select `dev` on the production host. |
 | `REGATA_SIMULATOR_ENC_PASSWORD` | Existing stage encryption key, unchanged; it must decrypt the checked-in stage/base ENC values. |
-| `REGATA_SIMULATOR_DB_PATH` | Existing canonical production JsonDB directory. Preserve this engine for this rollout. |
+| `REGATA_SIMULATOR_DB_PATH` | Legacy path retained for configuration/overlap checks; on prepared `bots2`, the copied JsonDB directory is `/home/ubuntu/.local/share/regata-data/jsondb`. |
+| `REGATA_SIMULATOR_DATABASE_ENGINE` | Explicit `sqlite` for the requested cutover, **only after verified offline import**; no automatic startup import. |
+| `REGATA_SIMULATOR_DATABASE_SQLITE_FILE` | `/home/ubuntu/.local/share/regata-data/store.db` on prepared `bots2`; must be the verified new candidate, not an empty startup-created database. |
 | `REGATA_SIMULATOR_SOURCES_PATH` | Matching source UUID-directory root. |
 | `REGATA_SIMULATOR_TEMPLATES_PATH` | Matching template UUID-directory root. |
 | `MAGICK_PATH` | Absolute path to the verified ImageMagick 7 `magick` binary. |

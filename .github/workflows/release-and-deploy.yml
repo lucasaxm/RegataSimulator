@@ -69,6 +69,7 @@ jobs:
           SERVER_USERNAME: ${{ vars.SERVER_USERNAME }}
           SERVER_ROOT: ${{ vars.SERVER_ROOT }}
           SERVER_KNOWN_HOSTS: ${{ vars.SERVER_KNOWN_HOSTS }}
+          SERVER_JAVA_BIN: ${{ vars.SERVER_JAVA_BIN }}
           RELEASE_ID: ${{ github.sha }}
         run: |
           set -euo pipefail
@@ -76,6 +77,8 @@ jobs:
           [[ "$SERVER_HOST" =~ ^[a-zA-Z0-9.-]+$ && "$SERVER_USERNAME" =~ ^[a-zA-Z0-9_-]+$ ]]
           [[ "$SERVER_ROOT" =~ ^/[a-zA-Z0-9_./-]+$ && "$SERVER_ROOT" != *'/../'* && "$SERVER_ROOT" != *'/./'* && "$SERVER_ROOT" != / ]]
           [[ "$RELEASE_ID" =~ ^[a-f0-9]{40}$ && -n "$SERVER_KNOWN_HOSTS" ]]
+          java_bin=${SERVER_JAVA_BIN:-/usr/bin/java}
+          [[ "$java_bin" =~ ^/[a-zA-Z0-9_./+-]+$ && "$java_bin" != *'/../'* && "$java_bin" != *'/./'* ]]
           hosts=$(mktemp)
           trap 'rm -f "$hosts"' EXIT
           printf '%s\n' "$SERVER_KNOWN_HOSTS" > "$hosts"
@@ -86,6 +89,6 @@ jobs:
           schema=$(sed -n 's/^--changeset regata:\([0-9]*\).*/\1/p' src/main/resources/db/changelog/sqlite.sql | tail -n 1)
           ssh "${options[@]}" "$remote" "umask 077; mkdir '$SERVER_ROOT/incoming/$RELEASE_ID'"
           scp "${options[@]}" RegataSimulator-0.0.1.jar "$remote:$SERVER_ROOT/incoming/$RELEASE_ID/app.jar"
-          ssh "${options[@]}" "$remote" "bash -s -- '$SERVER_ROOT' '$RELEASE_ID' '$checksum' '$schema' artifact-only-schema-compatible" < scripts/deploy-release.sh
+          ssh "${options[@]}" "$remote" "JAVA_BIN='$java_bin' bash -s -- '$SERVER_ROOT' '$RELEASE_ID' '$checksum' '$schema' artifact-only-schema-compatible" < scripts/deploy-release.sh
           # systemd unit and runtime environment are provisioned separately by an operator.
           # Never transmit/decrypt runtime secrets or tail application logs here.
