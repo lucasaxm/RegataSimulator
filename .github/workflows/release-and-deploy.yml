@@ -43,6 +43,7 @@ jobs:
           ./gradlew verifyMaintenanceJava clean build
           node --test src/test/js/*.test.cjs
           bash -n scripts/deploy-release.sh
+          bash -n scripts/run-service.sh
           ./gradlew dependencyScan
       - name: Retain dependency/security/license evidence
         if: always()
@@ -93,9 +94,12 @@ jobs:
           options=(-o "UserKnownHostsFile=$hosts" -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=2)
           remote="$SERVER_USERNAME@$SERVER_HOST"
           checksum=$(shasum -a 256 RegataSimulator-0.0.1.jar | cut -d ' ' -f 1)
+          unit_checksum=$(shasum -a 256 scripts/regatasimulator.service | cut -d ' ' -f 1)
+          launcher_checksum=$(shasum -a 256 scripts/run-service.sh | cut -d ' ' -f 1)
           schema=$(sed -n 's/^--changeset regata:\([0-9]*\).*/\1/p' src/main/resources/db/changelog/sqlite.sql | tail -n 1)
           ssh "${options[@]}" "$remote" "umask 077; mkdir '$SERVER_ROOT/incoming/$RELEASE_ID'"
           scp "${options[@]}" RegataSimulator-0.0.1.jar "$remote:$SERVER_ROOT/incoming/$RELEASE_ID/app.jar"
-          ssh "${options[@]}" "$remote" "JAVA_BIN='$java_bin' bash -s -- '$SERVER_ROOT' '$RELEASE_ID' '$checksum' '$schema' artifact-only-schema-compatible" < scripts/deploy-release.sh
-          # systemd unit and runtime environment are provisioned separately by an operator.
+          scp "${options[@]}" scripts/regatasimulator.service scripts/run-service.sh "$remote:$SERVER_ROOT/incoming/$RELEASE_ID/"
+          ssh "${options[@]}" "$remote" "JAVA_BIN='$java_bin' bash -s -- '$SERVER_ROOT' '$RELEASE_ID' '$checksum' '$schema' artifact-and-unit-schema-compatible '$unit_checksum' '$launcher_checksum'" < scripts/deploy-release.sh
+          # Host drop-ins and runtime environment remain operator-owned; base unit updates with the artifact.
           # Never transmit/decrypt runtime secrets or tail application logs here.

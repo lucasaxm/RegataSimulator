@@ -4,7 +4,7 @@
 
 ## GitHub Actions and settings
 
-PRs to `main` run clean Java tests/build, wrapper validation, Node fixtures and fail-closed scanning. Main pushes or approved manual dispatch build once and deploy that artifact; no VPS rebuild. Releases use full commit SHA and verified checksum; environment concurrency serializes deployment. Review latest-head CI and don't bypass findings/incomplete scans. See [maintenance](maintenance.md) for JDK/scan policy.
+PRs to `main` run clean Java tests/build, wrapper validation, Node fixtures and fail-closed scanning. Main pushes or approved manual dispatch build once and deploy that artifact; no VPS rebuild. Each release transfers the JAR, shared unit and `run-service.sh`, with separate SHA-256 checksums. A host deployment lock and environment concurrency serialize cooperating deployments. Review latest-head CI and don't bypass findings/incomplete scans. See [maintenance](maintenance.md) for JDK/scan policy.
 
 Configure in **stage**:
 
@@ -15,7 +15,7 @@ Configure in **stage**:
 | Variable | `SERVER_USERNAME` | `ubuntu` |
 | Variable | `SERVER_ROOT` | `/home/ubuntu/.local/share/regata`; canonical absolute path |
 | Variable | `SERVER_KNOWN_HOSTS` | Complete trusted OpenSSH host-key lines; independently verify rotations |
-| Variable | `SERVER_JAVA_BIN` | `/home/ubuntu/.local/share/regata-tools/jdk-21.0.12.1+1/bin/java`; matches unit ExecStart |
+| Variable | `SERVER_JAVA_BIN` | `/home/ubuntu/.local/share/regata-tools/jdk-21.0.12.1+1/bin/java`; matches host `REGATA_JAVA_BIN` |
 
 Unset Java defaults to `/usr/bin/java`. Workflow assumes SSH port 22; another port needs reviewed ssh/scp/trust changes. Host/user secrets alone do not satisfy `vars.*`. Application secrets are private VPS configuration, not transmitted by Actions; OSV needs no API key.
 
@@ -28,15 +28,18 @@ Unset Java defaults to `/usr/bin/java`. Workflow assumes SSH port 22; another po
 | `~/.local/share/regata/{incoming,releases,current}` | Transfer, immutable JARs, selected-release symlink |
 | `~/.config/regata/runtime.env` | Private runtime settings, mode 600 |
 | `~/.config/systemd/user/regatasimulator.service` | User service |
+| `~/.config/systemd/user/regatasimulator.service.d/host.conf` | Operator-owned public Java/heap/resource overrides; never overwritten by deployment |
 | `~/.local/share/regata-data/{store.db,sources,templates}` | Explicit SQLite and UUID media trees |
 | `~/.local/share/regata-backups` | Existing private/nonoverlapping backup root, mode 700 |
 | `~/.local/share/regata-tools` | Regata-specific JDK/native tools, not other bots' installations |
 
-Use canonical non-symlink paths/private directories/deployment-user ownership. Provide Bash, SSH, curl, GNU coreutils (`timeout`, `mv -Tf`), shasum and a working user manager. Enable lingering **and** the unit for reboot persistence; active-but-disabled won't return automatically. Don't replace global Java or restart unrelated bots.
+Use canonical non-symlink paths/private directories/deployment-user ownership. Provide Bash, SSH, curl, GNU coreutils (`timeout`, `mv -Tf`), flock, shasum, systemd-analyze and a working user manager. Bootstrap a regular installed unit and private runtime file before the first automated update. Enable lingering **and** the unit for reboot persistence; active-but-disabled won't return automatically. Don't replace global Java or restart unrelated bots.
 
-The checked-in unit is a provisioning baseline, not an installer. Installed `bots2` settings use private Java, **-Xms64m -Xmx256m**, **MemoryMax448M / MemorySwapMax64M**, cgroup shutdown/private temp/strict filesystem/no-new-privileges restrictions. Ceilings cover JVM/native children/cache, not reservations. Keep writable data/backups in `ReadWritePaths`. Runtime changes need deliberate restart; unit edits need daemon-reload. Preserve old configuration privately first.
+Deployment manages the **base unit and release launcher**, preserving operator-owned drop-ins and `runtime.env`. The launcher inherits (never sources/prints) the private environment, then execs `REGATA_JAVA_BIN` with `REGATA_JAVA_HEAP_MIN/MAX`; defaults are `/usr/bin/java`, 128m/512m. The `bots2` host drop-in supplies its private Java, **64m/256m**, **MemoryMax448M / MemorySwapMax64M**. No full ExecStart override is needed. Ceilings cover JVM/native children/cache, not reservations; cgroup shutdown/private temp/strict filesystem/no-new-privileges remain shared policy.
 
-The service template adds **`-Djava.net.preferIPv4Stack=true`** for Regata's JVM, avoiding unsupported IPv6 routes on the current IPv4-only host. This belongs in the actual unit's ExecStart (or private per-service JAVA_TOOL_OPTIONS), **not** the artifact deployment script or host-wide network policy. Actions does not install/update the unit: apply the flag explicitly to existing host-specific units, preserving their private Java/heap/sandbox settings, then daemon-reload/restart with authorization. A committed template change alone does not alter the live JVM. Check DNS/IP-family routes and connectivity before attributing every network failure to IPv6.
+Host drop-ins may configure environment/resources, not ExecStart/Pre/Post/Condition, WorkingDirectory or EnvironmentFile. Such startup overrides or unmanaged system/runtime drop-ins refuse automation for operator review. Keep custom writable paths in ReadWritePaths. Coordinate operator edits with deployments: changed unit/drop-in/runtime hashes abort rather than guessing how to restore a newly edited configuration. Preserve old configuration privately before maintenance.
+
+The release launcher supplies **`-Djava.net.preferIPv4Stack=true`** only to Regata's JVM, avoiding unsupported IPv6 routes. The base unit points to `current/run-service.sh`, so a host Java/heap choice cannot mask new shared JVM flags. No host-wide networking change is made. Check actual IP-family connectivity before attributing every failure to IPv6. Changes to runtime.env/drop-ins still require deliberate restart; deployment performs daemon-reload for its managed unit change.
 
 ### Private runtime environment
 
@@ -67,13 +70,15 @@ Keep port 8080 private behind the trusted proxy. Stage handles forwarded headers
 ## Release and rollback
 
 1. Check latest-head CI, resource capacity, recoverable data and intended destinations. Rehearse data/schema changes separately using [offline procedures](operations-runbook.md).
-2. Approve stage intentionally. Script validates hash/Java/paths/schema, confirms writers stopped and atomically selects `current`.
+2. Approve stage intentionally. Script validates all three checksums/Java/paths/schema and launcher syntax, captures the exact installed unit, and verifies the candidate effective unit with copied host drop-ins before stopping. Candidate verification points at the new release launcher because an older release may not contain it yet. Private verification logs stay with the failed candidate.
 3. Readiness defaults to **120 attempts**, one-second intervals, curl connect/total limits of 2/3 seconds. Script-level `READINESS_ATTEMPTS` accepts canonical integers 1..300. Bounded headroom is not an exact two-minute deadline; don't hide broken startup.
 4. Verify commit, service/restarts, local readiness, HTTPS and real Telegram/render behavior. Enable boot/schedules intentionally if paused; observe memory during jobs, not just idle.
 
-Interface: `bash scripts/deploy-release.sh ROOT FULL_COMMIT_SHA JAR_SHA256 SCHEMA_VERSION artifact-only-schema-compatible`. `JAVA_BIN` controls its Java check; workflow/actual unit must agree. Root needs incoming/releases; release output must be new.
+Interface: `bash scripts/deploy-release.sh ROOT FULL_COMMIT_SHA JAR_SHA256 SCHEMA_VERSION artifact-and-unit-schema-compatible UNIT_SHA256 LAUNCHER_SHA256`. `JAVA_BIN` controls its Java check and must agree with the host drop-in. Root needs incoming/releases; release output must be new. Shared paths are rendered for that canonical root; host/private paths remain operator configuration.
 
-Failed readiness stops writers and rechecks a previous managed same-schema artifact, still reporting failure; first release removes selection and remains stopped. Failed/unmanaged binaries aren't known-good fallbacks. Unconfirmed stop or failed fallback needs manual recovery. **Artifact rollback does not undo data/schema writes**; equal markers don't establish arbitrary old-binary compatibility.
+After confirmed writer stop, the script atomically replaces the installed base unit and `current` symlink, then daemon-reloads/starts/checks active-PID readiness. These are coordinated stopped-state file changes, **not** a crash-proof multi-file transaction. Install/reload/start/readiness failure restores the captured exact unit and previous same-schema artifact, even when that older release predates launchers/unit packaging. First release restores the original unit, removes selection and stays stopped. The script never writes drop-ins, runtime.env or data; preserves failed release/unit snapshots for inspection; and does not change boot enablement.
+
+Unknown writer stop, changed host/runtime settings, changed previous artifact, failed unit restoration or fallback readiness requires manual recovery with writers stopped. Failed/unmanaged binaries aren't known-good fallbacks. **Unit/artifact rollback does not undo data/schema writes**; equal markers don't establish arbitrary old-binary compatibility. External operator actions must cooperate with the deployment lock; it cannot freeze an independent systemctl/cleanup command.
 
 Don't blindly rerun a failed same-SHA job: paths already exist and old jobs use old scripts. Preserve failed artifacts; use a reviewed new release or explicit stopped/archive procedure. Never delete data/recovery files to make retry pass.
 
