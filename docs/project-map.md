@@ -62,6 +62,10 @@ Template CSV header: `Area,Source,TLx,TLy,TRx,TRy,BRx,BRy,BLx,BLy,Background`. A
 
 Each render owns private scratch outside persistent media. `RenderedImage` holds output through sending/persistence, then releases it; never delete it before delivery or move scratch into templates. Keep argument-array ProcessBuilder calls, bounded exit/output/time handling, platform-thread pipe readers and interruption/cleanup behavior. Test native rendering under the actual sandbox; see [deployment](deployment-setup.md#imagemagick-and-sandbox).
 
+`BotTelegramGateway.sendPhoto` uses a small `TelegramPhotoSender`: at most three SDK send calls, connection-failure backoff of 1/2 seconds, and at most 10 seconds of total waiting. An explicit 429 honors positive `retry_after` only within that budget; missing/excessive delays fail instead of retrying early. Only definite DNS/TCP-connect failures retry (generic socket failures require a known connect-stage frame). Read/reset/SSL failures, 5xx/permanent responses and unclassified errors are not replayed. Interruption stops delivery and preserves the flag.
+
+Retries retain the **same photo/file**, not source selection or rendering. Publication metadata runs once after successful send; exhausted sends clean scratch without history/weight changes, and metadata failure after sending never triggers resend. Previews using `sendPhoto` share this policy; other gateway operations remain single-call. This is bounded synchronous recovery, not a durable queue, an SDK-independent end-to-end deadline or an exactly-once guarantee.
+
 ## HTTP/security integration
 
 - `/api/sources`, `/api/templates`: gallery/filter/image/DTO/review/delete/import/weight operations. Preserve controller body/path shapes, pagination validation and generic ProblemDetail 400/404/409/503/500 outcomes.

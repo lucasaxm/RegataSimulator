@@ -5,6 +5,7 @@ import com.boatarde.regatasimulator.bots.RegataSimulatorBot;
 import com.boatarde.regatasimulator.application.ApplicationFailure;
 import com.boatarde.regatasimulator.util.TelegramUtils;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.methods.send.SendDocument;
@@ -24,8 +25,15 @@ import java.util.List;
 @Component
 public class BotTelegramGateway implements TelegramGateway {
     private final ObjectProvider<RegataSimulatorBot> bots;
+    private final TelegramPhotoSender photoSender;
     // Resolve only during a request, avoiding the bot -> router -> service -> bot construction cycle.
-    public BotTelegramGateway(ObjectProvider<RegataSimulatorBot> bots) { this.bots = bots; }
+    @Autowired
+    public BotTelegramGateway(ObjectProvider<RegataSimulatorBot> bots) { this(bots, new TelegramPhotoSender()); }
+
+    BotTelegramGateway(ObjectProvider<RegataSimulatorBot> bots, TelegramPhotoSender photoSender) {
+        this.bots = bots;
+        this.photoSender = photoSender;
+    }
 
     @Override
     public Delivery sendText(Text request) {
@@ -48,7 +56,7 @@ public class BotTelegramGateway implements TelegramGateway {
                 List.of(button(buttons, "confirm", "✅ Confirmar")),
                 List.of(button(buttons, "cancel", "❌ Cancelar")))).build());
         }
-        try { return delivery(TelegramUtils.executeSendMediaBotMethod(bots.getObject(), photo)); }
+        try { return delivery(photoSender.send(photo, method -> TelegramUtils.executeSendMediaBotMethod(bots.getObject(), method))); }
         catch (TelegramApiException e) { throw failed(e); }
     }
 
