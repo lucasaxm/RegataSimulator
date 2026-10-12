@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Regata · laboratório de templates</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header>
+    <div><h1>Laboratório de templates</h1><p>Imagens e textos ligados à mesma source. Somente exemplos locais.</p></div>
+    <label>Editor <select id="engine"><option value="konva">Konva · canvas</option><option value="moveable">Moveable · experimental</option></select></label>
+  </header>
+  <p id="candidate-warning" role="note" hidden>Moveable: falha conhecida ao começar a arrastar uma área ainda não selecionada. Selecione pela lista antes de arrastar. Mantido para comparação, não recomendado.</p>
+  <nav aria-label="Ferramentas do laboratório">
+    <label>Exemplo <select id="scene"><option value="captions">Fotos com legendas</option><option value="chat">Perfil com mensagem</option></select></label>
+    <button id="add-image">+ Imagem</button><button id="add-text">+ Texto</button>
+    <button id="undo" title="Desfazer">Desfazer</button><button id="redo">Refazer</button>
+    <button id="pan" aria-pressed="false">Mover tela</button>
+    <button id="zoom-out" aria-label="Diminuir zoom">−</button><output id="zoom">100%</output><button id="zoom-in" aria-label="Aumentar zoom">+</button><button id="fit">Ajustar</button>
+    <button id="clean" aria-pressed="false">Ver sem guias</button>
+  </nav>
+  <main>
+    <section class="workspace" aria-label="Área de edição">
+      <div id="viewport" tabindex="0" aria-label="Canvas: arraste os cantos. Use duas pontas para zoom, ou setas para mover a área selecionada."><div id="surface"></div></div>
+      <div class="canvas-footer"><span id="metrics">Carregando editores…</span><span>Prévia do navegador, não ImageMagick</span></div>
+    </section>
+    <aside aria-label="Áreas e propriedades">
+      <h2>Áreas</h2><div id="areas" class="area-list"></div>
+      <div class="row"><button id="backward">Recuar</button><button id="forward">Avançar</button><button id="delete" class="danger">Excluir</button></div>
+      <h2 id="selection-title">Propriedades</h2>
+      <label>Source vinculada <select id="source"></select></label>
+      <label class="checkbox"><input id="background" type="checkbox"> Atrás do template</label>
+      <fieldset id="geometry"><legend>Precisão em pixels da imagem</legend><label>Ponto <select id="corner"><option value="0">Superior esquerdo</option><option value="1">Superior direito</option><option value="2">Inferior direito</option><option value="3">Inferior esquerdo</option></select></label><div class="row"><label>X <input id="x" type="number" min="-10000" max="10000" step="1"></label><label>Y <input id="y" type="number" min="-10000" max="10000" step="1"></label></div><div class="row nudges"><button data-nudge="-1,0" aria-label="Mover um pixel à esquerda">←</button><button data-nudge="0,-1" aria-label="Mover um pixel para cima">↑</button><button data-nudge="0,1" aria-label="Mover um pixel para baixo">↓</button><button data-nudge="1,0" aria-label="Mover um pixel à direita">→</button></div></fieldset>
+      <section id="text-settings" hidden>
+        <h2>Texto dinâmico</h2>
+        <label>Texto <textarea id="text" rows="3" maxlength="512" spellcheck="false"></textarea></label>
+        <button id="insert-token">Inserir descrição da source</button>
+        <div class="row"><label>Fonte <select id="font"><option value="sans">Sans (Arial)</option><option value="serif">Serif (Georgia)</option><option value="mono">Mono (Courier New)</option></select></label><label>Peso <select id="weight"><option value="normal">Normal</option><option value="bold">Negrito</option></select></label></div>
+        <div class="row"><label>Tamanho máximo <input id="size" type="number" min="8" max="120"></label><label>Mínimo <input id="min-size" type="number" min="8" max="120"></label></div>
+        <div class="row"><label>Cor <input id="fill" type="color"></label><label>Contorno <input id="outline" type="color"></label><label>Espessura <input id="outline-width" type="number" min="0" max="8"></label></div>
+        <div class="row"><label>Alinhar <select id="align"><option value="left">Esquerda</option><option value="center">Centro</option><option value="right">Direita</option></select></label><label>Excesso <select id="overflow"><option value="shrink">Reduzir para caber</option><option value="clip">Manter tamanho</option></select></label></div>
+        <label>Entrelinhas <input id="line-height" type="number" min="1" max="2" step="0.05"></label>
+        <p id="text-result" class="hint"></p>
+      </section>
+      <details open><summary>Descrições de exemplo</summary><div id="samples"></div></details>
+      <details><summary>Documento experimental</summary><p class="hint">Formato do laboratório. Não é CSV nem um template válido para enviar ao bot.</p><button id="export">Baixar JSON</button><label>Importar JSON <input id="import" type="file" accept="application/json,.json"></label><pre id="document-summary"></pre></details>
+      <p class="hint">Uma ponta edita. Duas pontas movem/zooms. Fora das áreas, arraste para mover a tela. Texto usa caixas retangulares; imagens usam quatro cantos.</p>
+    </aside>
+  </main>
+  <p id="status" role="status" aria-live="polite">Nenhum arquivo será enviado. Sem conexão com o bot.</p>
+  <footer><a href="/licenses.txt" target="_blank" rel="noopener">Licenças das bibliotecas</a></footer>
+</body>
+</html>

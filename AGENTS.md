@@ -7,6 +7,7 @@
 - Start with [documentation index](docs/README.md), [development guide](docs/project-map.md), [deployment](docs/deployment-setup.md), [recovery runbook](docs/operations-runbook.md) and [maintenance](docs/maintenance.md).
 - GitHub environment `stage` is **production** on `bots2`, not a separate stage server. Main pushes queue deployment after CI, with owner approval. Production uses SQLite, enabled schedules and a systemd user service. Do not confuse GitHub/Spring profile selection or run stage credentials as tests; live operations need explicit authorization.
 - Frontend redesign is separate scope; do not expand backend work into UI/framework replacement.
+- Template-creation design/spike guidance is under `docs/template-creation/`. `spikes/template-creator/` is an isolated loopback-only npm browser experiment, not packaged frontend or a supported bot upload format. Keep its dependencies/known Moveable failure separate from production; text-area native rendering/schema work is still proposed.
 
 ## Source boundaries
 

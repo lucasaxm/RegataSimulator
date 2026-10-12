@@ -1,0 +1,21 @@
+{
+  "name": "regata-template-creator-spike",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test/*.test.mjs",
+    "test:browser": "playwright test",
+    "check": "node --check app.mjs && node --check model.mjs && node --check adapters.mjs && node --check server.mjs",
+    "audit": "npm audit --audit-level=low"
+  },
+  "dependencies": {
+    "konva": "10.7.1",
+    "moveable": "0.53.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "esbuild": "0.28.2"
+  }
+}

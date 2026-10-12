@@ -2,6 +2,8 @@
 
 **Design recommendation, not an implemented API/schema or deployment approval.** Start from the [verified current flow](current-flow.md). Keep this a focused template tool inside the existing static-page/Spring architecture, not a site-wide React replacement or general Photoshop clone.
 
+The isolated [mixed-area spike](spike.md) now exercises Konva/Moveable with source-linked [text boxes](text-areas.md). It recommends Konva; Moveable is retained by user choice with an explicit known first-drag failure. Neither the spike format nor text rendering is implemented in the production generator.
+
 ## Target journey
 
 **Choose image → mark/edit areas → test in place → send for approval.**
@@ -58,7 +60,7 @@ The inspected upstream licenses are MIT; retain notices and review the **selecte
 
 Do not install all three or add React only to obtain a canvas library. Pin/self-host the chosen library with license notices, or use a narrowly scoped build with a lockfile if packaging requires it. Existing Maven scanning does not cover new npm/CDN dependencies: add the appropriate inventory/security gate. Do not broaden CSP/frame ancestors or weaken admin/CSRF security to accommodate the editor.
 
-**Spike decision gate:** implement the same skewed quad with four handles, zoom/pinch/pan, one reused source and an off-canvas corner in Konva and Moveable. Compare code/adapter complexity, exported points, low-end phone latency, finger occlusion and Telegram gesture conflicts. Promote one candidate; discard the other prototype. Do not claim either library solves native pixel rendering or the whole submission workflow.
+**Spike decision gate:** use the same mixed image/text model, skewed quad, source bindings, zoom/pinch/pan and off-canvas corner in both candidates. The local comparison recommends Konva; Moveable remains a documented failing experiment rather than a production option. Before adoption, check low-end/native-phone latency, finger occlusion and Telegram gesture conflicts. Do not claim either library solves native pixel rendering or the whole submission workflow.
 
 ## Direct upload and preview architecture
 
