@@ -1,93 +1,86 @@
-# Deployment setup: GitHub `stage` is production
+# Deployment and production operations
 
-Date: 2026-10-10. The user has local development and one production VPS; the historically named GitHub environment **`stage` is production**, not a separate staging server. This is a provisioning checklist, not evidence that the VPS was inspected or deployed.
+**GitHub environment `stage` is production**, not a separate staging server. Production is `ubuntu@bots2.ssh.boatarde.dev`, a shared OCI free-tier host, with SQLite and nginx/HTTPS at `regsim.boatarde.dev`. Local dev is the test environment. GitHub environment selection does not automatically select a Spring profile.
 
-## 1. Current GitHub Actions behavior
+## GitHub Actions and settings
 
-- `.github/workflows/build-and-test-pull-request.yml`: PRs targeting `main` run wrapper validation, patched Temurin 21.0.12.1+1, clean Gradle build/tests, all Node fixtures and the actual fail-closed OSV scan; retain security/license evidence for 30 days. No app secrets are needed for tests/scanning.
-- `.github/workflows/release-and-deploy.yml`: a push to `main` builds/tests/scans, uploads the executable JAR, then deploys through environment **`stage`**. Manual dispatch defaults to `stage`; choose that environment for this production VPS. Concurrency serializes releases for that environment.
-- SSH uploads the built artifact once, verifies its checksum and invokes the checked-in release script. The script stops the preinstalled user service, switches a managed release symlink and checks localhost:8080 readiness. Failure can select a previous managed artifact with the same declared schema; it does not undo database writes.
-- Runtime secrets, the service unit, Java and ImageMagick are **not installed/transmitted by Actions**. Environment name does not automatically select a Spring profile.
-- Changes are currently local on `refactor`; no push/deployment has occurred. Do not merge/push to `main` until the production environment and VPS are provisioned. A main push triggers deployment, not only CI. Optional environment approval protects this production gate where the repository plan supports it.
+PRs to `main` run clean Java tests/build, wrapper validation, Node fixtures and fail-closed scanning. Main pushes or approved manual dispatch build once and deploy that artifact; no VPS rebuild. Releases use full commit SHA and verified checksum; environment concurrency serializes deployment. Review latest-head CI and don't bypass findings/incomplete scans. See [maintenance](maintenance.md) for JDK/scan policy.
 
-**October 11 preparation update:** `stage` now requires reviewer `lucasaxm`, self-review is allowed, and administrator bypass is disabled. A merge queues CI and deployment but does not bypass that approval. The user pushed the earlier branch; subsequent preparation commits must be pushed to `refactor` before merge. No main merge or production startup is authorized during overnight preparation.
+Configure in **stage**:
 
-## 2. GitHub environment setup
-
-In Settings → Environments → **stage**, configure exactly these entries:
-
-| Kind | Name | What to configure |
+| Kind | Name | Purpose |
 | --- | --- | --- |
-| Secret | `SERVER_SSH_KEY` | Keep the existing private deploy key if valid. Its public key must authorize the intended non-root VPS deployment user. |
-| Variable | `SERVER_HOST` | Copy the existing host value into a variable; the workflow reads `vars.SERVER_HOST`, not the current secret. Hostname/IP only, no scheme/port. |
-| Variable | `SERVER_USERNAME` | Copy the existing SSH user value into a variable; the workflow reads `vars.SERVER_USERNAME`, not the current secret. |
-| Variable | `SERVER_ROOT` | **New.** Canonical absolute deployment root matching the unit: `/home/<deploy-user>/.local/share/regata` for a normal home layout. Resolve the actual home path; do not put `$HOME`, `~` or placeholders in the variable. |
-| Variable | `SERVER_KNOWN_HOSTS` | **New.** Complete trusted OpenSSH known_hosts line(s) for this host, not just a SHA256 fingerprint. Obtain/verify against the VPS/provider console or another trusted channel. SSH checks are strict; do not disable them or trust a just-discovered key blindly. |
-| Variable | `SERVER_JAVA_BIN` | Optional validated absolute executable, default `/usr/bin/java`. On `bots2`, use `/home/ubuntu/.local/share/regata-tools/jdk-21.0.12.1+1/bin/java`, matching its provisioned unit without modifying other bots' Java. |
+| Secret | `SERVER_SSH_KEY` | Private key authorized for the non-root deploy account |
+| Variable | `SERVER_HOST` | `bots2.ssh.boatarde.dev`; hostname/IP only |
+| Variable | `SERVER_USERNAME` | `ubuntu` |
+| Variable | `SERVER_ROOT` | `/home/ubuntu/.local/share/regata`; canonical absolute path |
+| Variable | `SERVER_KNOWN_HOSTS` | Complete trusted OpenSSH host-key lines; independently verify rotations |
+| Variable | `SERVER_JAVA_BIN` | `/home/ubuntu/.local/share/regata-tools/jdk-21.0.12.1+1/bin/java`; matches unit ExecStart |
 
-No newly generated application secret, Telegram token or OSV API key is required. The pictured application secrets (`REGATA_SIMULATOR_ENC_PASSWORD`, database/media paths and `MAGICK_PATH`) are no longer consumed by the workflow. Keep them until the VPS runtime environment is verified; their existing correct values can be reused there. Existing host/user secrets can remain temporarily but do not satisfy the new `vars.*` references. Do not paste secret values into chat or commit them.
+Unset Java defaults to `/usr/bin/java`. Workflow assumes SSH port 22; another port needs reviewed ssh/scp/trust changes. Host/user secrets alone do not satisfy `vars.*`. Application secrets are private VPS configuration, not transmitted by Actions; OSV needs no API key.
 
-The checked-in SSH workflow assumes port 22. A different port requires an explicit reviewed workflow change for both ssh/scp and the trusted-host entry, not putting `host:port` into `SERVER_HOST`.
+`stage` requires reviewer `lucasaxm`, permits self-review for the solo owner and disables administrator bypass. Merge and deployment approval are separate decisions; don't approve on the user's behalf without authorization.
 
-## 3. One-time VPS provisioning
+## VPS layout and supervision
 
-Use the **same non-root account as `SERVER_USERNAME`** for the deployment root, service and data access. Administrator-only package/user-manager work should be done directly on the server by an operator; no privileged operation was performed in this review.
+| Path (deployment user's home) | Purpose |
+| --- | --- |
+| `~/.local/share/regata/{incoming,releases,current}` | Transfer, immutable JARs, selected-release symlink |
+| `~/.config/regata/runtime.env` | Private runtime settings, mode 600 |
+| `~/.config/systemd/user/regatasimulator.service` | User service |
+| `~/.local/share/regata-data/{store.db,sources,templates}` | Explicit SQLite and UUID media trees |
+| `~/.local/share/regata-backups` | Existing private/nonoverlapping backup root, mode 700 |
+| `~/.local/share/regata-tools` | Regata-specific JDK/native tools, not other bots' installations |
 
-### Binaries and user manager
+Use canonical non-symlink paths/private directories/deployment-user ownership. Provide Bash, SSH, curl, GNU coreutils (`timeout`, `mv -Tf`), shasum and a working user manager. Enable lingering **and** the unit for reboot persistence; active-but-disabled won't return automatically. Don't replace global Java or restart unrelated bots.
 
-1. Install patched **Java 21.0.12.1 or newer Java 21**, and verify that **`/usr/bin/java`** is the actual correct executable. The unit and default release check both use that path. Merely installing a different JAVA_HOME does not update the unit. An explicit unit override and consistent deployment check are needed if using another path.
-2. Install **ImageMagick 7** and find its actual `magick` executable. The renderer calls `magick identify` and subcommands; do not substitute an ImageMagick 6 `convert` path. Check the executable with the service user's permissions.
-3. Provide Bash, OpenSSH, curl, GNU coreutils (`timeout`, `mv -Tf`), `shasum`, sed/grep and a working systemd user manager. Gradle and Node are not needed on the VPS for normal JAR deployment.
-4. Arrange that the user's manager starts at boot and remains available over noninteractive SSH, commonly via administrator-provisioned `loginctl enable-linger <deploy-user>`. Verify `systemctl --user` works for that actual SSH user, not just root.
-5. Check host support for the unit's sandboxing/cgroup limits. Its 768 MiB memory limit covers Java **and ImageMagick child processes**, not only the 512 MiB JVM heap; ensure capacity or provision a reviewed override. Do not blindly remove hardening after a namespace/permission failure.
-
-On `bots2`, patched Java is privately installed/checksum-verified; ImageMagick 7 is `/home/ubuntu/tools/bin/magick`; `ubuntu` lingering is enabled. The installed unit uses `-Xms64m -Xmx256m`, MemoryMax 448M and MemorySwapMax 64M. It remains **disabled/inactive** with no selected `current` during preparation. Enable boot persistence explicitly after tomorrow's approval; the Actions `start` can run a disabled unit for the first release. Neutral Linux capacity passed; production-sized rehearsal is a separate gate.
-
-### Directories and unit
-
-Create existing private directories (700, owned by the deployment user):
-
-- `~/.local/share/regata`, including `releases/` and `incoming/`;
-- `~/.config/regata`;
-- `~/.local/share/regata-data` and the intended database/source/template roots;
-- `~/.local/share/regata-backups`, nonoverlapping with application metadata/media.
-
-These must be actual canonical paths, not symlink aliases. **Do not create an empty replacement for an existing production store or move data casually.** Prefer preserving its current coherent paths; if outside these prefixes, provision a unit override for `ReadWritePaths` and ownership. `ProtectSystem=strict` requires declared writable locations. Confirm space for render scratch and retained archives; the backup root itself must already exist and be mode 700.
-
-Install checked-in `scripts/regatasimulator.service` as `~/.config/systemd/user/regatasimulator.service` (create the parent). As the deployment user, use `systemctl --user daemon-reload`, verify the unit, and `systemctl --user enable regatasimulator.service`. **Do not start it yet:** first provision runtime configuration, preserve the old release/data and stop the old writer before initial deployment. The unit's working/JAR paths must agree with `SERVER_ROOT`.
+The checked-in unit is a provisioning baseline, not an installer. Installed `bots2` settings use private Java, **-Xms64m -Xmx256m**, **MemoryMax448M / MemorySwapMax64M**, cgroup shutdown/private temp/strict filesystem/no-new-privileges restrictions. Ceilings cover JVM/native children/cache, not reservations. Keep writable data/backups in `ReadWritePaths`. Runtime changes need deliberate restart; unit edits need daemon-reload. Preserve old configuration privately first.
 
 ### Private runtime environment
 
-Create **`~/.config/regata/runtime.env`**, owned by the deployment user, mode **600**. It is read by systemd, not sourced by the Actions script; use `NAME=value` entries without shell `export`, command substitution or `$HOME` expansion. Enter actual secrets directly on the server, never through chat. Required/intentional entries:
+Use systemd `NAME=value`; no shell export/substitution or `$HOME` expansion. Never put secrets in chat/Git/logs/action output.
 
-| Variable | Value/purpose |
-| --- | --- |
-| `SPRING_PROFILES_ACTIVE` | `stage` to retain the existing intended stage/production configuration, after verifying its bot identity/destinations. Do not select `dev` on the production host. |
-| `REGATA_SIMULATOR_ENC_PASSWORD` | Existing stage encryption key, unchanged; it must decrypt the checked-in stage/base ENC values. |
-| `REGATA_SIMULATOR_DB_PATH` | Legacy path retained for configuration/overlap checks; on prepared `bots2`, the copied JsonDB directory is `/home/ubuntu/.local/share/regata-data/jsondb`. |
-| `REGATA_SIMULATOR_DATABASE_ENGINE` | Explicit `sqlite` for the requested cutover, **only after verified offline import**; no automatic startup import. |
-| `REGATA_SIMULATOR_DATABASE_SQLITE_FILE` | `/home/ubuntu/.local/share/regata-data/store.db` on prepared `bots2`; must be the verified new candidate, not an empty startup-created database. |
-| `REGATA_SIMULATOR_SOURCES_PATH` | Matching source UUID-directory root. |
-| `REGATA_SIMULATOR_TEMPLATES_PATH` | Matching template UUID-directory root. |
-| `MAGICK_PATH` | Absolute path to the verified ImageMagick 7 `magick` binary. |
-| `REGATA_SIMULATOR_BACKUP_LOCAL_DIRECTORY` | Existing private absolute backup root, normally the deployed user's `~/.local/share/regata-backups` expanded to an absolute path. **New runtime setting; not a GitHub secret.** |
-| `REGATA_SIMULATOR_BACKUP_RETENTION_COUNT` | Optional, default `7`; review capacity. |
-| `REGATA_SIMULATOR_SCHEDULING_ENABLED` | `false` for the first deployment smoke; explicitly set `true` only after verifying production destinations and behavior. This does not disable manual mutations/long polling. |
-| `SERVER_ADDRESS` / `SERVER_PORT` | Recommended `127.0.0.1` / `8080` behind the existing local HTTPS proxy; workflow readiness assumes port 8080. |
+- `SPRING_PROFILES_ACTIVE=stage`: existing production identity/destinations. Don't switch to Spring `prod` just to rename production; it lacks some creator/channel/backup properties.
+- `REGATA_SIMULATOR_ENC_PASSWORD`: existing key, unchanged unless explicitly migrating credentials.
+- `REGATA_SIMULATOR_DATABASE_ENGINE=sqlite`, `REGATA_SIMULATOR_DATABASE_SQLITE_FILE`: verified absolute store; no startup JSON import.
+- `REGATA_SIMULATOR_DB_PATH`: legacy compatibility/overlap-check path; never point an old binary there after new SQLite writes.
+- `REGATA_SIMULATOR_SOURCES_PATH`, `REGATA_SIMULATOR_TEMPLATES_PATH`: matching absolute media roots.
+- `MAGICK_PATH`: sandbox-compatible ImageMagick 7 entrypoint below.
+- `REGATA_SIMULATOR_BACKUP_LOCAL_DIRECTORY`: existing private backup root; optional `REGATA_SIMULATOR_BACKUP_RETENTION_COUNT` defaults to 7.
+- `REGATA_SIMULATOR_SCHEDULING_ENABLED`: true for normal production; false for a planned rollout smoke. Neither disables manual writes or registration.
+- `SERVER_ADDRESS=127.0.0.1`, `SERVER_PORT=8080`: nginx upstream/fixed release readiness endpoint.
 
-`application-stage.yml` supplies creator/token/username/channel/backup-chat and proxy settings. GitHub `stage` and Spring `stage` are distinct concepts even when intentionally using the same name. **Do not switch to Spring `prod` simply to rename production**: the current `application-prod.yml` does not itself supply creator/channel/backup-chat; it would need additional validated configuration.
+Production reboot startup and schedules are enabled. Default publishing: every 30 minutes; backup: Sunday at 12:15, `America/Sao_Paulo`. Override `regata-simulator.scheduling.{zone,publish-cron,backup-cron}` deliberately; changes enable live side effects.
 
-Default cookies remain Secure/HttpOnly/Lax/host-only in stage. Use the existing HTTPS proxy; do not expose port 8080 directly to the Internet. Stage trusts forwarded-header handling, so verify proxy/header source trust. Same-origin browser access does not need CORS entries; cross-origin frontends require explicit `REGATA_SIMULATOR_WEB_ALLOWED_ORIGINS_0` etc. containing exact origins. No API key is needed for CORS, and it does not replace CSRF/authentication.
+### ImageMagick and sandbox
 
-## 4. First cutover and deployment
+An ImageMagick **AppImage can work in SSH but fail under NoNewPrivileges** because FUSE mounting is denied (exit 127). Keep hardening: extract the existing bundle once privately, preserve it, and point `MAGICK_PATH` to **`squashfs-root/AppRun`**. The launcher configures bundled libraries/assets and executes native payload without FUSE. The current `bots2` entrypoint is `/home/ubuntu/.local/share/regata-tools/imagemagick-extracted-20261012/squashfs-root/AppRun`, not the original `/home/ubuntu/tools/bin/magick` bundle.
 
-1. Preserve the current JAR, launcher configuration and coherent database/media backup. Identify and stop the legacy `subprocess`/nohup/other service writer before the new service can start. Disable any old restart/crontab that could resurrect it. **Do not run two bots/JVMs against the same token or storage.** Installing the new unit does not stop an old process managed elsewhere.
-2. Verify production metadata/media pairing and backup accessibility without making destructive repairs. The old dev dataset's missing images are a separate historical finding, not evidence that production is coherent or broken.
-3. Confirm that no unrelated listener can satisfy the fixed port-8080 readiness probe. Keep schedules disabled for the first smoke.
-4. Once GitHub variables/key and VPS provisioning are ready, push the reviewed branch and merge to `main`, or invoke the release workflow on the exact approved ref with environment `stage`. CI failures/findings block deployment; do not suppress the gate to force a rollout.
-5. Verify service state, local readiness, protected login/API behavior, Telegram identity and an intentional private smoke using the real production configuration. Changes to `runtime.env` take effect on service restart, not merely `daemon-reload`.
-6. Enable schedules only after destinations, storage/rendering and backup capture/restore policy are verified. Plan restarts explicitly because normal startup registers the bot.
+Verify version **and full render** under actual EnvironmentFile/NoNewPrivileges/PrivateTmp/ProtectSystem/resource limits. Resource-only tests or hardened login tests do not verify rendering. Preserve scratch/image/geometry/process limits; don't bypass policy or expose raw subprocess output to fix packaging.
 
-The old unmanaged binary is **not automatically a previous release** in the new directory layout. A failed first managed deployment leaves writers stopped and no selected `current`; preserve an explicit manual recovery plan for the old binary and any new writes. On later managed same-schema deployments, automatic fallback selects a previous artifact but still does not revert data. Existing `incoming/<commit>`/`releases/<commit>` targets also mean a failed job is not blindly retryable for the same SHA; inspect state before cleanup/retry.
+### HTTPS and browser policy
 
-The successful [local final-artifact dev test](boot-4-live-dev-results.md) remains the live application gate. This checklist does not require a second VPS/staging server or a SQLite cutover. See [operations runbook](phase-5-operations-results.md) and [readiness review](deployment-readiness-review.md) for backup limits, writer freeze and deployment/recovery boundaries.
+Keep port 8080 private behind the trusted proxy. Stage handles forwarded headers: verify upstream/header trust. Keep Secure/HttpOnly/host-only/Lax cookies; same-origin needs no CORS grant, cross-origin needs exact origins. The certificate covers `regsim.boatarde.dev`, not necessarily the `.dev.br` alias. Test actual authenticated HTTPS/CSRF when changing proxy/cookies.
+
+## Release and rollback
+
+1. Check latest-head CI, resource capacity, recoverable data and intended destinations. Rehearse data/schema changes separately using [offline procedures](operations-runbook.md).
+2. Approve stage intentionally. Script validates hash/Java/paths/schema, confirms writers stopped and atomically selects `current`.
+3. Readiness defaults to **120 attempts**, one-second intervals, curl connect/total limits of 2/3 seconds. Script-level `READINESS_ATTEMPTS` accepts canonical integers 1..300. Bounded headroom is not an exact two-minute deadline; don't hide broken startup.
+4. Verify commit, service/restarts, local readiness, HTTPS and real Telegram/render behavior. Enable boot/schedules intentionally if paused; observe memory during jobs, not just idle.
+
+Interface: `bash scripts/deploy-release.sh ROOT FULL_COMMIT_SHA JAR_SHA256 SCHEMA_VERSION artifact-only-schema-compatible`. `JAVA_BIN` controls its Java check; workflow/actual unit must agree. Root needs incoming/releases; release output must be new.
+
+Failed readiness stops writers and rechecks a previous managed same-schema artifact, still reporting failure; first release removes selection and remains stopped. Failed/unmanaged binaries aren't known-good fallbacks. Unconfirmed stop or failed fallback needs manual recovery. **Artifact rollback does not undo data/schema writes**; equal markers don't establish arbitrary old-binary compatibility.
+
+Don't blindly rerun a failed same-SHA job: paths already exist and old jobs use old scripts. Preserve failed artifacts; use a reviewed new release or explicit stopped/archive procedure. Never delete data/recovery files to make retry pass.
+
+## Troubleshooting and smoke checks
+
+- Read-only: `systemctl --user status regatasimulator.service`, `systemctl --user show regatasimulator.service`, `readlink ~/.local/share/regata/current`, local probes and HTTPS response codes. Summarize journals without credentials/raw Telegram URLs/private Messages.
+- UP means lifecycle, not rendering. Correlate `operation=MemeService.publish outcome=completed`, scheduler failures, cgroup peak/swap/limit/OOM events and restarts.
+- Exit 127: reproduce under full sandbox, inspect AppImage/FUSE/loader/delegate requirements before changing policy.
+- **POST `/api/admin/post_meme`**, **POST `/api/admin/create_backup`** require admin login/fresh post-login CSRF. They send real messages/mutate state: authorize, invoke once, never replay uncertain responses. Publish HTTP 200 follows render/send/persistence completion.
+- Shared small hosts may reach cgroup ceilings during recovery. Prefer sequential jobs and monitor pressure; don't silently increase limits/stop unrelated apps. Swap occupancy alone doesn't establish active thrashing or spare capacity.
+
+Use the [recovery runbook](operations-runbook.md) for data protection and partial failure.

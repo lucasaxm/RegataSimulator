@@ -1,0 +1,49 @@
+# Build, dependency and security maintenance
+
+[build.gradle](../build.gradle), [gradle.lockfile](../gradle.lockfile), [wrapper configuration](../gradle/wrapper/gradle-wrapper.properties) and [CI](../.github/workflows/) are version authorities. Keep upgrade policy and compatibility requirements here, not historical vulnerability/test timelines.
+
+## Runtime baseline
+
+| Family | Configured baseline |
+| --- | --- |
+| Java / Gradle | Java 21, release floor 21.0.12.1; Temurin 21.0.12.1+1 / Gradle 8.14.6 |
+| Boot / Framework / Security / Session | 4.1.1 / 7.0.9 / 7.1.1 / 4.1.1 |
+| Tomcat / springdoc | 11.0.26 / 3.1.1 |
+| Jackson 2 / Jackson 3 | 2.21.7 / 3.1.7 |
+| Xerial / SQLite / Liquibase | 3.53.4.0 / 3.53.4 / 4.33.0 |
+| Telegram Bots / JsonDB / native Jasypt | 6.9.7.1 / 1.0.115-j11 / 1.9.3 |
+
+Boot provides compatible Spring families. Jackson 2 is persistence/Telegram/preferred HTTP via `spring-boot-jackson2`; patch both JSON families coherently. Strict runtimeClasspath locking doesn't lock test/plugin graphs. Retain SQLite's runtime patch guard/per-connection durability.
+
+## Release validation
+
+- `./gradlew verifyMaintenanceJava clean build` — patched Java release gate/tests/package.
+- `node --test src/test/js/*.test.cjs` — separate browser/deployment/scanner gates.
+- `./gradlew dependencyScan` — actual OSV Maven scan/inventory/notices.
+- Node shim trouble: supply `-PnodeExecutable=/absolute/path/to/node`.
+- Isolated JDK proof: set JAVA_HOME/PATH plus `-Porg.gradle.java.installations.paths=/absolute/jdk`, disable auto-detect/auto-download and use `--info` to verify **compiler and test executor**, not merely launcher. Don't install globally just for testing.
+
+CI verifies the exact official Linux Temurin archive's SHA256 before setup-java `jdkfile`. Runtime `21.0.12.1+1` isn't valid setup-java SemVer; current archive uses supported cache identifier `21.0.12+101`. That identifier does not replace checksum/runtime verification. Update URL/hash/identifier coherently. Gradle distribution checksum/wrapper validation remain mandatory.
+
+## Scanner and license boundaries
+
+Inventory retains resolved coordinates and embedded LICENSE/NOTICE/COPYING under `build/dependency-security/`; absent notices require upstream POM review. CI retains evidence 30 days; archive longer if required and preserve notices when redistributing.
+
+Public OSV scanner needs no key: 50-package batches, three attempts, 15-second request/stream bounds, 4 MiB response cap. Findings/malformed/paginated/incomplete/network-failed results fail the gate; stale reports removed. **Don't suppress the gate to force deployment.** Zero findings is time-bound Maven-graph evidence, not security certification.
+
+Review JDK/native ImageMagick/SQLite/OS/CDN advisories, upstream support/licenses separately; Maven scanning doesn't cover those, unknown advisories or every exploit path. Version numbers/fake scanner tests/local passes don't establish real CI/production behavior.
+
+## Legacy encrypted configuration
+
+The native bridge preserves existing ENC: PBEWITHHMACSHA512ANDAES_256, SunJCE, pool size 1, 1,000 iterations, random salt/IV, Base64. **Compatibility only, not a new KDF recommendation.** Don't rewrite production ciphertext or encryption policy incidentally.
+
+- Preserve lazy reads/source order/enumeration/contains/origin/relaxed lookup, `MapPropertySource` type and original backing map.
+- Unsupported GCM/custom/asymmetric settings, malformed ciphertext, missing/wrong keys and cycles fail closed with no secret-bearing causes/plaintext fallback. Higher-precedence plaintext still follows Spring precedence.
+- `EncryptedPropertyFailure` intentionally is a **cause-free Error**: Boot opaque-source mapping catches exceptions and could fall through to lower-precedence plaintext. Don't "tidy" it away without regression coverage.
+- Keep environment-postprocessor/late-initializer spring.factories discovery. Automated tests use synthetic ciphertext; authorized real credential checks stay in memory, never fixtures/docs/logs.
+
+## Upgrade workflow
+
+Scope runtime/dependency/schema changes explicitly; select published compatible releases, not speculative versions or isolated incompatible Spring overrides. Refresh lock/inventory/scan; run clean Java/Node gates and full filter-chain/property/repository/migration/recovery regressions. Review binary/native compatibility; separate schema cutover from artifact rollout.
+
+Native changes need actual renders under full service environment/sandbox; readiness and shell version checks aren't sufficient. Preserve trust, backups/rollback and [approval controls](deployment-setup.md). Per-run evidence belongs in CI/private operational storage, not new report docs.
