@@ -97,7 +97,7 @@ test('failed first release leaves writers stopped and no current artifact', () =
 });
 test('service definition supervises cgroup, bounds shutdown and references only operator-owned secret file', () => {
   const unit = fs.readFileSync('scripts/regatasimulator.service', 'utf8');
-  for (const field of ['KillMode=control-group', 'TimeoutStopSec=45', 'UMask=0077', 'Restart=on-failure', 'EnvironmentFile=%h/.config/regata/runtime.env']) assert.ok(unit.includes(field));
+  for (const field of ['KillMode=control-group', 'TimeoutStopSec=45', 'UMask=0077', 'Restart=on-failure', 'EnvironmentFile=%h/.config/regata/runtime.env', '-Djava.net.preferIPv4Stack=true']) assert.ok(unit.includes(field));
   assert.equal(unit.includes('subprocess'), false);
 });
 

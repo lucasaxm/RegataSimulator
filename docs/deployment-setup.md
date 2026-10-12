@@ -36,6 +36,8 @@ Use canonical non-symlink paths/private directories/deployment-user ownership. P
 
 The checked-in unit is a provisioning baseline, not an installer. Installed `bots2` settings use private Java, **-Xms64m -Xmx256m**, **MemoryMax448M / MemorySwapMax64M**, cgroup shutdown/private temp/strict filesystem/no-new-privileges restrictions. Ceilings cover JVM/native children/cache, not reservations. Keep writable data/backups in `ReadWritePaths`. Runtime changes need deliberate restart; unit edits need daemon-reload. Preserve old configuration privately first.
 
+The service template adds **`-Djava.net.preferIPv4Stack=true`** for Regata's JVM, avoiding unsupported IPv6 routes on the current IPv4-only host. This belongs in the actual unit's ExecStart (or private per-service JAVA_TOOL_OPTIONS), **not** the artifact deployment script or host-wide network policy. Actions does not install/update the unit: apply the flag explicitly to existing host-specific units, preserving their private Java/heap/sandbox settings, then daemon-reload/restart with authorization. A committed template change alone does not alter the live JVM. Check DNS/IP-family routes and connectivity before attributing every network failure to IPv6.
+
 ### Private runtime environment
 
 Use systemd `NAME=value`; no shell export/substitution or `$HOME` expansion. Never put secrets in chat/Git/logs/action output.
@@ -81,6 +83,7 @@ Don't blindly rerun a failed same-SHA job: paths already exist and old jobs use 
 - UP means lifecycle, not rendering. Correlate `operation=MemeService.publish outcome=completed`, scheduler failures, cgroup peak/swap/limit/OOM events and restarts.
 - Exit 127: reproduce under full sandbox, inspect AppImage/FUSE/loader/delegate requirements before changing policy.
 - **POST `/api/admin/post_meme`**, **POST `/api/admin/create_backup`** require admin login/fresh post-login CSRF. They send real messages/mutate state: authorize, invoke once, never replay uncertain responses. Publish HTTP 200 follows render/send/persistence completion.
+- Photo sends have bounded connection/429 retries using the same rendered artifact; see [delivery contract](project-map.md#media-and-geometry). Ambiguous read/reset failures and server errors are not blindly retried, and failed delivery is not durably queued for later. The next cron invocation is a new generation, not recovery of the previous one.
 - Shared small hosts may reach cgroup ceilings during recovery. Prefer sequential jobs and monitor pressure; don't silently increase limits/stop unrelated apps. Swap occupancy alone doesn't establish active thrashing or spare capacity.
 
 Use the [recovery runbook](operations-runbook.md) for data protection and partial failure.
