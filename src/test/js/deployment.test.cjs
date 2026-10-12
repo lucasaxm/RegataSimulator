@@ -29,11 +29,12 @@ function fixture(options = {}) {
     if(process.argv.includes('show'))console.log(process.argv.includes('--property=MainPID')?${JSON.stringify(options.stuck ? '99' : '0')}: 'inactive');
     process.exit(${options.stopFailure ? "process.argv.includes('stop')?1:0" : '0'});`);
   fake('curl', `const f=require('node:fs');const current=f.existsSync(${JSON.stringify(path.join(root, 'current'))})?f.readlinkSync(${JSON.stringify(path.join(root, 'current'))}):'';
-    console.log(JSON.stringify({status:${options.failAll ? "'DOWN'" : options.failNew ? `current==='releases/${next}'?'DOWN':'UP'` : "'UP'"}}));`);
+    const counter=${JSON.stringify(path.join(base, 'readiness-calls'))};const calls=f.existsSync(counter)?Number(f.readFileSync(counter,'utf8'))+1:1;f.writeFileSync(counter,String(calls));
+    console.log(JSON.stringify({status:${options.failAll ? "'DOWN'" : options.failNew ? `current==='releases/${next}'?'DOWN':'UP'` : options.readyAfter ? `calls>${options.readyAfter}?'UP':'DOWN'` : "'UP'"}}));`);
   const checksum = crypto.createHash('sha256').update('synthetic artifact').digest('hex');
   return { base, root, log, run(overrides = {}) {
     return spawnSync('bash', [script, root, next, overrides.checksum || checksum, '3', 'artifact-only-schema-compatible'],
-      { encoding: 'utf8', timeout: 20000, env: { ...process.env, PATH: bin + path.delimiter + process.env.PATH, JAVA_BIN: path.join(bin, 'java') } });
+      { encoding: 'utf8', timeout: 20000, env: { ...process.env, PATH: bin + path.delimiter + process.env.PATH, JAVA_BIN: path.join(bin, 'java'), READINESS_ATTEMPTS: overrides.readinessAttempts || '30' } });
   }, clean() { fs.rmSync(base, { recursive: true, force: true }); } };
 }
 
@@ -52,6 +53,28 @@ test('readiness failure restores previous artifact and remains failed', () => {
     assert.equal(fs.readlinkSync(path.join(f.root, 'current')), 'releases/' + old);
     assert.match(r.stderr, /previous artifact restored/);
   } finally { f.clean(); }
+});
+
+test('configured readiness allowance accepts startup beyond the old 30-attempt limit', () => {
+  const f = fixture({ readyAfter: 35 }); try {
+    const r = f.run({ readinessAttempts: '40' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(fs.readlinkSync(path.join(f.root, 'current')), 'releases/' + next);
+  } finally { f.clean(); }
+});
+
+test('invalid readiness allowances are refused before service or artifact changes', () => {
+  const f = fixture(); try {
+    for (const readinessAttempts of ['0', '301', '-1', 'abc', '01']) {
+      assert.equal(f.run({ readinessAttempts }).status, 2);
+      assert.equal(fs.existsSync(f.log), false);
+      assert.equal(fs.readlinkSync(path.join(f.root, 'current')), 'releases/' + old);
+    }
+  } finally { f.clean(); }
+});
+
+test('default readiness allowance provides bounded headroom for constrained hosts', () => {
+  assert.match(fs.readFileSync(script, 'utf8'), /readiness_attempts=\$\{READINESS_ATTEMPTS:-120\}/);
 });
 test('unconfirmed writer stop never switches current', () => {
   const f = fixture({ stuck: true }); try {

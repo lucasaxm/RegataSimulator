@@ -6,6 +6,8 @@ umask 077
 [[ $# -eq 5 ]] || { echo 'Expected root, release id, SHA256, schema version and rollback acknowledgment' >&2; exit 2; }
 root=$1 id=$2 checksum=$3 schema=$4 acknowledgment=$5
 [[ "$root" =~ ^/[a-zA-Z0-9_./-]+$ && "$root" != *'/../'* && "$root" != *'/./'* && "$root" != / && "$id" =~ ^[a-f0-9]{40}$ && "$checksum" =~ ^[a-f0-9]{64}$ && "$schema" =~ ^[1-9][0-9]{0,3}$ && "$acknowledgment" == artifact-only-schema-compatible ]] || { echo 'Unsafe deployment arguments' >&2; exit 2; }
+readiness_attempts=${READINESS_ATTEMPTS:-120}
+[[ "$readiness_attempts" =~ ^[1-9][0-9]{0,2}$ ]] && (( readiness_attempts <= 300 )) || { echo 'Readiness attempts must be between 1 and 300' >&2; exit 2; }
 for directory in "$root" "$root/releases" "$root/incoming"; do
     [[ -d "$directory" && ! -L "$directory" ]] || { echo 'Operator-created private deployment directories required' >&2; exit 2; }
     part=$directory
@@ -47,7 +49,7 @@ stop_writers() {
     return 1
 }
 ready() {
-    for ((i=0;i<30;i++)); do
+    for ((i=0;i<readiness_attempts;i++)); do
         if curl --fail --silent --show-error --connect-timeout 2 --max-time 3 --noproxy '*' "$url" 2>/dev/null | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"'; then return 0; fi
         sleep 1
     done
