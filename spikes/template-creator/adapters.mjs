@@ -1,6 +1,6 @@
 import Konva from 'konva';
 import Moveable from 'moveable';
-import { FONT_FAMILIES, clone, layerOrder, layoutText, moveArea, moveCorner,
+import { FONT_FAMILIES, clone, layoutText, moveArea, moveCorner,
     rectPoints, resolveText } from './model.mjs';
 
 // Browser-only previews: no image export, rectification, HTML interpolation or I/O.
@@ -9,6 +9,32 @@ const corners = area => area.type === 'image' ? area.points : rectPoints(area.re
 const sourceOf = (doc, area) => doc.sources.find(source => source.slot === area.source);
 const font = (size, family, weight) => `${weight} ${size}px "${family}"`;
 const canvas = () => document.createElement('canvas');
+const imageTemplates = new WeakMap();
+const generatedTemplates = new Map();
+const boxFill = area => typeof area.style.boxFill === 'string'
+    && /^#[0-9a-f]{6}$/i.test(area.style.boxFill) ? area.style.boxFill : null;
+
+function loadedTemplateImage(state) {
+    const image = state.templateImage; // Runtime-only; never read images from document JSON.
+    if (typeof HTMLImageElement !== 'undefined' && image instanceof HTMLImageElement) {
+        return image.complete && image.naturalWidth > 0 && image.naturalHeight > 0 ? image : null;
+    }
+    if ((typeof HTMLCanvasElement !== 'undefined' && image instanceof HTMLCanvasElement)
+        || (typeof OffscreenCanvas !== 'undefined' && image instanceof OffscreenCanvas)
+        || (typeof ImageBitmap !== 'undefined' && image instanceof ImageBitmap)) {
+        return image.width > 0 && image.height > 0 ? image : null;
+    }
+    return null;
+}
+
+const customImageEditing = state => state.document.scene === 'custom'
+    && Boolean(loadedTemplateImage(state)) && !state.clean;
+
+function previewOrder(doc) {
+    // Same native background semantics, without the older model's demo-only validation.
+    return [...doc.areas.filter(area => area.background).map(area => area.id),
+        'template', ...doc.areas.filter(area => !area.background).map(area => area.id)];
+}
 
 function textLayout(doc, area, context) {
     return layoutText(resolveText(area.text, sourceOf(doc, area).description), area.rect,
@@ -18,10 +44,18 @@ function textLayout(doc, area, context) {
         });
 }
 
-function template(doc, target = canvas()) {
-    target.width = doc.width;
-    target.height = doc.height;
+function template(doc, target = canvas(), image = null) {
+    const limit = doc.scene === 'custom' && !image ? 900 : 2048;
+    const ratio = Math.min(1, limit / doc.width, limit / doc.height);
+    target.width = Math.max(1, Math.floor(doc.width * ratio));
+    target.height = Math.max(1, Math.floor(doc.height * ratio));
     const c = target.getContext('2d');
+    if (image) {
+        c.drawImage(image, 0, 0, target.width, target.height);
+        return target; // Keep uploaded alpha; no synthetic background or inferred cutouts.
+    }
+    if (doc.scene === 'custom') return target;
+    c.scale(target.width / doc.width, target.height / doc.height);
     c.fillStyle = '#20272e';
     c.fillRect(0, 0, doc.width, doc.height);
     c.fillStyle = doc.scene === 'chat' ? '#1f3037' : '#34404a';
@@ -42,7 +76,28 @@ function template(doc, target = canvas()) {
     return target;
 }
 
-function paintCanvas(target, doc, area) {
+function cachedTemplate(state) {
+    const doc = state.document, image = loadedTemplateImage(state);
+    const key = `${doc.scene}:${doc.width}:${doc.height}`;
+    if (image) {
+        const size = `${image.naturalWidth ?? image.width}:${image.naturalHeight ?? image.height}`;
+        const signature = `${key}:${size}:${image.currentSrc ?? ''}`;
+        let record = imageTemplates.get(image);
+        if (record?.signature !== signature) {
+            record = { signature, raster: template(doc, canvas(), image) };
+            imageTemplates.set(image, record);
+        }
+        return record.raster;
+    }
+    if (!generatedTemplates.has(key)) {
+        // Bound retained demo/blank rasters as documents change dimensions.
+        if (generatedTemplates.size >= 4) generatedTemplates.delete(generatedTemplates.keys().next().value);
+        generatedTemplates.set(key, template(doc));
+    }
+    return generatedTemplates.get(key);
+}
+
+function paintCanvas(target, doc, area, translucent = false) {
     const size = area.type === 'image' ? { width: 100, height: 100 } : area.rect;
     // Bound raster allocation; CSS retains the full canonical world dimensions.
     const ratio = Math.min(1, 2048 / size.width, 2048 / size.height);
@@ -52,13 +107,21 @@ function paintCanvas(target, doc, area) {
     c.scale(ratio, ratio);
     c.textBaseline = 'top';
     if (area.type === 'image') {
+        // Colored synthetic sources, not real-source pixel-parity previews.
+        c.globalAlpha = translucent ? 0.35 : 1;
         c.fillStyle = sourceOf(doc, area).color;
         c.fillRect(0, 0, 100, 100);
+        c.globalAlpha = 1;
         c.font = 'bold 12px Arial';
         c.fillStyle = '#16232b';
         c.textAlign = 'center';
-        c.fillText(`Source ${area.source}`, 50, 44);
+        c.fillText(`Source ${area.source}`, 50, 44, 92);
         return;
+    }
+    const background = boxFill(area);
+    if (background) {
+        c.fillStyle = background;
+        c.fillRect(0, 0, area.rect.width, area.rect.height);
     }
     const { lines, fontSize, lineHeight } = textLayout(doc, area, c);
     const style = area.style;
@@ -189,10 +252,10 @@ export function createAdapter(engine, root, hooks) {
 function konvaAdapter(root, ctx) {
     const stage = new Konva.Stage({ container: root, width: 1, height: 1 });
     const sceneLayer = new Konva.Layer(), overlayLayer = new Konva.Layer();
-    const world = new Konva.Group(), overlay = new Konva.Group();
+    const world = new Konva.Group(), guides = new Konva.Group({ listening: false }), overlay = new Konva.Group();
     stage.add(sceneLayer, overlayLayer);
     sceneLayer.add(world);
-    overlayLayer.add(overlay);
+    overlayLayer.add(guides, overlay);
     const measure = canvas().getContext('2d');
     const records = new Map();
     let state, selected, handles = [];
@@ -200,16 +263,24 @@ function konvaAdapter(root, ctx) {
     function updateHandles(area) {
         corners(area).forEach((point, index) => handles[index]?.position(point));
     }
+    function updateGuide(area) {
+        records.get(area.id)?.guide?.setAttrs({
+            points: corners(area).flatMap(point => [point.x, point.y]),
+            stroke: area.id === selected ? SELECTED : sourceOf(state.document, area).color,
+            strokeWidth: (area.id === selected ? 2 : 1) / state.view.scale });
+    }
     function paint(area) {
         const record = records.get(area.id);
         if (!record) return;
         record.group.position({ x: 0, y: 0 });
         const points = corners(area), color = sourceOf(state.document, area).color;
         const strokeWidth = (area.id === selected ? 2 : 1) / state.view.scale;
+        const imageFill = customImageEditing(state) ? `${color}73` : color;
         record.line.setAttrs({ points: points.flatMap(point => [point.x, point.y]),
-            fill: area.type === 'image' ? color : 'rgba(0,0,0,0)',
+            fill: area.type === 'image' ? imageFill : boxFill(area) ?? 'rgba(0,0,0,0)',
             stroke: area.id === selected ? SELECTED : color,
-            strokeWidth: state.clean ? 0 : strokeWidth });
+            strokeWidth: state.clean || record.guide ? 0 : strokeWidth });
+        updateGuide(area);
         if (area.type === 'image') {
             const x = points.reduce((sum, point) => sum + point.x, 0) / 4;
             const y = points.reduce((sum, point) => sum + point.y, 0) / 4;
@@ -281,14 +352,15 @@ function konvaAdapter(root, ctx) {
             state = next;
             const bounds = root.parentElement.getBoundingClientRect();
             stage.size({ width: bounds.width, height: bounds.height });
-            for (const group of [world, overlay]) group.setAttrs({ x: state.view.x, y: state.view.y,
+            for (const group of [world, guides, overlay]) group.setAttrs({ x: state.view.x, y: state.view.y,
                 scaleX: state.view.scale, scaleY: state.view.scale });
-            world.destroyChildren(); overlay.destroyChildren(); records.clear(); handles = [];
+            world.destroyChildren(); guides.destroyChildren(); overlay.destroyChildren(); records.clear(); handles = [];
             selected = undefined;
             const templateIndex = state.document.areas.filter(area => area.background).length;
-            for (const [index, id] of layerOrder(state.document).entries()) {
+            for (const [index, id] of previewOrder(state.document).entries()) {
                 if (index === templateIndex) {
-                    world.add(new Konva.Image({ image: template(state.document), listening: false }));
+                    world.add(new Konva.Image({ image: cachedTemplate(state),
+                        width: state.document.width, height: state.document.height, listening: false }));
                     continue;
                 }
                 const area = state.document.areas.find(item => item.id === id);
@@ -299,7 +371,11 @@ function konvaAdapter(root, ctx) {
                 const content = new Konva.Text({ wrap: 'none', align: 'center',
                     fill: '#16232b', fontFamily: 'Arial', fontSize: 22, fontStyle: 'bold' });
                 clip.add(content); group.add(line, clip); world.add(group);
-                records.set(id, { group, line, clip, content });
+                // Outlines remain visible above opaque templates, without reordering native planes.
+                const guide = customImageEditing(state)
+                    ? new Konva.Line({ closed: true, lineJoin: 'round', listening: false }) : null;
+                if (guide) guides.add(guide);
+                records.set(id, { group, line, clip, content, guide });
                 group.on('click tap', () => ctx.select(id));
                 group.on('dragstart', () => { if (!ctx.begin(id, 'drag')) group.stopDrag(); });
                 group.on('dragmove', () => {
@@ -308,6 +384,7 @@ function konvaAdapter(root, ctx) {
                     ctx.accept(() => moveArea(live.original, group.x(), group.y()));
                     const a = corners(live.accepted)[0], b = corners(live.original)[0];
                     group.position({ x: a.x - b.x, y: a.y - b.y });
+                    updateGuide(live.accepted);
                     updateHandles(live.accepted); draw();
                 });
                 group.on('dragend', () => ctx.end('drag'));
@@ -330,13 +407,16 @@ function moveableAdapter(root, ctx) {
     world.style.pointerEvents = 'none';
     const backdrop = canvas();
     backdrop.className = 'dom-template';
+    const guides = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    Object.assign(guides.style, { position: 'absolute', left: '0', top: '0',
+        pointerEvents: 'none', overflow: 'visible' });
     root.append(world);
     const records = new Map(), listeners = new AbortController();
     // Controls live in an unscaled container: zoom is UI magnification, NOT camera scale.
     const editor = new Moveable(root, { container: root, rootContainer: root, zoom: 1,
         origin: false, pinchable: false, keepRatio: false, throttleDrag: 0, throttleResize: 0,
         checkResizableError: false, renderDirections: ['nw', 'ne', 'se', 'sw'] });
-    let state, selected, pending = null;
+    let state, selected, pending = null, backdropRaster;
     function releasePending(token = pending) {
         if (!token || pending !== token) return;
         pending = null;
@@ -345,12 +425,16 @@ function moveableAdapter(root, ctx) {
         }
     }
     function decorate(area) {
-        const target = records.get(area.id)?.target;
-        if (!target) return;
+        const record = records.get(area.id);
+        if (!record) return;
+        const { target, guide } = record;
         const color = area.id === selected ? SELECTED : sourceOf(state.document, area).color;
         const width = (area.id === selected ? 2 : 1) / state.view.scale;
-        target.style.outline = state.clean ? 'none' : `${width}px solid ${color}`;
+        target.style.outline = state.clean || customImageEditing(state) ? 'none' : `${width}px solid ${color}`;
         target.classList.toggle('selected', area.id === selected && !state.clean);
+        guide.setAttribute('points', corners(area).map(point => `${point.x},${point.y}`).join(' '));
+        guide.setAttribute('stroke', color);
+        guide.setAttribute('stroke-width', String(width));
     }
     function paint(area) {
         const record = records.get(area.id);
@@ -363,7 +447,7 @@ function moveableAdapter(root, ctx) {
                 : `translate(${area.rect.x}px,${area.rect.y}px)`,
             cursor: state.pan || state.clean ? 'default' : 'move' });
         decorate(area);
-        paintCanvas(image, state.document, area);
+        paintCanvas(image, state.document, area, customImageEditing(state));
     }
     function focus(id) {
         selected = id;
@@ -422,11 +506,16 @@ function moveableAdapter(root, ctx) {
         const live = ctx.live();
         if (live?.kind !== 'resize') return;
         ctx.accept(() => {
-            const area = clone(live.original);
-            const position = transformedPoint(new DOMMatrix(event.drag.transform), 0, 0);
+            const [horizontal, vertical] = event.direction;
+            const index = [[-1, -1], [1, -1], [1, 1], [-1, 1]]
+                .findIndex(([x, y]) => x === horizontal && y === vertical);
+            const position = new DOMMatrix(event.drag.transform).transformPoint(new DOMPoint(0, 0));
             // Moveable already inverts the parent CSS camera; width/height are world pixels.
-            area.rect = { ...position, width: Math.round(event.width), height: Math.round(event.height) };
-            return area;
+            // Quantize only the active corner; preserve the original opposite corner.
+            return moveCorner(live.original, index, {
+                x: position.x / position.w + (horizontal === 1 ? event.width : 0),
+                y: position.y / position.w + (vertical === 1 ? event.height : 0),
+            });
         });
         paint(live.accepted);
     });
@@ -483,22 +572,38 @@ function moveableAdapter(root, ctx) {
             state = next;
             world.style.transform = `translate(${state.view.x}px,${state.view.y}px) scale(${state.view.scale})`;
             world.style.width = `${state.document.width}px`; world.style.height = `${state.document.height}px`;
-            template(state.document, backdrop);
+            backdrop.style.width = `${state.document.width}px`;
+            backdrop.style.height = `${state.document.height}px`;
+            const raster = cachedTemplate(state);
+            if (backdropRaster !== raster) {
+                backdrop.width = raster.width; backdrop.height = raster.height;
+                backdrop.getContext('2d').drawImage(raster, 0, 0);
+                backdropRaster = raster;
+            }
+            guides.setAttribute('width', String(state.document.width));
+            guides.setAttribute('height', String(state.document.height));
+            guides.style.display = customImageEditing(state) ? 'block' : 'none';
             for (const [id, record] of records) {
-                if (!state.document.areas.some(area => area.id === id)) { record.target.remove(); records.delete(id); }
+                if (!state.document.areas.some(area => area.id === id)) {
+                    record.target.remove(); record.guide.remove(); records.delete(id);
+                }
             }
             const templateIndex = state.document.areas.filter(area => area.background).length;
-            for (const [index, id] of layerOrder(state.document).entries()) {
+            for (const [index, id] of previewOrder(state.document).entries()) {
                 if (index === templateIndex) { world.append(backdrop); continue; }
                 const area = state.document.areas.find(item => item.id === id);
                 if (!records.has(id)) {
                     const target = document.createElement('div'), image = canvas();
+                    const guide = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                    guide.setAttribute('fill', 'none');
                     target.className = `dom-area ${area.type}-region`;
                     target.dataset.areaId = id; target.style.pointerEvents = 'auto';
-                    target.append(image); records.set(id, { target, image });
+                    target.append(image); records.set(id, { target, image, guide });
                 }
                 world.append(records.get(id).target); paint(area);
+                guides.append(records.get(id).guide);
             }
+            world.append(guides); // Editor-only outlines stay above even opaque uploaded templates.
             focus(state.selectedId);
         },
         stop() { pending = null; editor.stopDrag(); },

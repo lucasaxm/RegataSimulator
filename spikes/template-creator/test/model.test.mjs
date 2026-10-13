@@ -30,6 +30,8 @@ test('public exports are exactly the agreed browser-independent API', () => {
         'FONT_FAMILIES', 'clone', 'rectPoints', 'createScene', 'resolveText', 'layoutText',
         'validateDocument', 'layerOrder', 'moveArea', 'moveCorner', 'encodeDocument',
         'decodeDocument', 'viewToImage', 'imageToView', 'zoomAt',
+        'createEmptyDocument', 'sourceOptions', 'nextImageSource', 'addDrawnArea',
+        'importImageCsv', 'exportImageCsv',
     ].sort());
     assert.deepEqual(FONT_FAMILIES, { sans: 'Arial', serif: 'Georgia', mono: 'Courier New' });
     assert.ok(Object.isFrozen(FONT_FAMILIES));

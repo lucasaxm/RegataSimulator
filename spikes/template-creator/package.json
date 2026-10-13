@@ -7,7 +7,7 @@
     "start": "node server.mjs",
     "test": "node --test test/*.test.mjs",
     "test:browser": "playwright test",
-    "check": "node --check app.mjs && node --check model.mjs && node --check adapters.mjs && node --check server.mjs",
+    "check": "node --check app.mjs && node --check model.mjs && node --check media.mjs && node --check adapters.mjs && node --check server.mjs",
     "audit": "npm audit --audit-level=low"
   },
   "dependencies": {

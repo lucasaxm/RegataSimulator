@@ -10,13 +10,18 @@
 </head>
 <body>
   <header>
-    <div><h1>Laboratório de templates</h1><p>Imagens e textos ligados à mesma source. Somente exemplos locais.</p></div>
+    <div><h1>Laboratório de templates</h1><p>Carregue sua imagem e desenhe áreas ligadas à mesma source. Tudo local.</p></div>
     <label>Editor <select id="engine"><option value="konva">Konva · canvas</option><option value="moveable">Moveable · experimental</option></select></label>
   </header>
   <p id="candidate-warning" role="note" hidden>Moveable: falha conhecida ao começar a arrastar uma área ainda não selecionada. Selecione pela lista antes de arrastar. Mantido para comparação, não recomendado.</p>
+  <section class="filebar" aria-label="Imagem do template">
+    <label>Carregar template <input id="template-file" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" aria-describedby="image-status"></label>
+    <div class="filemeta"><p id="image-info">Nenhuma imagem carregada.</p><output id="image-status" class="hint" aria-live="polite">PNG/JPEG até 20 MiB, 10.000 px por lado e 40 milhões de pixels. JPEG: limites de dimensões verificados após decodificar.</output></div>
+  </section>
   <nav aria-label="Ferramentas do laboratório">
-    <label>Exemplo <select id="scene"><option value="captions">Fotos com legendas</option><option value="chat">Perfil com mensagem</option></select></label>
-    <button id="add-image">+ Imagem</button><button id="add-text">+ Texto</button>
+    <label>Template / demos <select id="scene"><option value="custom" selected>Seu template</option><option value="captions">Demo · Fotos com legendas</option><option value="chat">Demo · Perfil com mensagem</option></select></label>
+    <button id="select-tool" aria-pressed="true">Selecionar</button>
+    <button id="add-image" aria-pressed="false" disabled>Desenhar imagem</button><button id="add-text" aria-pressed="false" disabled>Desenhar texto</button>
     <button id="undo" title="Desfazer">Desfazer</button><button id="redo">Refazer</button>
     <button id="pan" aria-pressed="false">Mover tela</button>
     <button id="zoom-out" aria-label="Diminuir zoom">−</button><output id="zoom">100%</output><button id="zoom-in" aria-label="Aumentar zoom">+</button><button id="fit">Ajustar</button>
@@ -24,7 +29,11 @@
   </nav>
   <main>
     <section class="workspace" aria-label="Área de edição">
-      <div id="viewport" tabindex="0" aria-label="Canvas: arraste os cantos. Use duas pontas para zoom, ou setas para mover a área selecionada."><div id="surface"></div></div>
+      <div id="viewport" role="application" tabindex="0" aria-label="Canvas: desenhe áreas ou arraste os cantos. Use duas pontas para zoom, ou setas para mover a área selecionada.">
+        <div id="surface"></div>
+        <div id="draw-preview" aria-hidden="true" hidden></div>
+        <div id="empty-state"><div><h2>Comece pela imagem</h2><p>Carregue um PNG ou JPEG acima.<br>Para explorar sem arquivo, escolha uma demo.</p></div></div>
+      </div>
       <div class="canvas-footer"><span id="metrics">Carregando editores…</span><span>Prévia do navegador, não ImageMagick</span></div>
     </section>
     <aside aria-label="Áreas e propriedades">
@@ -41,16 +50,19 @@
         <div class="row"><label>Fonte <select id="font"><option value="sans">Sans (Arial)</option><option value="serif">Serif (Georgia)</option><option value="mono">Mono (Courier New)</option></select></label><label>Peso <select id="weight"><option value="normal">Normal</option><option value="bold">Negrito</option></select></label></div>
         <div class="row"><label>Tamanho máximo <input id="size" type="number" min="8" max="120"></label><label>Mínimo <input id="min-size" type="number" min="8" max="120"></label></div>
         <div class="row"><label>Cor <input id="fill" type="color"></label><label>Contorno <input id="outline" type="color"></label><label>Espessura <input id="outline-width" type="number" min="0" max="8"></label></div>
+        <div class="row"><label class="checkbox"><input id="box-fill-enabled" type="checkbox"> Fundo da caixa</label><label>Cor do fundo <input id="box-fill" type="color" value="#000000" disabled></label></div>
+        <p class="hint">O fundo cobre os pixels da caixa de texto; não é a opção “Atrás do template”.</p>
         <div class="row"><label>Alinhar <select id="align"><option value="left">Esquerda</option><option value="center">Centro</option><option value="right">Direita</option></select></label><label>Excesso <select id="overflow"><option value="shrink">Reduzir para caber</option><option value="clip">Manter tamanho</option></select></label></div>
         <label>Entrelinhas <input id="line-height" type="number" min="1" max="2" step="0.05"></label>
         <p id="text-result" class="hint"></p>
       </section>
       <details open><summary>Descrições de exemplo</summary><div id="samples"></div></details>
-      <details><summary>Documento experimental</summary><p class="hint">Formato do laboratório. Não é CSV nem um template válido para enviar ao bot.</p><button id="export">Baixar JSON</button><label>Importar JSON <input id="import" type="file" accept="application/json,.json"></label><pre id="document-summary"></pre></details>
-      <p class="hint">Uma ponta edita. Duas pontas movem/zooms. Fora das áreas, arraste para mover a tela. Texto usa caixas retangulares; imagens usam quatro cantos.</p>
+      <details><summary>CSV de imagens</summary><p class="hint">Somente áreas de imagem, com o cabeçalho e as coordenadas originais. Textos exigem JSON experimental.</p><label>Importar coordenadas <textarea id="csv-input" rows="4" maxlength="65536" spellcheck="false"></textarea></label><button id="csv-import" disabled>Importar CSV</button><label>CSV de saída <textarea id="csv-output" rows="4" readonly spellcheck="false"></textarea></label><button id="csv-copy" disabled>Copiar CSV</button></details>
+      <details><summary>Documento experimental</summary><p class="hint">JSON do laboratório, não aceito pelo bot. Não contém a imagem: para importar seu template, carregue antes a mesma imagem e dimensões. Não é um projeto completo nem uma exportação PNG.</p><button id="export">Baixar JSON</button><label>Importar JSON <input id="import" type="file" accept="application/json,.json"></label><pre id="document-summary"></pre></details>
+      <p class="hint">Desenhe por arrasto; Escape ou Selecionar cancela. Textos herdam a source selecionada ou da última imagem. Duas pontas cancelam o desenho e movem/zooms. Fora das áreas, arraste para mover a tela. Texto usa caixas retangulares; imagens usam quatro cantos.</p>
     </aside>
   </main>
-  <p id="status" role="status" aria-live="polite">Nenhum arquivo será enviado. Sem conexão com o bot.</p>
+  <output id="status" aria-live="polite">Nenhum arquivo será enviado. Sem conexão com o bot.</output>
   <footer><a href="/licenses.txt" target="_blank" rel="noopener">Licenças das bibliotecas</a></footer>
 </body>
 </html>

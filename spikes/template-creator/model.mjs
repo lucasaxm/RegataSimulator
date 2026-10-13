@@ -9,6 +9,9 @@ const MAX_FIELD_LENGTH = 512;
 const MAX_LAYOUT_LENGTH = 16384;
 const MAX_DOCUMENT_BYTES = 128 * 1024;
 const MAX_COORDINATE = 10000;
+const MAX_CSV_LENGTH = 64 * 1024;
+const CSV_HEADER = 'Area,Source,TLx,TLy,TRx,TRy,BRx,BRy,BLx,BLy,Background';
+const SOURCE_COLORS = Object.freeze(['#70b9cd', '#e3b56a', '#b298d5']);
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 const COLOR = /^#[0-9a-f]{6}$/i;
 const ID = /^[a-z0-9_-]{1,64}$/i;
@@ -102,6 +105,13 @@ function defaultStyle() {
     };
 }
 
+export function createEmptyDocument(width = 900, height = 620) {
+    return validateDocument({
+        format: 'regata-creator-spike', version: 1, width, height, scene: 'custom',
+        sources: [], areas: [],
+    });
+}
+
 export function createScene(name = 'captions') {
     requireThat(name === 'captions' || name === 'chat', 'Cena inválida.');
     const doc = {
@@ -164,7 +174,8 @@ export function resolveText(template, description) {
 
 function validateStyle(style) {
     exactKeys(style, ['font', 'size', 'minSize', 'fill', 'outline', 'outlineWidth',
-        'align', 'lineHeight', 'weight', 'overflow']);
+        'align', 'lineHeight', 'weight', 'overflow',
+        ...(style && Object.hasOwn(style, 'boxFill') ? ['boxFill'] : [])]);
     requireThat(typeof style.font === 'string' && Object.hasOwn(FONT_FAMILIES, style.font)
         && finite(style.size) && style.size >= 8 && style.size <= 120
         && finite(style.minSize) && style.minSize >= 8 && style.minSize <= style.size
@@ -174,7 +185,9 @@ function validateStyle(style) {
         && typeof style.outline === 'string' && COLOR.test(style.outline)
         && ['normal', 'bold'].includes(style.weight)
         && ['left', 'center', 'right'].includes(style.align)
-        && ['shrink', 'clip'].includes(style.overflow));
+        && ['shrink', 'clip'].includes(style.overflow)
+        && (!Object.hasOwn(style, 'boxFill') || style.boxFill === null
+            || (typeof style.boxFill === 'string' && COLOR.test(style.boxFill))));
 }
 
 function fittingPrefix(graphemes, start, width, measured) {
@@ -317,9 +330,11 @@ export function validateDocument(doc) {
         && Number.isInteger(doc.width) && doc.width > 0 && doc.width <= MAX_COORDINATE
         && Number.isInteger(doc.height) && doc.height > 0 && doc.height <= MAX_COORDINATE
         && doc.width * doc.height <= 40000000
-        && ['captions', 'chat'].includes(doc.scene)
-        && Array.isArray(doc.sources) && doc.sources.length >= 1 && doc.sources.length <= 128
-        && Array.isArray(doc.areas) && doc.areas.length >= 1 && doc.areas.length <= 128);
+        && ['captions', 'chat', 'custom'].includes(doc.scene)
+        && Array.isArray(doc.sources) && doc.sources.length <= 128
+        && Array.isArray(doc.areas) && doc.areas.length <= 128
+        && ((doc.sources.length >= 1 && doc.areas.length >= 1)
+            || (doc.scene === 'custom' && doc.sources.length === 0 && doc.areas.length === 0)));
     const slots = new Set();
     for (const source of doc.sources) {
         exactKeys(source, ['slot', 'description', 'color']);
@@ -353,6 +368,125 @@ export function validateDocument(doc) {
     }
     for (let slot = 1; slot <= references.size; slot++) requireThat(references.has(slot));
     return doc;
+}
+
+function usedSources(doc) {
+    return new Set(doc.areas.map(area => area.source));
+}
+
+function ensureSources(doc, required) {
+    requireThat(Number.isInteger(required) && required >= 1 && required <= 128, 'Fonte inválida.');
+    for (let slot = doc.sources.length + 1; slot <= required; slot++) {
+        doc.sources.push({ slot, description: `Source ${slot}`,
+            color: SOURCE_COLORS[(slot - 1) % SOURCE_COLORS.length] });
+    }
+}
+
+export function sourceOptions(doc, id) {
+    validateDocument(doc);
+    const area = doc.areas.find(item => item.id === id);
+    requireThat(area !== undefined, 'Área inválida.');
+    if (area.type === 'text') return [...usedSources(doc)].sort((a, b) => a - b);
+
+    // Match the current creator's adjacency rules, ignoring interleaved text.
+    const images = doc.areas.filter(item => item.type === 'image');
+    const index = images.indexOf(area);
+    if (index === 0) return [1];
+    const previous = images[index - 1].source;
+    let candidates = [previous, previous + 1];
+    if (index < images.length - 1) {
+        const difference = images[index + 1].source - previous;
+        if (difference === 0) candidates = [previous];
+        else if (difference !== 1) candidates = [previous + 1];
+    }
+    // Rebinding must not remove a slot still needed to bridge text/image refs.
+    // Palette declarations alone do not make a referenced slot contiguous.
+    return candidates.filter(candidate => {
+        if (candidate > 128) return false;
+        const references = new Set(doc.areas.map(item => item === area ? candidate : item.source));
+        for (let slot = 1; slot <= references.size; slot++) {
+            if (!references.has(slot)) return false;
+        }
+        return true;
+    });
+}
+
+export function nextImageSource(doc) {
+    validateDocument(doc);
+    const references = usedSources(doc);
+    let candidate = 1;
+    while (references.has(candidate)) candidate++;
+    requireThat(candidate <= 128, 'Limite de fontes atingido.');
+    // Appending cannot remove any existing union references. Both adjacent
+    // choices therefore remain contiguous, even when text already uses them.
+    const previous = doc.areas.findLast(area => area.type === 'image')?.source;
+    const choices = previous === undefined ? [1]
+        : [previous, previous + 1].filter(slot => slot <= 128);
+    return choices.includes(candidate) ? candidate : choices.at(-1);
+}
+
+export function addDrawnArea(doc, input) {
+    validateDocument(doc);
+    safeTree(input);
+    exactKeys(input, ['type', 'id', 'rect',
+        ...(input && Object.hasOwn(input, 'source') ? ['source'] : [])]);
+    requireThat(input.type === 'image' || input.type === 'text', 'Área inválida.');
+    // The controller normalizes reverse drags before calling this API. Do not
+    // silently round or flip input here; every drawn corner is an integer.
+    rectangle(input.rect, false);
+    requireThat(Object.values(input.rect).every(Number.isInteger)
+        && input.rect.width >= 1 && input.rect.height >= 1, 'Retângulo inválido.');
+    const points = rectPoints(input.rect);
+    validatePoints(points);
+    requireThat(overlapsCanvas(points, doc.width, doc.height), 'Área inválida.');
+
+    const result = clone(doc);
+    const references = usedSources(doc);
+    let source;
+    if (input.type === 'image') source = input.source ?? nextImageSource(doc);
+    else if (references.has(input.source)) source = input.source;
+    else source = doc.areas.findLast(area => area.type === 'image')?.source ?? 1;
+    ensureSources(result, source);
+    const common = { id: input.id, type: input.type, source, background: false };
+    result.areas.push(input.type === 'image' ? { ...common, points }
+        : { ...common, rect: clone(input.rect), text: '{{source.description}}',
+            style: { ...defaultStyle(), boxFill: null } });
+    return validateDocument(result);
+}
+
+export function importImageCsv(csv, width, height) {
+    requireThat(typeof csv === 'string' && csv.length > 0 && csv.length <= MAX_CSV_LENGTH,
+        'CSV inválido.');
+    requireThat(Number.isInteger(width) && Number.isInteger(height), 'Dimensões inválidas.');
+    const doc = createEmptyDocument(width, height);
+    const lines = csv.split(/\r?\n/u);
+    if (lines.at(-1) === '') lines.pop();
+    requireThat(lines[0] === CSV_HEADER && lines.length >= 2 && lines.length <= 129, 'CSV inválido.');
+    for (let index = 1; index < lines.length; index++) {
+        const fields = lines[index].split(',');
+        requireThat(fields.length === 11 && fields.every(field => /^-?\d+$/u.test(field)), 'CSV inválido.');
+        const values = fields.map(Number);
+        requireThat(values.every(Number.isSafeInteger), 'CSV inválido.');
+        const [area, source, ...coordinates] = values;
+        const background = coordinates.pop();
+        requireThat(area === index && (background === 0 || background === 1), 'CSV inválido.');
+        ensureSources(doc, source);
+        doc.areas.push({ id: `image-${index}`, type: 'image', source, background: background === 1,
+            points: Array.from({ length: 4 }, (_, corner) => ({
+                x: coordinates[corner * 2], y: coordinates[corner * 2 + 1],
+            })) });
+    }
+    return validateDocument(doc);
+}
+
+export function exportImageCsv(doc) {
+    validateDocument(doc);
+    requireThat(!doc.areas.some(area => area.type === 'text'),
+        'O CSV de imagens não suporta áreas de texto. Use JSON para preservar o texto.');
+    requireThat(doc.areas.length > 0, 'O CSV precisa de pelo menos uma área de imagem.');
+    return [CSV_HEADER, ...doc.areas.map((area, index) =>
+        [index + 1, area.source, ...area.points.flatMap(point => [Math.round(point.x), Math.round(point.y)]),
+            area.background ? 1 : 0].join(','))].join('\n');
 }
 
 export function layerOrder(doc) {

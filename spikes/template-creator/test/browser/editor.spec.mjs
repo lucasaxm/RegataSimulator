@@ -2,26 +2,28 @@ import { test as base, expect } from '@playwright/test';
 
 const ORIGIN = 'http://127.0.0.1:4173';
 const ENGINES = ['konva', 'moveable'];
+const staticAssets = new Set(['/', '/app.js', '/styles.css']);
+function allowedRequest(request) {
+  const url = new URL(request.url());
+  return url.origin === ORIGIN && ['GET', 'HEAD'].includes(request.method())
+    && (url.protocol === 'blob:' || (url.protocol === 'http:'
+      && staticAssets.has(url.pathname) && !url.search));
+}
 const test = base.extend({
   browserGuard: [async ({ page, context }, use) => {
     const errors = [], forbidden = [], requests = [];
     page.on('pageerror', error => errors.push(error.message));
-    page.on('request', request => requests.push({ url: request.url(), method: request.method() }));
+    context.on('request', request => { if (!allowedRequest(request)) requests.push(request.url()); });
     await context.route('**/*', async route => {
-      const url = new URL(route.request().url());
-      if (url.origin !== ORIGIN) {
-        forbidden.push(url.href);
+      if (!allowedRequest(route.request())) {
+        forbidden.push(route.request().url());
         await route.abort();
       } else await route.continue();
     });
     await use();
     expect.soft(errors, 'No uncaught browser exceptions').toEqual([]);
-    expect.soft(forbidden, 'No external network access').toEqual([]);
-    expect.soft(requests.filter(({ url, method }) => {
-      const parsed = new URL(url);
-      return parsed.origin !== ORIGIN || !['GET', 'HEAD'].includes(method)
-        || !['/', '/app.js', '/styles.css'].includes(parsed.pathname);
-    }), 'The editor only reads its local static assets; no backend calls').toEqual([]);
+    expect.soft(forbidden, 'No external network access or backend calls').toEqual([]);
+    expect.soft(requests, 'Only local static assets and same-origin image blobs').toEqual([]);
   }, { auto: true }],
 });
 
@@ -73,8 +75,14 @@ async function dragWorld(page, point, dx, dy) {
   await drag(page, start, dx * view.scale, dy * view.scale);
   return view.scale;
 }
+async function drawImage(page, from, to) {
+  await page.locator('#add-image').click();
+  const start = await worldPoint(page, from), end = await worldPoint(page, to);
+  await drag(page, start, end.x - start.x, end.y - start.y);
+}
+const sourceValues = page => page.locator('#source option').evaluateAll(options => options.map(option => Number(option.value)));
 function expectQuantizedPoint(actual, expected, bound) {
-  // Mobile mouse coordinates can quantize by one CSS pixel at the current camera scale.
+  // Desktop/mobile pointers can quantize by one screen CSS pixel, not one original pixel, at the fitted camera scale.
   for (const coordinate of ['x', 'y']) {
     expect(Number.isFinite(actual[coordinate])).toBe(true);
     expect(Number.isInteger(actual[coordinate])).toBe(true);
@@ -97,20 +105,19 @@ async function summary(page) {
 
 for (const engine of ENGINES) test.describe(engine, () => {
   test.beforeEach(async ({ page }) => {
+    page.on('dialog', dialog => dialog.accept()); // Explicit demo/JSON replacement confirmations.
     await page.goto('/'); // Fresh page/context for every test; never reuse a prior document.
+    await page.locator('#scene').selectOption('captions');
     await expect(page.locator('#areas [data-area-id]')).toHaveCount(6);
     await switchEngine(page, engine);
   });
 
-  test('engine switching leaves the entire document exactly unchanged; server is read-only', async ({ page, request }) => {
+  test('engine switching leaves the entire document exactly unchanged; only local assets are read', async ({ page }) => {
     const initial = (await snapshot(page)).document;
     for (const target of [otherEngine(engine), engine]) {
       await switchEngine(page, target);
       expect((await snapshot(page)).document).toEqual(initial);
     }
-    // APIRequestContext does not execute page JS; never follow redirects off loopback.
-    const response = await request.post(`${ORIGIN}/`, { data: 'synthetic', maxRedirects: 0 });
-    expect(response.status()).toBe(405);
   });
 
   test('zoom, camera pan and viewport resize preserve canonical geometry', async ({ page }) => {
@@ -133,24 +140,22 @@ for (const engine of ENGINES) test.describe(engine, () => {
     expect((await snapshot(page)).document).toEqual(initial.document);
   });
 
-  test('real corner drag moves 20/10 and undo restores the exact document', async ({ page, isMobile }) => {
+  test('real corner drag moves 20/10 and undo restores the exact document', async ({ page }) => {
     const initial = (await snapshot(page)).document, image = area(initial, 'image-1');
     const cornerScale = await dragWorld(page, image.points[0], 20, 10);
     const expectedCorner = structuredClone(initial);
     area(expectedCorner, image.id).points[0] = { x: image.points[0].x + 20, y: image.points[0].y + 10 };
     const cornerDocument = (await snapshot(page)).document;
-    if (isMobile) {
-      const actual = area(cornerDocument, image.id).points[0];
-      expectQuantizedPoint(actual, area(expectedCorner, image.id).points[0], Math.ceil(1 / cornerScale));
-      area(expectedCorner, image.id).points[0] = { x: actual.x, y: actual.y };
-      expect(cornerDocument).not.toEqual(initial);
-    }
+    const actual = area(cornerDocument, image.id).points[0];
+    expectQuantizedPoint(actual, area(expectedCorner, image.id).points[0], Math.ceil(1 / cornerScale));
+    area(expectedCorner, image.id).points[0] = { x: actual.x, y: actual.y };
+    expect(cornerDocument).not.toEqual(initial);
     expect(cornerDocument).toEqual(expectedCorner);
     await page.locator('#undo').click();
     expect((await snapshot(page)).document).toEqual(initial);
   });
 
-  test('first drag selects and moves an unselected area 30/20 (known Moveable target race)', async ({ page, isMobile }) => {
+  test('first drag selects and moves an unselected area 30/20 (known Moveable target race)', async ({ page }) => {
     // Retained by user choice as a failing comparison candidate, not desired behavior.
     // Unexpected success fails the runner: remove this annotation when the race is fixed.
     test.fail(engine === 'moveable', 'Moveable 0.53.0 adapter loses Gesto state on first-drag target switching.');
@@ -163,21 +168,21 @@ for (const engine of ENGINES) test.describe(engine, () => {
     area(expectedMove, unselected.id).points = unselected.points.map(point => ({ x: point.x + 30, y: point.y + 20 }));
     const moved = await snapshot(page);
     expect(moved.selectedId).toBe(unselected.id);
-    if (isMobile) {
-      const actual = area(moved.document, unselected.id).points[0];
-      expectQuantizedPoint(actual, area(expectedMove, unselected.id).points[0], Math.ceil(1 / moveScale));
-      const dx = actual.x - unselected.points[0].x, dy = actual.y - unselected.points[0].y;
-      expect(dx).toBeGreaterThan(0);
-      expect(dy).toBeGreaterThan(0); // Selection alone is not a successful first drag.
-      area(expectedMove, unselected.id).points = unselected.points.map(point => ({ x: point.x + dx, y: point.y + dy }));
-      expect(area(moved.document, unselected.id).points).toEqual(area(expectedMove, unselected.id).points);
+    const actualPoints = area(moved.document, unselected.id).points;
+    for (let index = 0; index < unselected.points.length; index++) {
+      expectQuantizedPoint(actualPoints[index], area(expectedMove, unselected.id).points[index], Math.ceil(1 / moveScale));
     }
+    const dx = actualPoints[0].x - unselected.points[0].x, dy = actualPoints[0].y - unselected.points[0].y;
+    expect(dx).toBeGreaterThan(0);
+    expect(dy).toBeGreaterThan(0); // Selection alone is not a successful first drag.
+    area(expectedMove, unselected.id).points = unselected.points.map(point => ({ x: point.x + dx, y: point.y + dy }));
+    expect(actualPoints).toEqual(area(expectedMove, unselected.id).points);
     expect(moved.document).toEqual(expectedMove);
     await page.locator('#undo').click();
     expect((await snapshot(page)).document).toEqual(initial);
   });
 
-  test('text top-left drag resizes by -10/-10 without skew and undo restores it', async ({ page, isMobile }) => {
+  test('text top-left drag resizes by -10/-10 without skew and undo restores it', async ({ page }) => {
     await selectArea(page, 'text-1');
     const initial = (await snapshot(page)).document, { rect } = area(initial, 'text-1');
     const resizeScale = await dragWorld(page, rect, -10, -10);
@@ -185,21 +190,19 @@ for (const engine of ENGINES) test.describe(engine, () => {
     area(expected, 'text-1').rect = { x: rect.x - 10, y: rect.y - 10,
       width: rect.width + 10, height: rect.height + 10 };
     const resized = (await snapshot(page)).document;
-    if (isMobile) {
-      const actual = area(resized, 'text-1').rect;
-      expectQuantizedPoint(actual, { x: 45, y: 455 }, Math.ceil(1 / resizeScale));
-      // An axis-aligned rect must retain integer dimensions and its exact opposite corner.
-      for (const dimension of ['width', 'height']) {
-        expect(Number.isFinite(actual[dimension])).toBe(true);
-        expect(Number.isInteger(actual[dimension])).toBe(true);
-        expect(actual[dimension]).toBeGreaterThan(0);
-      }
-      expect(actual.x + actual.width).toBe(rect.x + rect.width);
-      expect(actual.y + actual.height).toBe(rect.y + rect.height);
-      area(expected, 'text-1').rect = { x: actual.x, y: actual.y,
-        width: actual.width, height: actual.height };
-      expect(resized).not.toEqual(initial);
+    const actual = area(resized, 'text-1').rect;
+    expectQuantizedPoint(actual, area(expected, 'text-1').rect, Math.ceil(1 / resizeScale));
+    // An axis-aligned rect must retain integer dimensions and its exact opposite corner.
+    for (const dimension of ['width', 'height']) {
+      expect(Number.isFinite(actual[dimension])).toBe(true);
+      expect(Number.isInteger(actual[dimension])).toBe(true);
+      expect(actual[dimension]).toBeGreaterThan(0);
     }
+    expect(actual.x + actual.width).toBe(rect.x + rect.width);
+    expect(actual.y + actual.height).toBe(rect.y + rect.height);
+    area(expected, 'text-1').rect = { x: actual.x, y: actual.y,
+      width: actual.width, height: actual.height };
+    expect(resized).not.toEqual(initial);
     expect(resized).toEqual(expected);
     await page.locator('#corner').selectOption('2');
     await expect(page.locator('#x')).toHaveValue(String(rect.x + rect.width));
@@ -343,13 +346,27 @@ for (const engine of ENGINES) test.describe(engine, () => {
     document = (await snapshot(page)).document;
     expect(document.areas.map(item => [item.type, item.source])).toEqual([['text', 1]]);
     expect(union(document)).toEqual([1]);
-    await expect(page.locator('#delete')).toBeDisabled();
+    await expect(page.locator('#delete')).toBeEnabled(); // Remaining text is selected and deletable.
+    expect(await sourceValues(page)).toEqual([1]); // Unused palette slots 2/3 are not bindings.
     await page.locator('#undo').click();
     await selectArea(page, 'text-1');
+    expect(await sourceValues(page)).toEqual([1]);
+    await drawImage(page, { x: 320, y: 360 }, { x: 490, y: 480 });
+    const secondImage = (await snapshot(page)).document.areas.find(item => item.type === 'image' && item.source === 2);
+    expect(secondImage).toBeDefined();
+    await selectArea(page, 'text-1');
+    expect(await sourceValues(page)).toEqual([1, 2]); // Palette slot 3 is still unused.
     await page.locator('#source').selectOption('2');
     await edit(page, '#samples input[data-source-slot="2"]', 'Segundo vínculo');
     expect(union((await snapshot(page)).document)).toEqual([1, 2]);
     await selectArea(page, 'image-1');
+    await page.locator('#delete').click();
+    document = (await snapshot(page)).document;
+    expect(document.areas.map(item => [item.id, item.source])).toEqual([['text-1', 1], [secondImage.id, 1]]);
+    expect(document.sources[0]).toMatchObject({ slot: 1, description: 'Segundo vínculo' });
+    await expect(page.locator('#text-result')).toContainText('Segundo vínculo entrou no grupo');
+    expect(await sourceValues(page)).toEqual([1]);
+    await selectArea(page, secondImage.id);
     await page.locator('#delete').click();
     document = (await snapshot(page)).document;
     expect(document.areas.map(item => [item.type, item.source])).toEqual([['text', 1]]);

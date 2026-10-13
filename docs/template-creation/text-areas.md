@@ -26,6 +26,7 @@ Keep a typed `image`/`text` area distinction and a library-independent document.
 | Font ID / weight | Curated font catalog and normal/bold, not an arbitrary path/URL/CSS string |
 | Size / minimum | Font size in original-image pixels, independent of editor zoom |
 | Color / outline | Validated colors and bounded outline width |
+| Optional box fill | Solid color behind the glyphs, useful for covering an existing caption; separate from the behind-template plane |
 | Alignment / line-height | Left/center/right and bounded spacing |
 | Overflow | Explicit shrink-to-fit or intentional clip; never silent data truncation |
 | Plane / order | Behind template or in front; images and texts share order within each plane |
@@ -67,7 +68,7 @@ Native previews must exercise fixed long/short/multiline/accented descriptions, 
 
 ## Persistence and compatibility work, deliberately not done here
 
-Current `TemplateArea`/CSV and `ImageRenderer.Request` represent image quadrilaterals only. Do not bolt text properties onto CSV rows, infer text from magic source IDs, or silently export only image areas. The spike exports a clearly experimental typed JSON document; the bot cannot accept it.
+Current `TemplateArea`/CSV and `ImageRenderer.Request` represent image quadrilaterals only. Do not bolt text properties onto CSV rows, infer text from magic source IDs, or silently export only image areas. The spike imports/exports the existing CSV only for image-only documents and refuses CSV export when any text exists. Mixed documents use clearly experimental typed JSON; the bot cannot accept it. The local image is not embedded in that JSON.
 
 Before production adoption, design a versioned template definition with validated kind-specific fields, stable area order and bounded source bindings. Legacy image-only definitions/CSV must translate unchanged. Use explicit allowed discriminators/DTOs, not unrestricted polymorphic deserialization. Update selection, renderer inputs, safe gallery/import projections and validation in one scoped feature slice, then both JsonDB/SQLite adapters and offline import/export/backup/restore/rollback contracts. New schema/binary compatibility needs separate migration tests and operator approval; this spike does not authorize a data cutover.
 
