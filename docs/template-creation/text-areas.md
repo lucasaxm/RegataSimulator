@@ -1,6 +1,6 @@
 # Text areas and source-linked captions
 
-**Status:** supported in the isolated browser spike; production templates, CSV, repositories and ImageMagick rendering are unchanged. See [spike guide](spike.md) for running it and the retained Moveable failure.
+**Status:** supported in the isolated browser spike; production templates, CSV, repositories and ImageMagick rendering are unchanged. **Konva is selected for production**; the spike stays unchanged. See the [implementation proposal](proposal.md) for canvas-first contextual text controls, portable color sampling and the staged native/font/versioning work, and the [spike guide](spike.md) for the historical comparison.
 
 ## Product rule: one selected source, two representations
 
@@ -79,4 +79,4 @@ Unknown template versions must fail clearly rather than drop text or overwrite o
 - Agree on the source-bound pattern, axis-aligned MVP, font catalog, missing-description and overflow policies.
 - Build isolated text-rasterizer/native preview fixtures before any schema change; compare with the browser at full original-image dimensions.
 - Add versioned mixed definitions/source-slot union selection, compatibility/migration/recovery coverage and then creator integration.
-- Validate the chosen editor on actual iOS/Android Telegram WebViews, not just Chromium emulation; add magnifier, native controls, real-image handling and accessibility polish from the broader [proposal](proposal.md).
+- Implement the selected Konva editor with compact font/color panels, template-pixel sampling and a visible selected-region preview instead of the laboratory's long inspector. Validate on Android Brave, iOS Safari and actual Telegram WebViews, not just Chromium emulation; magnifier, precision controls and accessibility requirements are specified in the [proposal](proposal.md).

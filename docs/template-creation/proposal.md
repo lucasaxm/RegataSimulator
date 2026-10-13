@@ -1,8 +1,18 @@
-# Proposed creator experience and delivery plan
+# Creator implementation plan
 
-**Design recommendation, not an implemented API/schema or deployment approval.** Start from the [verified current flow](current-flow.md). Keep this a focused template tool inside the existing static-page/Spring architecture, not a site-wide React replacement or general Photoshop clone.
+**Implementation decisions and proposed contracts, not implemented APIs/schema or deployment approval.** Start from the [verified current flow](current-flow.md). Keep this a focused template tool inside the existing static-page/Spring architecture, not a site-wide React replacement or general Photoshop clone.
 
-The isolated [mixed-area spike](spike.md) now exercises Konva/Moveable with source-linked [text boxes](text-areas.md). It recommends Konva; Moveable is retained by user choice with an explicit known first-drag failure. Neither the spike format nor text rendering is implemented in the production generator.
+The isolated [mixed-area spike](spike.md) exercises Konva/Moveable with source-linked [text boxes](text-areas.md). **Konva is selected for the real creator**, following the comparison and user feedback on macOS Chrome and Android Brave. Moveable stays in the unchanged historical spike, not in the production dependency graph or UI. This closes library selection; actual native-phone/WebView acceptance remains a delivery gate, not another comparison task. Neither the spike format nor text rendering is implemented in the production generator.
+
+## Implementation decisions
+
+- Build the real editor in the existing static-page/Spring application with **vanilla JavaScript and Konva**. Reuse tested model concepts, not the laboratory shell or its full dependency tree. No more spike implementation is planned.
+- Default drawn image areas to **rectangle editing**; retain explicit **perspective editing** for independent corners. Add anchored rectification and paired-edge resizing, specified below.
+- Provide an application-owned **Pegar cor da imagem** control on desktop and mobile. Native browser color dialogs/screen eyedroppers are optional conveniences, not the portable implementation.
+- Make the canvas occupy the workspace. Compact tools and one contextual property panel replace the laboratory's heading, demo selector, stacked tool rows and long below-canvas inspector.
+- Keep source-linked text in the target MVP, including optional box fill, literal `{{source.description}}`, explicit overflow and one source selection per shared slot. It requires real fonts/rendering/versioned persistence before submission can support text.
+- Preserve legacy CSV/image geometry and the administrator review boundary. First deliver a useful image-only editor; then enable mixed definitions and authenticated in-app preview/final submit through separately tested backend slices. A nicer CSV generator is an intermediate delivery, not the end goal.
+- Keep compatibility, migration/recovery, native-device testing and dependency/license checks explicit. This plan authorizes neither production operations nor a schema cutover.
 
 ## Target journey
 
@@ -25,11 +35,35 @@ The normal path has no CSV copying, manual document reattachment or caption comp
 - **Desktop:** wheel/trackpad zoom around pointer, pan mode/Space-drag, arrow nudges of one original-image pixel, Shift for a larger step; do not intercept typing in coordinate inputs.
 - **Visible alternatives:** zoom +/−, Fit image, 100%, selected-corner X/Y fields and a mobile nudge pad. Zoom is not the only precision method.
 - Keep corner targets approximately **44 CSS px** at any zoom with smaller visual markers; use an offset magnifier on mobile so the finger does not obscure the pixel being placed. Labels/shape outlines supplement color.
-- Add/delete/duplicate, explicit straighten-to-rectangle, undo/redo and reorder controls. Undo groups a gesture as one action; no hidden destructive double-tap. Clear/replace-image prompts protect dirty work.
+- Add/delete/duplicate, anchored straighten-to-rectangle, undo/redo and reorder controls. Undo groups a gesture as one action; no hidden destructive double-tap. Clear/replace-image prompts protect dirty work.
+
+### Rectangle, perspective and paired-edge controls
+
+The current creator's `handleDoubleClick()` / `straightenAreaFromCorner()` anchors a corner, aligns its two neighbors to its axes and derives the opposite corner. Preserve the useful intent, **not** its time-only mobile double-tap detection or automatic mutation.
+
+**Default: Retângulo.** New image areas start as axis-aligned rectangles; text boxes remain rectangular. Show corner and midpoint edge handles:
+
+- Dragging a corner changes width/height while the opposite corner stays exactly fixed. Regenerate the other two corners from the rectangle; do not treat this as four independent corner drags.
+- Dragging an edge moves its two endpoints along the appropriate axis while the opposite edge stays fixed. This provides the requested two-corner adjustment without skew.
+- Dragging the interior translates the whole area, preserving width/height. Numeric width/height and corner X/Y provide exact alternatives.
+- **Manter proporção** is an optional visible toggle, off by default; Shift is a desktop shortcut, not the only way to enable it. Text-box resizing reflows text, not an affine stretch of glyphs or an implicit font-size change.
+
+**Perspectiva** is an explicit image-only mode. Corners move independently; a midpoint handle translates that edge's two endpoints by the same original-pixel delta, preserving their edge vector and leaving the opposite pair untouched. Validate convexity/overlap; a rejected drag keeps the last valid geometry. This is not multi-area selection. Entering perspective mode does not change coordinates. Nonrectangular CSV imports start in this mode; rectangular imports start in rectangle mode.
+
+**Transformar em retângulo** is a visible geometry action, also offered when switching a skewed image area back to rectangle mode:
+
+1. Choose **Canto fixo** from TL/TR/BR/BL using a labeled corner diagram. Default to the selected corner, or TL when none is selected.
+2. Show a ghost preview. By default preserve that anchor **and the current opposite corner**, deriving the other two intersections from their x/y coordinates. This differs deliberately from the legacy neighbor-projection formula and makes the two stationary points predictable.
+3. Optional positive integer width/height inputs allow a different size about the fixed anchor; the preview shows that the opposite corner will then move. If the existing diagonal has zero extent or cannot preserve the stored corner correspondence, require these explicit dimensions rather than silently flipping/relabeling corners.
+4. **Aplicar** commits one undoable command and selects rectangle mode; **Cancelar** preserves both geometry and editing mode. No automatic bounding-box conversion, clamp-to-image, or reshuffling of TL/TR/BR/BL.
+
+Use original integer coordinates, quantize a moving point/delta once, derive all dependent points from the gesture-start geometry, and then validate. Independent rounding of origin and size must never drift the fixed opposite corner. Reject zero sizes, reflections/crossing and invalid overlap rather than committing a collapsed/flipped area. Rectangle/perspective constraints are editor state, not an incompatible new CSV field; undo/redo restores a coherent geometry/mode pair.
+
+Corner double-tap or long-press can later **open** this action, but must never apply it invisibly. Ship the visible button first. Handle hit regions stay screen-sized; when they overlap at low zoom, offer zoom-to-selection or the corner chooser instead of choosing an arbitrary handle.
 
 ### Coordinate and layering model
 
-Maintain a small, library-independent document model: image identity/dimensions, stable area IDs, four original-image points, source-slot references, background flag and order. Keep viewport transform and selection separate. Never persist Konva/Fabric scene JSON as the domain contract.
+Maintain a small, library-independent document model: template image identity/dimensions, stable typed area IDs, image quadrilaterals or text rectangles in original-image coordinates, source-slot references, background flag and order. Mixed definitions add validated text pattern/font/style fields through the versioned contract described in [text areas](text-areas.md). Keep viewport transform and selection separate. Never persist Konva/Fabric scene JSON as the domain contract.
 
 Points live in **original-image pixels**, not screen/CSS/device pixels. Pan, zoom, rotation of the device and container resize change only the view. Invert the viewport transform for input; quantize once to the existing integer contract, and validate the quantized geometry before preview/export/submit. Keep TL/TR/BR/BL point correspondence stable rather than re-sorting points by screen position.
 
@@ -37,15 +71,65 @@ Provide early validation for convexity, degeneracy, contiguous indices/slots, bo
 
 Show a layer list with **Atrás do template → Template → Na frente do template**. Within each editable group, provide move-forward/backward or reorder plus keyboard/buttons, not drag-only controls. A position change across the fixed template plane is an explicit background change. Serialize compatible indices after reorder.
 
-Use **Source 1**, **Source 2**, etc., with a visible “reuse same image” relationship and stable slot colors. Adding an area offers **reuse a source / new source** instead of silently assigning another random image. Deletion renumbers used slots contiguously without breaking references; list order and slot identity are different concepts. The same slot remains visibly linked even in non-adjacent areas.
+Use **Source 1**, **Source 2**, etc., with a visible “reuse same image” relationship and stable slot colors. Keep the current-style image adjacency choices initially, ignoring interleaved text when finding image neighbors; first image is slot 1. Show permitted reuse/new-slot choices explicitly. A default allocation must be offered by that area's picker, including when text already uses the candidate slot. Text can bind existing referenced slots and inherits the selected area's slot. The sample-description palette is not the image-choice list. Deletion renumbers the remaining used-slot union contiguously in one undoable command, updating every image/text reference and sample association together. List order and slot identity are different concepts; repeated/non-adjacent slots remain supported by the domain/CSV even when the picker offers narrower editing choices.
+
+### Consistent color controls and template eyedropper
+
+The screenshot difference is browser/platform UI, not a reliable feature of HTML color inputs. [EyeDropper](https://developer.mozilla.org/en-US/docs/Web/API/EyeDropper) is limited/experimental, requires a secure context and is not a mobile/WebView baseline. Its screen sampler is also different from an HTML color input's native dialog. Do not assume Android Brave exposes it because desktop Chrome does.
+
+Use the same compact color field for text fill, outline and optional box fill: current swatch, validated `#RRGGBB`, recent/preset colors, and **Pegar cor da imagem**. Provide arbitrary color entry through HEX/RGB controls; no native modal is required for the normal path. Sampled box fill is the primary way to cover lettering on a nonblack chat/template background; it stays distinct from **Atrás do template**. Native color dialogs may remain an optional advanced convenience.
+
+Sampler interaction:
+
+1. Bind the operation to the selected area's specific color property and remember the previous value. Collapse the mobile property panel to a short sampling bar; keep the canvas and selected region visible.
+2. Desktop hover or one-finger drag moves a crosshair with an offset, pixelated magnifier and candidate swatch/HEX. A tap/click can choose a candidate; **Usar cor** commits exactly one undoable style change. **Cancelar**/Escape restores the previous value and returns to the prior panel. Sampling never drags an area, inserts a shape or changes its source.
+3. Sample the loaded, canonically oriented **template bitmap only**, not colored source placeholders, text rasters, selection outlines, handles or the checkerboard. For later cutout tools, this means the working template copy. External desktop/screen pixels are outside the portable feature's scope.
+4. Invert camera/CSS coordinates to original-image coordinates and read the bounded pixel/patch in a small reusable scratch canvas, using [getImageData](https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/getImageData). Sampling must not allocate a second full 40MP RGBA canvas; the magnifier uses a bounded patch. Display caches/downsampling and device pixel ratio must not determine the sampled pixel.
+5. Use decoded sRGB RGB values for solid HEX fields. A fully transparent or off-image location has no selectable color; show guidance rather than converting transparent black/checkerboard to black. For a partially transparent pixel, show its alpha and explain that applying its RGB creates a solid color. Do not promise encoded-byte, cross-device color-profile or native-render pixel identity.
+6. Two fingers cancel the pending candidate and enter viewport navigation; releasing one cannot commit it. Pointer cancellation, loss of focus, image replacement, selection/property changes and modal closure also cancel safely. Offer sampling X/Y and nudge/confirm controls for keyboard and precision use.
+
+Operate on local/authorized same-origin blobs, not arbitrary remote image URLs. Catch canvas-read security/privacy failures and preserve the old value; keep manual HEX/RGB entry available with an actionable explanation. [Canvas origin rules](https://developer.mozilla.org/en-US/docs/Web/HTML/How_to/CORS_enabled_image) must not be worked around by weakening CORS. Brave/privacy protection can block or perturb pixel reads; verify normal Android Brave settings on hardware and document limitations rather than demanding users disable protections. An optional separately labeled **Pegar da tela** may use feature-detected `EyeDropper.open()` with user activation/cancellation handling on supported desktops; it is not an MVP dependency or a promised mobile screen-capture feature.
 
 ### Layout and visual direction
 
-The canvas is the product, not a decorative hero. On mobile: compact image/tools row, maximum remaining viewport for canvas, collapsible selected-area sheet, and one native Telegram main action. On desktop: canvas plus a narrow area/layer inspector. Hide CSV by default and keep a fallback browser action when the native button is unavailable.
+The image is the hero and the editor is a workbench, not a dashboard. **Do not promote the laboratory layout.** Remove its product-description heading, engine/demo selector, persistent file input/status block, diagnostics and visible CSV/sample sections from the normal workspace. After load, a compact filename/change-image action replaces the chooser; help, notices, compatibility export and sample descriptions live in explicit menus/panels.
 
-Use Telegram's dynamic theme variables, system font stack (matching the host rather than another font download), 14–16px controls and clear Portuguese labels. Default fallback tokens: surface `#1e1e1e`, panel `#242326`, text `#ffffff`, secondary text `#a6a6a6`, action `#738fed`, invalid/destructive `#ee686f`; verify contrast for actual Telegram themes. Make selection distinctive with labeled handles and linked slot badges, not ornamental gradients/cards.
+**Desktop:** canvas fills available space beside one approximately 280px collapsible inspector. Selection opens only relevant properties; tabs are **Área**, **Texto**, **Camadas**, not a stack of every field. Font/color/box-fill changes remain visible in the canvas. Tools, undo and zoom do not become a second dashboard header.
 
-Respect stable viewport height and safe/content-safe insets with older-client fallbacks. Feature-detect/version-check optional fullscreen, swipes, haptics and native buttons. Disable Telegram vertical swipes only while editor gestures conflict, not throughout unrelated screens. Allow browser accessibility zoom; constrain touch behavior to the editing surface. Numeric fields, focus order, screen-reader area descriptions and non-gesture alternatives are required.
+**Mobile portrait:** one approximately 44px app bar, a compact tool dock, and a contextual bottom panel with a collapsed and bounded editing state. No wrapped toolbar rows and no body-scroll journey from inspector back to canvas. At 360×640 and 390×844, with keyboard closed, target at least **55% of the usable application viewport as unobscured canvas**, even while editing common text properties. Usable height excludes browser/OS/Telegram reserved controls and safe insets; measure actual occlusion, not the CSS height of a canvas behind a sheet. The editing panel is normally capped at the smaller of 224px or 30% of usable height; fit controls to the remaining budget rather than violating the canvas target.
+
+Conceptual layouts (not final pixel art):
+
+```text
+Desktop
+┌─ Change image / filename ─ Undo / Redo ─ Preview ─┐
+│                                               │
+│  Canvas + unobtrusive zoom     │ Area / Text    │
+│  and selected-region handles  │ contextual     │
+│                               │ inspector     │
+└─ Image / Text / Layers tools ──┴───────────────┘
+
+Mobile
+┌─ Open / filename ─ Undo ─ Redo ─ More ─┐
+│                                      │
+│  Canvas: selected region stays here   │
+│  Zoom/fit is a small floating control │
+│                                      │
+├─ Select / Image / Text / Layers ──────┤
+│ Selected area / one property category │
+│ Compact font OR color OR geometry     │
+└─ Preview / submit, when available ────┘
+```
+
+Only one property category opens at a time: font/size, color/background, content, or geometry. Advanced settings scroll **inside** the panel, not the entire page. A list/layer drawer can expand deliberately, then closes on selection; it is not the default editing state. Full-screen dialogs are for tasks such as file choice/help/native preview, not routine color/font adjustment. In short landscape layouts, use a narrow side panel or compact strip rather than covering the canvas with a tall bottom sheet.
+
+Preserve the current view when panels open; minimally pan the selected region into the unobscured canvas if needed. Container/keyboard/device resizing changes only the camera, never saved geometry. With the virtual keyboard open, show the focused field in a compact input panel and keep a selected-region preview in the same screen (target at least 128px when usable height permits). For exceptionally small viewports, offer **Ver área** to dismiss the keyboard without losing the edit, not a scroll-to-top requirement. Color sampling dismisses the keyboard and collapses the panel explicitly.
+
+Use Telegram's dynamic theme variables and a system UI font stack; 14–16px readable controls, small contextual titles and no promotional typography/font download. Canvas text uses the separately pinned production font catalog, not this UI stack. Fallback tokens: workspace `#6f7072`, panel `#242426`, text `#f4f4f5`, secondary `#b6b6bb`, action `#285ad1`, destructive `#e36b6b`; verify contrast in light/dark/custom Telegram themes. A neutral workspace/checkerboard distinguishes template bounds without becoming a sampled color. Selection is conveyed through labeled corners, edge handles and source-slot badges, not ornamental gradients/cards or color alone. The distinctive visual element is the user's template; surrounding chrome stays quiet.
+
+Respect dynamic/stable viewport height, VisualViewport keyboard changes and safe/content-safe insets with older-client fallbacks. Feature-detect/version-check optional fullscreen, swipes, haptics and native buttons. Reserve native main-button space only when actually present; provide a browser action otherwise. Disable Telegram vertical swipes only while editor gestures conflict, not throughout unrelated screens. Allow browser accessibility zoom; constrain touch behavior to the editing surface. 44px touch targets, visible keyboard focus, focus return after panels, reduced motion, numeric alternatives, screen-reader area descriptions and accessible color-field labels are required.
+
+**Design review gate:** compare the same user tasks against the compact legacy creator, not against the laboratory alone. Changing font, text color and sampled background must show the updated selected region without a page scroll. Capture portrait/landscape and keyboard-open layouts; review before building all controls, then repeat against the real implementation. Decorative chrome that reduces canvas area is a regression even if it looks polished.
 
 ## Library comparison
 
@@ -53,14 +137,22 @@ The inspected upstream licenses are MIT; retain notices and review the **selecte
 
 | Candidate | What it supplies | Work still required | Recommendation |
 | --- | --- | --- | --- |
-| **Konva** | Canvas scene graph, polygons/images/layers, hit-testing, drag support, inverse transforms; documented pinch and pointer-centered zoom recipes; vanilla JS support | Four independent point controls, gesture arbitration, validation, undo/document model. Its standard Transformer is affine, not four-corner perspective image warping | Preferred foundation for this focused polygon editor |
+| **Konva** | Canvas scene graph, polygons/images/layers, hit-testing, drag support, inverse transforms; documented pinch and pointer-centered zoom recipes; vanilla JS support | Custom geometry constraints/handles, gesture arbitration, validation, undo/document model. Its standard Transformer is affine, not four-corner perspective image warping | **Selected foundation** |
 | **Fabric.js** | Editable polygon controls, object selection and viewport transforms; demonstrated editing under zoom/translation | Perspective image rendering is not supplied by polygon point editing; custom controls/gestures and broader object-model integration | Good alternative if broader image/object editing becomes central |
-| **Moveable** | DOM/SVG draggable/warpable/pinchable controls; four-direction perspective handles and CSS `matrix3d` output | World-coordinate extraction, pan/zoom coordination, multiple-area selection, masks/stacking and backend parity; generated API docs are older, so verify the selected package API | Compare against Konva in the spike when ready-made perspective handles minimize effort |
+| **Moveable** | DOM/SVG draggable/warpable/pinchable controls; four-direction perspective handles and CSS `matrix3d` output | World-coordinate extraction, async target/drag lifecycle and masks/stacking; retained spike has a known unselected-first-drag failure | Historical comparison only; exclude from production |
 | Rectangle cropper | Mature rectangular crop/rotation interaction | Cannot represent four independently positioned corners, repeated slots or the template's two planes | Not a replacement for our geometry editor |
 
 Do not install all three or add React only to obtain a canvas library. Pin/self-host the chosen library with license notices, or use a narrowly scoped build with a lockfile if packaging requires it. Existing Maven scanning does not cover new npm/CDN dependencies: add the appropriate inventory/security gate. Do not broaden CSP/frame ancestors or weaken admin/CSRF security to accommodate the editor.
 
-**Spike decision gate:** use the same mixed image/text model, skewed quad, source bindings, zoom/pinch/pan and off-canvas corner in both candidates. The local comparison recommends Konva; Moveable remains a documented failing experiment rather than a production option. Before adoption, check low-end/native-phone latency, finger occlusion and Telegram gesture conflicts. Do not claim either library solves native pixel rendering or the whole submission workflow.
+**Comparison closed.** Keep the spike reproducible and unchanged; do not spend another slice polishing or replacing its failing candidate. Konva-only production packaging has its own inventory/notices: Moveable/Croact's experimental notice gaps do not automatically apply to that graph. Before rollout, check native-phone latency, finger occlusion and Telegram gesture conflicts. Konva does not supply the native renderer or whole submission workflow. If using its Transformer for rectangles, normalize scale into canonical dimensions/points, disable rotation/flipping/centered scaling, configure aspect behavior explicitly and never persist scene scale as geometry; custom model-owned handles are preferred for predictable rectangle/perspective switching.
+
+### Production source and asset packaging
+
+Keep a dedicated `frontend/template-creator/` package/lockfile for the real editor's modules, tests and build tools, separate from `spikes/`. Start with the spike-tested Konva 10.7.1 as the pinned baseline, rechecking advisories/notices; no Moveable, Fabric, Croact or React runtime. Use the existing Spring static-page deployment: a new `src/main/resources/static/create/editor/` shell initially coexists with unchanged `/create` legacy behavior.
+
+Have the scoped bundler emit self-hosted assets/notices into `build/generated-resources/creator/static/create/editor/`; a declared Gradle task wires these into `processResources`/the executable JAR. Generated output is built, never hand-edited or committed. Track module source, package/lockfile, build configuration and license inputs. Use reproducible npm installation, declared inputs/outputs and a pinned supported CI Node runtime; a clean build must produce the complete assets or fail, never reuse a stale bundle. No Node/npm runtime on the VPS and no new canvas-library CDN requirement.
+
+Add production model/browser/syntax tests plus npm vulnerability/license gates to CI; do not rely on Maven scanning or the spike's tests as production coverage. Keep existing Java/Node/security/deployment gates. Add a packaged-resource test proving the shell, hashed/self-hosted bundle and notices resolve from a clean JAR. Do not broaden existing CSP/frame ancestors, CORS or ADMIN/CSRF access to make assets work. A network-unavailable Telegram SDK must leave standalone local editing/export usable, without pretending submission identity exists.
 
 ## Direct upload and preview architecture
 
@@ -141,17 +233,24 @@ Use the established cycle: **develop → focused tests → fix/retest → full a
 
 | Slice | Deliverable | Gate before next slice |
 | --- | --- | --- |
-| 1. Compatibility fixtures + library spike | Canonical geometry/serialization tests and isolated Konva/Moveable interaction comparison; verify dev-bot launch context | Same four-point contract under zoom/pan; select one library after real iOS/Android check; no production tests |
-| 2. Precision editor | Original-pixel model, handles/gestures, numeric/nudge, undo, delete/duplicate/reorder, linked slots, validation and advanced CSV fallback | Old CSV parses unchanged; zoom/resize never alter saved geometry; touch manipulation does not rectify/move accidentally |
-| 3. Creator identity + origin contract | Scoped signed-data authentication, media acquisition boundary, legacy/web attribution/notification contract and any necessary schema/recovery updates | Full filter-chain negative tests, both storage adapters and compatible restore/migration/rollback tests; no fabricated Message |
-| 4. In-app native preview + final submit | Bounded owned drafts, revision/sample-bound rendering/cache, stable finalization/receipt and existing moderation handoff | Complete dev-bot upload/edit/preview/submit/admin decision round-trip with no manual file/caption/chat confirmation; failures cannot duplicate or lose committed items |
-| 5. Reversible cutouts + polish | Polygon opening, then erase/restore if useful; local recovery and clear status/help | Alpha/full-resolution round-trip, undo/redo and foreground-occlusion parity; stable phone performance |
+| 1. Production foundation and compatibility | Separate Konva-only package, pure original-pixel document/command model, clean-JAR bundling and source/license inventory; comparison is already settled | Generated fixtures, exact supplied three-row CSV and repeated/off-canvas slots round-trip; standalone assets resolve; no spike changes, live operations or schema changes |
+| 2. Canvas-first image editor | New static shell alongside legacy creator; bounded local image loading/orientation, draw/select, mobile panels, gestures, layers/slots, delete/duplicate/reorder, numeric/nudge and undo | Image-only CSV remains accepted unchanged; no geometry drift on zoom/resize/keyboard; useful editor without any new API or Telegram launch |
+| 3. Geometry and color polish | Rectangle/perspective modes, paired-edge resize, anchor conversion preview and portable color sampler; finish compact text-property panel layout with isolated fixtures | All four anchors/edges preserve intended fixed points; no hidden double-tap; desktop/Android sampler and canvas-visibility acceptance below |
+| 4. Literal text rendering and font catalog | Bounded literal rasterizer, pinned licensed font IDs/weights, shared layout/overflow/box-fill contract, native mixed render fixtures | One source image/description per slot; no expressions/native text escapes, silent truncation or glyph stretching; native sandbox/font/media limits proven on isolated fixtures |
+| 5. Mixed definition, creator identity and origin/receipt contracts | Versioned image/text definition, dual repository/DTO validation, explicit verified web submitter/origin, scoped authentication and media acquisition boundary; design any schema changes before implementing them | Legacy CSV/image-only/nullable origins stay valid; full filter-chain negative tests and JsonDB/SQLite/offline backup/restore/export/migration/rollback coverage; no forged Message |
+| 6. In-app native preview and final submit | Bounded owned drafts, revision/sample-bound mixed rendering/cache, serialized finalization and stable receipt, existing moderation handoff | Dedicated dev-bot image + caption workflow completes without copying CSV/reattachment/chat confirmation; stale/lost/concurrent requests cannot duplicate or lose committed items; no publication weights/history changes for previews |
+| 7. Reversible cutouts and further polish | Polygon opening, then erase/restore if useful; bounded local recovery and additional accessibility/performance refinement | Alpha/full-resolution round-trip, undo/redo and foreground-occlusion parity; measured phone behavior |
 
-Slices 3–4 are essential to fixing the steps problem; do not stop at a prettier CSV generator. Keep the legacy creator/caption route available during adoption, clearly named as fallback. Feature-flag the new submission path independently; runtime restart/rollout and any schema maintenance require separate operator authorization.
+Slices 1–3 build the real tool rather than another laboratory. Image-only compatibility is the first usable milestone. Font/color/panel fixtures can exercise text locally, but **do not present mixed text submission/export as supported until slices 4–6 are complete**; never silently drop text into legacy CSV. Settle font artifacts, launch mode and schema/resource decisions during their owning slices, not by inventing production defaults now.
+
+Slices 5–6 are essential to fixing the steps problem; do not stop at a prettier CSV generator. Keep the legacy creator/caption route available during adoption, clearly named as fallback. Link/feature-enable the new editor and submission path independently; only switch the canonical `/create` entry after parity/device acceptance. Runtime restart/rollout and any schema maintenance require separate operator authorization. Schema/definition changes need data-aware rollback; an old image-only binary cannot safely consume mixed templates just because a JAR can be reverted.
 
 ### Test strategy
 
 - **Geometry/model:** resize/rotate-device/zoom/DPR cycles leave original points unchanged; repeat-slot `[1,2,1]`; reorder both planes; delete middle slots; CSV round-trip; negative/edge/corner-only/off-canvas coordinates; convexity after integer rounding; boundaries 1/128/129 areas and byte/pixel limits.
+- **Rectangle acceptance:** all four anchors on skewed fixtures; anchor/opposite preservation or explicit width/height override; cancel/no-op; exact one-action undo/redo; each edge moves exactly its pair; each corner resize fixes its opposite; optional aspect lock; skew → rectangle → perspective round-trips; rejected zero/crossed/no-positive-overlap geometry stays unchanged. Valid partially off-canvas rectangles remain supported. Perspective edge translation preserves its edge vector. Numeric assertions remain pixel-exact; native pointer expectations permit only CSS-pixel quantization, never opposite-edge drift.
+- **Color acceptance:** known solid/generated pixel patches at pan/zoom/DPR and oriented JPEG/PNG; template colors under guides/text/placeholders; each target property; transparent/partial-alpha/off-image samples; no full-image extra allocation; commit/cancel/undo; pointer/selection/image changes and two-finger cancellation. Test with no `EyeDropper`, native API rejection, tainted/blocked reads and retained manual entry. Desktop Chrome/macOS and **Android Brave on hardware** must exercise the portable control; iOS Safari and Telegram WebViews are required before rollout, not inferred from emulation.
+- **Workspace acceptance:** no engine/demo selector or permanently expanded file/CSV/palette block; measure the unobscured canvas target at 360×640/390×844; common font/color/background changes and sampling show their effect without body scrolling; keyboard-open selected-region preview, landscape panels, browser chrome/safe insets, focus return and 200% accessibility zoom. Panel resizing never rewrites document geometry. Screen captures review information density against the legacy creator.
 - **Browser:** mouse/stylus/touch, second-finger interruption, pointer cancel, magnifier/nudge, keyboard focus, reduced motion, 360px/390px layouts, landscape, virtual keyboard/safe areas, Telegram Web iframe and native iOS/Android clients, standalone/no SDK/older SDK/CDN failure, cancelled/invalid image inputs and EXIF orientation. Emulation supplements real-device checks; target responsive frame times but measure rather than promise 60fps.
 - **Rendering:** generated valid fixtures for skewed and off-canvas quads, reused slots, overlapping B/F areas, opaque/JPEG and alpha PNG holes; verify **B2,B4,template,F1,F3** and current forced-resize/perspective/mask behavior. Compare server/native output with fixed samples; any browser approximation is labeled.
 - **Security:** forged/missing/wrong-bot/stale/future/duplicate-field initData; actor spoofing/IDOR/cross-draft access; creator denied moderation/source admin/publish/backup; unchanged ADMIN CSRF and generic errors; token expiry, origin/CORS and real iframe behavior; no credentials in logs/URLs/storage.
@@ -164,7 +263,9 @@ Success means a user can place a corner to **one original-image pixel using prec
 
 Measure started/completed creation and validation/render failure outcomes with opt-in/local usability feedback or low-cardinality aggregated telemetry, not raw initData, user names/images or draft UUID metrics. Establish a baseline before choosing time/abandonment targets; no improvement percentages have been measured yet.
 
-Before implementation, settle: actual bot launch mode; Konva versus Moveable spike outcome; desired availability of real approved-source previews; draft retention/quota/deadline values measured against host capacity; and concrete origin/receipt schema/backward-recovery design. Cross-device drafts, editing approved templates and AI segmentation are not MVP assumptions.
+Decided: Konva, vanilla/static delivery, original-pixel model, rectangle/perspective separation, anchored rectification, portable template sampling and a canvas-first contextual workspace. These do **not** block starting the production foundation/editor slices.
+
+Before enabling the owning backend slices, settle: licensed/pinned font artifacts and glyph/missing-description policy; actual dev-bot launch mode; availability of real approved-source previews; draft retention/quota/deadline values measured against host capacity; and concrete versioned-definition/origin/receipt schema with backward-recovery design. Validate the proposed panel heights on actual devices before freezing visual tokens/spacing. Cross-device drafts, editing approved templates, rotated/perspective text, multi-area transforms, whole-phone eyedropping and AI segmentation are not MVP assumptions.
 
 ## Upstream references
 
@@ -173,3 +274,5 @@ Before implementation, settle: actual bot launch mode; Konva versus Moveable spi
 - [Konva overview](https://konvajs.org/docs/overview.html), [polygons](https://konvajs.org/docs/shapes/Line_-_Polygon.html), [pinch recipe](https://konvajs.org/docs/sandbox/Multi-touch_Scale_Stage.html), [pointer-centered zoom](https://konvajs.org/docs/sandbox/Zooming_Relative_To_Pointer.html), [relative pointer positions](https://konvajs.org/docs/sandbox/Relative_Pointer_Position.html), [license](https://github.com/konvajs/konva/blob/master/LICENSE).
 - [Fabric polygon controls under viewport transforms](https://fabricjs.com/demos/poly-controls/), [license](https://github.com/fabricjs/fabric.js/blob/master/LICENSE).
 - [Moveable overview](https://daybrush.com/moveable/), [warp controls/matrix API](https://daybrush.com/moveable/release/latest/doc/Moveable.Warpable.html), [license](https://github.com/daybrush/moveable/blob/master/LICENSE).
+- [Konva Transformer dimensions/scales](https://konvajs.org/docs/select_and_transform/Basic_demo.html), [explicit aspect-ratio behavior](https://konvajs.org/docs/select_and_transform/Keep_Ratio.html).
+- [EyeDropper compatibility](https://developer.mozilla.org/en-US/docs/Web/API/EyeDropper), [activation/cancellation](https://developer.mozilla.org/en-US/docs/Web/API/EyeDropper/open), [canvas pixel sampling](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API/Tutorial/Pixel_manipulation_with_canvas), [canvas origin restrictions](https://developer.mozilla.org/en-US/docs/Web/HTML/How_to/CORS_enabled_image).
