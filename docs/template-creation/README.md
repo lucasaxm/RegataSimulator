@@ -21,6 +21,19 @@ First deliver **open image → define/edit areas → prepare/copy data → manua
 - Add authenticated Mini App upload/preview/final-submit use cases. This needs explicit submitter/origin persistence and resource limits, not anonymous access to administrator APIs or fabricated Telegram Messages.
 - Add reversible **cut a transparent opening in this area** tooling after the core flow. Arbitrary AI background removal is optional later work, not a prerequisite or a promise.
 
+## Acceptance status and next delivery
+
+The image-only editor, optional official Telegram SDK UX and restricted HTTPS preview mode are implemented. **The user reports that testing the candidate inside Telegram through the temporary HTTPS preview went well.** This is user-reported Telegram-hosted acceptance, not just an SDK double or browser emulation. Device/OS/client versions and individual scenarios were not recorded, so it does not establish Android/iOS/keyboard/performance coverage, successful manual submission/moderation, authenticated creator APIs or release approval. Temporary tunnels are testing tools, not hosting; see [maintenance](../maintenance.md#editor-build-and-verification) for exposure and shutdown limits.
+
+**Next phase: image-only release readiness and separately approved legacy adoption**, not text or direct submission:
+
+1. Close the remaining focused phone checks: portrait/landscape and keyboard-open precision editing, gestures/undo/reset/image replacement, PNG/JPEG opening and copy/manual-copy handoff. Cover supported Android/iOS browser and Telegram clients; retain the successful Telegram report rather than treating integration as wholly untested.
+2. Confirm the preserved original-document/caption → submitter confirmation → administrator review journey under explicitly authorized test conditions. Do not infer that this was exercised from the general Telegram report or perform production mutations as routine verification.
+3. Verify the release candidate with the maintenance-floor JDK and applicable clean build, frontend/browser/package and security gates. Earlier local passes and configured CI are not current release parity.
+4. Seek explicit operator approval for rollout and any canonical `/create` switch; retain a reachable legacy fallback and rollback plan. No push, deployment or bot-link change is authorized by acceptance documentation.
+
+After this first useful image-editor delivery, proceed with portable color/text UX, native text/font rendering, versioned definitions and verified creator identity, then in-app native preview/direct submission as detailed in the [implementation proposal](proposal.md#incremental-delivery-and-acceptance).
+
 ## Current source and release-candidate scope
 
 - Vanilla JS **Konva 10.7.1 only at runtime**, esbuild 0.28.2 and Playwright 1.64.0 build/test tools; tracked package/lockfile, CI Node 22.23.1. Hashed self-hosted assets/manifest/notices are generated at `build/generated-resources/creator/static/create/editor/` and packaged by Gradle `processResources`, not edited in place.
@@ -40,4 +53,4 @@ First deliver **open image → define/edit areas → prepare/copy data → manua
 
 The exact menu/inline/keyboard launch configuration is not defined in the repository and must be checked with a dedicated development bot before identity integration. Standalone editor access establishes no Telegram identity; an SDK object or bot-launched appearance is not authentication evidence.
 
-Model/media tests, controlled Telegram SDK unit doubles, Chromium emulation and package checks are distinct from the spike; their presence is not overall-green evidence or real-device proof. Real Android Brave/iOS/Telegram WebView, keyboard usability and performance remain image-only release gates. Direct-submission round-trip belongs to the later slice, not this candidate. Older Java 21 is not maintenance-floor parity. No production-bot tests or live upload/render/notification/publishing/deployment are authorized by this status.
+Model/media tests, controlled Telegram SDK unit doubles, Chromium emulation and package checks are distinct from the spike; their presence is not overall-green evidence or real-device proof. The user-reported successful Telegram test does not close the remaining Android Brave/iOS/client matrix, keyboard usability and performance gates. Direct-submission round-trip belongs to the later slice, not this candidate. Older Java 21 is not maintenance-floor parity. No production-bot tests or live upload/render/notification/publishing/deployment are authorized by this status.
