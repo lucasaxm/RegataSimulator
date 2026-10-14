@@ -8,6 +8,7 @@ export const frontend = path.dirname(fileURLToPath(import.meta.url));
 export const repository = path.resolve(frontend, '../..');
 export const outputDirectory = path.join(repository, 'build/generated-resources/creator/static/create/editor');
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+const telegramSdk = 'https://telegram.org/js/telegram-web-app.js';
 
 async function guardOutput() {
     const relative = path.relative(repository, outputDirectory);
@@ -114,9 +115,10 @@ export async function buildEditor() {
         const { generated, assets } = generatedAssets(result.outputFiles);
         const html = template.replace('__EDITOR_SCRIPT__', `/create/editor/${assets.script}`)
             .replace('__EDITOR_STYLE__', `/create/editor/${assets.style}`);
-        if (/__(?:EDITOR_SCRIPT|EDITOR_STYLE)__/.test(html)
-            || /(?:src|href)\s*=\s*["']\s*(?:https?:|\/\/)/i.test(html)) {
-            throw new Error('Editor HTML must use self-hosted assets only');
+        const remote = [...html.matchAll(/(src|href)\s*=\s*["']\s*((?:https?:|\/\/)[^"']*)["']/gi)];
+        if (/__(?:EDITOR_SCRIPT|EDITOR_STYLE)__/.test(html) || remote.length !== 1
+            || remote[0][1].toLowerCase() !== 'src' || remote[0][2] !== telegramSdk) {
+            throw new Error('Only the official Telegram SDK may accompany self-hosted editor assets');
         }
         generated.set('index.html', Buffer.from(html));
         generated.set('licenses.txt', Buffer.from(notices));
@@ -129,6 +131,8 @@ export async function buildEditor() {
             schemaVersion: 1, assets,
             files: Object.fromEntries([...generated].map(([name, bytes]) => [name, { sha256: digest(bytes) }])),
             runtimeDependencies, securityInventory,
+            hostedIntegrationScripts: [{ name: 'Telegram WebApp SDK', url: telegramSdk,
+                securityScope: 'Official hosted, unversioned integration; not covered by npm/Maven audits' }],
             securityGate: 'npm audit --audit-level=low (includes build/test dependencies; not legal clearance)',
             buildToolLicenseReview: 'NOT_ASSESSED: development tools are not shipped; review redistribution separately'
         };
@@ -150,7 +154,7 @@ export async function buildEditor() {
 }
 
 async function checkSources() {
-    const files = ['app.mjs', 'model.mjs', 'media.mjs', 'build.mjs', 'server.mjs',
+    const files = ['app.mjs', 'model.mjs', 'media.mjs', 'telegram.mjs', 'build.mjs', 'server.mjs',
         'playwright.config.mjs', 'verify-package.mjs'];
     const tests = await readdir(path.join(frontend, 'test'), { recursive: true });
     files.push(...tests.filter(name => /\.(mjs|cjs|js)$/.test(name)).map(name => path.join('test', name)));

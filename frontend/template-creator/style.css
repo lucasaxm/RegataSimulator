@@ -6,3 +6,187 @@ dialog{color:inherit;background:var(--panel);border:1px solid var(--line);border
 @media(max-width:700px){:root{font-size:14px}.appbar{padding:3px 6px;gap:4px}.appbar #filename{font-size:12px}.appbar .file-button{padding:7px;max-width:104px}.appbar button{padding:7px 9px}main{flex-direction:column}.tools{gap:4px;padding:3px 6px}.tools button{padding:6px;flex:1;white-space:nowrap;font-size:13px}#inspector{width:100%;flex:none;height:min(224px,max(96px,calc(var(--app-height)*.45 - 126px)));border-left:0;border-top:1px solid var(--line)}.panel-heading{padding:4px 8px;align-items:center}.panel-heading label{flex-direction:row;align-items:center;gap:8px}.panel-heading select{flex:1;width:auto}.panel-content{padding:8px;gap:8px}.panel-content .row{gap:6px}.camera{top:6px;right:6px}.camera button{min-width:34px;min-height:36px;padding:4px 6px}#rectify-dialog{inset:auto 6px 28px auto;width:calc(100vw - 12px);max-height:45dvh;padding:10px}#status{font-size:11px}}
 @media(max-height:480px) and (orientation:landscape){main{flex-direction:row}#inspector{width:250px;flex:0 0 250px;height:auto;border-left:1px solid var(--line)}#rectify-dialog{max-height:calc(var(--app-height) - 50px);width:300px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+
+/* Image-first flow: quiet graphite chrome, blue actions, no remote fonts. */
+html {
+	height: 100%;
+	overflow: hidden;
+}
+
+html > body {
+	width: 100%;
+	height: 100%;
+	overscroll-behavior: none;
+}
+
+.primary {
+	background: var(--accent);
+	color: var(--tg-theme-button-text-color, #fff);
+	border-color: transparent;
+	font-weight: 600;
+}
+
+#editor #empty {
+	pointer-events: auto;
+	cursor: pointer;
+	gap: 4px;
+	padding: 24px;
+}
+
+#editor #empty h1 {
+	font-size: clamp(26px, 4vw, 36px);
+	letter-spacing: -.025em;
+}
+
+#editor #empty p {
+	max-width: 36ch;
+	margin: 6px 0;
+}
+
+#open-image {
+	min-width: 184px;
+	min-height: 54px;
+	margin: 16px 0 12px;
+	font-size: 17px;
+	pointer-events: auto;
+}
+
+#drop-hint {
+	position: absolute;
+	inset: 12px;
+	z-index: 2;
+	display: grid;
+	place-content: center;
+	padding: 24px;
+	border: 3px dashed #91b8ff;
+	border-radius: 8px;
+	background: var(--panel);
+	color: inherit;
+	font-size: 18px;
+	text-align: center;
+	pointer-events: none;
+}
+
+#editor .tools {
+	display: grid;
+	grid-template-columns: repeat(5, minmax(0, 130px));
+	justify-content: center;
+}
+
+#editor .tools button {
+	min-width: 0;
+}
+
+.tools [data-panel] {
+	border-color: transparent;
+}
+
+.tools [data-panel][aria-pressed="true"] {
+	border-color: var(--accent);
+}
+
+.panel-content [data-panel-content] {
+	display: flex;
+	flex-direction: column;
+	flex: 0 0 auto;
+	gap: 12px;
+	min-width: 0;
+}
+
+.panel-content [data-panel-content] > button {
+	text-align: left;
+}
+
+#inspector[data-active-panel="shape"] .panel-heading {
+	border-bottom-color: var(--accent);
+}
+
+.send-steps {
+	padding-left: 24px;
+	line-height: 1.5;
+}
+
+.send-steps li + li {
+	margin-top: 10px;
+}
+
+#csv-copy,
+#return-bot {
+	margin: 0 4px 8px 0;
+}
+
+.data-options {
+	margin: 12px 0;
+	padding-top: 12px;
+	border-top: 1px solid var(--line);
+}
+
+.data-options summary {
+	min-height: 44px;
+	padding: 12px 0;
+	cursor: pointer;
+}
+
+.data-options summary:focus-visible {
+	outline: 3px solid #91b8ff;
+	outline-offset: -3px;
+}
+
+@media (max-width: 700px) {
+	#editor .tools {
+		grid-template-columns: repeat(5, minmax(0, 1fr));
+	}
+
+	#editor .tools button {
+		padding: 6px 3px;
+		font-size: 12px;
+	}
+
+	#inspector {
+		/* Reserve >=55% of app height for the canvas, excluding chrome/panel. */
+		height: min(240px, max(0px, calc(var(--app-height) * .45 - 140px
+			- env(safe-area-inset-top) - env(safe-area-inset-bottom))));
+		flex-shrink: 0;
+	}
+
+	.panel-content [data-panel-content] {
+		gap: 8px;
+	}
+
+	#editor #empty {
+		padding: 16px;
+	}
+
+	#editor #empty h1 {
+		font-size: 28px;
+	}
+}
+
+@media (max-width: 700px) and (orientation: landscape),
+	   (max-height: 480px) and (orientation: landscape) {
+	main {
+		flex-direction: row;
+	}
+
+	#inspector {
+		width: clamp(200px, 34vw, 280px);
+		flex: 0 0 clamp(200px, 34vw, 280px);
+		height: auto;
+		border-top: 0;
+		border-left: 1px solid var(--line);
+	}
+
+	#editor #empty {
+		gap: 0;
+		padding: 12px;
+	}
+
+	#editor #empty h1 {
+		font-size: 24px;
+	}
+
+	#open-image {
+		min-height: 44px;
+		margin: 6px 0;
+	}
+}

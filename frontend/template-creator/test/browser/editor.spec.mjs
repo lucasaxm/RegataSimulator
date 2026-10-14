@@ -2,6 +2,7 @@ import { test as base, expect } from '@playwright/test';
 import { deflateSync } from 'node:zlib';
 
 const HEADER = 'Area,Source,TLx,TLy,TRx,TRy,BRx,BRy,BLx,BLy,Background';
+const SDK_URL = 'https://telegram.org/js/telegram-web-app.js';
 // Coordinates supplied in model.test.mjs; images below are generated, not user media.
 const USER_CSV = `${HEADER}\n1,1,105,840,274,840,274,1018,105,1018,0\n2,2,461,842,631,842,631,1020,461,1020,0\n3,3,800,840,969,840,969,1018,800,1018,0`;
 const RECT = [[30, 35], [150, 35], [150, 125], [30, 125]];
@@ -62,6 +63,11 @@ const test = base.extend({
         page.on('dialog', dialog => dialog.accept());
         await page.route('**/*', async route => {
             const request = route.request(), url = new URL(request.url());
+            // The sole approved external script is synthetic even in standalone tests.
+            // Never contact Telegram, including when its optional SDK fails to load.
+            if (request.url() === SDK_URL && request.method() === 'GET') {
+                return route.fulfill({ contentType: 'application/javascript', body: '' });
+            }
             if (url.protocol === 'blob:' || url.protocol === 'data:') return route.continue();
             if (url.origin !== 'http://127.0.0.1:4174' || request.method() !== 'GET'
                 || !url.pathname.startsWith('/create/editor/')) {
@@ -71,7 +77,7 @@ const test = base.extend({
             return route.continue();
         });
         await use();
-        expect(forbidden, 'Only loopback editor GETs are allowed; no API or external requests').toEqual([]);
+        expect(forbidden, 'Only loopback editor GETs and the synthetic exact official SDK GET are allowed').toEqual([]);
         expect(errors, 'Uncaught browser errors').toEqual([]);
     }, { auto: true }]
 });
@@ -81,10 +87,10 @@ async function settled(page) {
 }
 
 async function open(page, width = 200, height = 160) {
-    await page.goto('/create/editor/');
+    await page.goto('/create/editor/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('#empty')).toBeVisible();
     const chooser = page.waitForEvent('filechooser');
-    await page.locator('#image-file').click();
+    await page.getByRole('button', { name: 'Abrir imagem', exact: true }).click();
     await (await chooser).setFiles({ name: 'generated.png', mimeType: 'image/png', buffer: png(width, height) });
     await expect(page.locator('#empty')).toBeHidden();
     await expect(page.locator('#filename')).toHaveAttribute('title', `generated.png · ${width} × ${height} px`);
@@ -96,17 +102,34 @@ async function readCsv(page) {
     await page.locator('#csv-open').click();
     await expect(page.locator('#csv-dialog')).toBeVisible();
     const value = await page.locator('#csv').inputValue();
-    await page.getByRole('button', { name: 'Fechar CSV', exact: true }).click();
+    await page.getByRole('button', { name: 'Fechar instruções de envio', exact: true }).click();
     await expect(page.locator('#csv-dialog')).toBeHidden();
     return value;
 }
 
 async function importCsv(page, value) {
     await page.locator('#csv-open').click();
+    await openDataOptions(page);
     await page.locator('#csv').fill(value);
     await page.locator('#csv-import').click();
     await expect(page.locator('#csv-dialog')).toBeHidden();
     await expect(page.locator('#inspector')).toBeVisible();
+    await settled(page);
+}
+
+async function openDataOptions(page) {
+    const details = page.locator('#csv-dialog .data-options');
+    if (!await details.evaluate(element => element.open)) {
+        await details.locator('summary').click();
+    }
+    await expect(details).toHaveAttribute('open', '');
+}
+
+async function showPanel(page, name) {
+    const content = page.locator(`#panel-${name}`);
+    if (!await content.isVisible()) await page.locator(`[data-panel="${name}"]`).click();
+    await expect(content).toBeVisible();
+    await expect(page.locator(`[data-panel="${name}"]`)).toHaveAttribute('aria-pressed', 'true');
     await settled(page);
 }
 
@@ -134,7 +157,7 @@ async function drag(page, project, from, to) {
 
 async function draw(page, from = RECT[0], to = RECT[2]) {
     const project = await fit(page);
-    await page.locator('#draw').click();
+    if (await page.locator('#draw').getAttribute('aria-pressed') !== 'true') await page.locator('#draw').click();
     await drag(page, project, from, to);
     await expect(page.locator('#inspector')).toBeVisible();
     await fit(page);
@@ -144,7 +167,21 @@ test('empty defaults and local file picker load without upload', async ({ page }
     await page.goto('/create/editor/');
     await expect(page.locator('#empty')).toBeVisible();
     for (const id of ['draw', 'properties', 'undo', 'redo']) await expect(page.locator(`#${id}`)).toBeDisabled();
-    await expect(page.locator('#select')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('heading', { name: 'Comece pela imagem' })).toBeVisible();
+    const cta = page.getByRole('button', { name: 'Abrir imagem', exact: true });
+    await expect(cta).toBeVisible(); await expect(cta).toBeEnabled();
+    const ctaBox = await cta.boundingBox(), viewportBox = await page.locator('#viewport').boundingBox();
+    expect(ctaBox.height).toBeGreaterThanOrEqual(44);
+    expect(ctaBox.width).toBeGreaterThanOrEqual(184);
+    expect(ctaBox.x).toBeGreaterThanOrEqual(viewportBox.x);
+    expect(ctaBox.y).toBeGreaterThanOrEqual(viewportBox.y);
+    expect(ctaBox.x + ctaBox.width).toBeLessThanOrEqual(viewportBox.x + viewportBox.width);
+    expect(ctaBox.y + ctaBox.height).toBeLessThanOrEqual(viewportBox.y + viewportBox.height);
+    await expect(page.locator('.tools')).toBeHidden();
+    await expect(page.locator('.camera')).toBeHidden();
+    await expect(page.locator('.file-button')).toBeHidden();
+    await expect(page.locator('body')).not.toContainText(/\bCSV\b/i);
+    await expect(page.locator('#select, #fit-areas')).toHaveCount(0);
     await expect(page.locator('#inspector')).toBeHidden();
     expect(await readCsv(page)).toBe('');
     await open(page);
@@ -157,7 +194,7 @@ test('native pointer draw produces exact pixels and opens adjustments', async ({
     await open(page); await draw(page);
     expect(await readCsv(page)).toBe(oneArea(RECT));
     await expect(page.locator('#properties')).toHaveAttribute('aria-expanded', 'true');
-    await expect(page.locator('#select')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#draw')).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('reverse drawing normalizes TL TR BR BL exactly', async ({ page }) => {
@@ -170,7 +207,11 @@ test('zero-distance click and Escape cancel pending drawing without history', as
     const project = await fit(page), a = project(RECT[0]), b = project(RECT[2]);
     await page.locator('#draw').click(); await page.mouse.click(a.x, a.y);
     expect(await readCsv(page)).toBe('');
+    await expect(page.locator('#draw')).toHaveAttribute('aria-pressed', 'true');
     await page.locator('#draw').click();
+    await expect(page.locator('#draw')).toHaveAttribute('aria-pressed', 'false');
+    await page.locator('#draw').click();
+    await expect(page.locator('#draw')).toHaveAttribute('aria-pressed', 'true');
     await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y);
     await page.keyboard.press('Escape'); await page.mouse.up();
     expect(await readCsv(page)).toBe('');
@@ -258,7 +299,9 @@ for (let index = 0; index < 4; index++) {
 
     test(`rectangle dialog anchor ${index}: ghost cancel is inert, Apply fixes anchor/opposite, undo exact`, async ({ page }) => {
         await open(page); await importCsv(page, oneArea(SKEW));
+        await showPanel(page, 'precision');
         await page.locator('#corner').selectOption(String(index));
+        await showPanel(page, 'shape');
         await page.locator('#mode').selectOption('rectangle');
         await expect(page.locator('#rectify-dialog')).toBeVisible();
         await expect(page.locator('#anchor')).toHaveValue(String(index));
@@ -283,6 +326,7 @@ for (let index = 0; index < 4; index++) {
 
 test('duplicate/delete undo exactly; source pickers, background plane and list order remain independent', async ({ page }) => {
     await open(page); await draw(page);
+    await showPanel(page, 'layers');
     await expect(page.locator('#source option')).toHaveText(['Source 1']);
     await page.locator('#duplicate').click();
     const duplicate = translated(RECT, 10, 10);
@@ -310,7 +354,7 @@ test('duplicate/delete undo exactly; source pickers, background plane and list o
 test('exact three-row 1080×1114 CSV survives camera actions, resize and nudge undo', async ({ page }) => {
     await open(page, 1080, 1114); await importCsv(page, USER_CSV);
     expect(await readCsv(page)).toBe(USER_CSV);
-    for (const id of ['zoom-in', 'zoom-out', 'zoom-value', 'fit', 'fit-areas']) {
+    for (const id of ['zoom-in', 'zoom-out', 'zoom-value', 'fit']) {
         await page.locator(`#${id}`).click(); expect(await readCsv(page)).toBe(USER_CSV);
     }
     await page.locator('#pan').click();
@@ -335,10 +379,11 @@ test('invalid CSV preserves previous document and undo history', async ({ page }
     for (const invalid of [oneArea(RECT).replace('TLx', 'text'), `${HEADER}\n1,3,30,35,150,35,150,125,30,125,0`,
         `${HEADER}\n1,1,30,35,150,125,150,35,30,125,0`, `${HEADER}\n1,1,200,0,220,0,220,20,200,20,0`]) {
         await page.locator('#csv-open').click(); await page.locator('#csv').fill(invalid);
+        await openDataOptions(page);
         await page.locator('#csv-import').click();
         await expect(page.locator('#csv-error')).not.toBeEmpty();
         await expect(page.locator('#csv-dialog')).toBeVisible();
-        await page.getByRole('button', { name: 'Fechar CSV', exact: true }).click();
+        await page.getByRole('button', { name: 'Fechar instruções de envio', exact: true }).click();
         expect(await readCsv(page)).toBe(oneArea(RECT));
     }
     await page.locator('#undo').click(); expect(await readCsv(page)).toBe('');
@@ -421,6 +466,7 @@ for (const [label, name, mimeType, buffer, error] of badImages) {
 
 test('closed-keyboard canvas stays ≥55% on mobile with inspector open; inspector scrolls, not body', async ({ page }) => {
     await open(page); await draw(page);
+    await showPanel(page, 'layers');
     await page.locator('#viewport').focus();
     const metrics = await page.evaluate(() => {
         const viewport = document.querySelector('#viewport').getBoundingClientRect();
@@ -460,8 +506,374 @@ test('viewport focus keyboard nudges exactly; input focus never nudges; CtrlZ re
     expect(await readCsv(page)).toBe(oneArea(translated(RECT, 1, 0)));
     await page.locator('#viewport').focus(); await page.keyboard.press('Control+z');
     expect(await readCsv(page)).toBe(oneArea(RECT));
+    await showPanel(page, 'precision');
     await page.locator('#x').focus(); await page.keyboard.press('ArrowRight');
     expect(await readCsv(page)).toBe(oneArea(RECT));
+});
+
+test('native empty canvas click opens the local chooser', async ({ page }) => {
+    await page.goto('/create/editor/');
+    await expect(page.locator('#empty')).toBeVisible();
+    const box = await page.locator('#viewport').boundingBox();
+    const chooser = page.waitForEvent('filechooser');
+    // A blank corner, not the CTA: exercise the viewport's native click path.
+    await page.mouse.click(box.x + 10, box.y + 10);
+    await (await chooser).setFiles({ name: 'canvas.png', mimeType: 'image/png', buffer: png() });
+    await expect(page.locator('#filename')).toHaveAttribute('title', 'canvas.png · 200 × 160 px');
+    await expect(page.locator('#empty')).toBeHidden();
+    await expect(page.locator('.tools')).toBeVisible();
+    await expect(page.locator('.camera')).toBeVisible();
+    expect(await readCsv(page)).toBe('');
+});
+
+// Browser-local clipboard/file payloads only. Chromium's OS image clipboard is
+// platform-dependent; dispatch real ClipboardEvent/DataTransfer DOM objects,
+// without replacing editor handlers, importing model state or exposing globals.
+async function transfer(page, kind, files, target = '#viewport', text = null) {
+    return page.locator(target).evaluate((element, payload) => {
+        const data = new DataTransfer();
+        for (const file of payload.files) {
+            data.items.add(new File([new Uint8Array(file.bytes)], file.name, { type: file.type }));
+        }
+        if (payload.text !== null) data.setData('text/uri-list', payload.text);
+        const event = payload.kind === 'paste'
+            ? new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: data })
+            : new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: data });
+        element.dispatchEvent(event);
+        return event.defaultPrevented;
+    }, { kind, files: files.map(file => ({ name: file.name, type: file.type, bytes: [...file.buffer] })), text });
+}
+
+test('generated PNG paste opens locally; typing inputs and textarea ignore image paste', async ({ page }) => {
+    await page.goto('/create/editor/');
+    await expect(page.locator('#empty')).toBeVisible();
+    const file = { name: 'pasted.png', type: 'image/png', buffer: png() };
+    expect(await transfer(page, 'paste', [file])).toBe(true);
+    await expect(page.locator('#filename')).toHaveAttribute('title', 'pasted.png · 200 × 160 px');
+    await expect(page.locator('#empty')).toBeHidden();
+    await draw(page);
+    await showPanel(page, 'precision');
+    const replacement = { name: 'ignored.png', type: 'image/png', buffer: png(240, 180) };
+    for (const target of ['#x', '#y', '#corner']) {
+        await page.locator(target).focus();
+        expect(await transfer(page, 'paste', [replacement], target)).toBe(false);
+        await settled(page);
+        await expect(page.locator('#filename')).toHaveAttribute('title', 'pasted.png · 200 × 160 px');
+        expect(await readCsv(page)).toBe(oneArea(RECT));
+    }
+    await page.locator('#csv-open').click();
+    await page.locator('#csv').focus();
+    expect(await transfer(page, 'paste', [replacement], '#csv')).toBe(false);
+    await expect(page.locator('#csv')).toHaveValue(oneArea(RECT));
+    await expect(page.locator('#filename')).toHaveAttribute('title', 'pasted.png · 200 × 160 px');
+    await page.getByRole('button', { name: 'Fechar instruções de envio', exact: true }).click();
+    // The same replacement outside a typing control must actually load.
+    const confirmation = page.waitForEvent('dialog');
+    expect(await transfer(page, 'paste', [replacement])).toBe(true);
+    expect((await confirmation).message()).toBe('Trocar a imagem descarta as áreas atuais. Continuar?');
+    await expect(page.locator('#filename')).toHaveAttribute('title', 'ignored.png · 240 × 180 px');
+    expect(await readCsv(page)).toBe('');
+});
+
+test('generated file drop loads; URL, multiple files and nonimage drops preserve exact document and history', async ({ page }) => {
+    await page.goto('/create/editor/');
+    await expect(page.locator('#empty')).toBeVisible();
+    const file = { name: 'dropped.png', type: 'image/png', buffer: png() };
+    expect(await transfer(page, 'drop', [file])).toBe(true);
+    await expect(page.locator('#filename')).toHaveAttribute('title', 'dropped.png · 200 × 160 px');
+    await draw(page);
+    const attempts = [
+        [[], 'https://example.invalid/image.png', 'Arraste um arquivo local PNG ou JPEG. Links não abrem imagens aqui.'],
+        [[file, { ...file, name: 'second.png' }], null, 'Abra uma imagem por vez: escolha um único arquivo PNG ou JPEG.'],
+        [[{ name: 'note.txt', type: 'text/plain', buffer: Buffer.from('not an image') }], null,
+            'Escolha uma imagem PNG ou JPEG. Outros tipos de arquivo não são aceitos.']
+    ];
+    for (const [files, text, error] of attempts) {
+        expect(await transfer(page, 'drop', files, '#viewport', text)).toBe(true);
+        await expect(page.locator('#drop-hint')).toBeHidden();
+        await expect(page.locator('#status')).toHaveAttribute('data-error', 'true');
+        await expect(page.locator('#status')).toHaveText(error);
+        await expect(page.locator('#filename')).toHaveAttribute('title', 'dropped.png · 200 × 160 px');
+        expect(await readCsv(page)).toBe(oneArea(RECT));
+        await expect(page.locator('#undo')).toBeEnabled();
+        await expect(page.locator('#redo')).toBeDisabled();
+        await expect(page).toHaveURL('http://127.0.0.1:4174/create/editor/');
+    }
+    await page.locator('#undo').click(); expect(await readCsv(page)).toBe('');
+    await page.locator('#redo').click(); expect(await readCsv(page)).toBe(oneArea(RECT));
+});
+
+test('Fit includes image and off-canvas bounds without changing exact document', async ({ page }) => {
+    await open(page);
+    const initialZoom = Number((await page.locator('#zoom-value').innerText()).replace('%', ''));
+    const outside = [[-1800, -1400], [50, -1400], [50, 100], [-1800, 100]];
+    const exact = `${HEADER}\n${csvFor(outside)}\n${csvFor(SKEW, 2, 1, 2)}`;
+    await importCsv(page, exact);
+    await settled(page); await page.locator('#fit').click(); await settled(page);
+    const box = await page.locator('#viewport').boundingBox();
+    // Union includes the image's right/bottom extent and is larger than every
+    // tested viewport: [-1800,-1400]..[200,160], not just the selected area.
+    const expectedScale = Math.min((box.width - 36) / 2000, (box.height - 72) / 1560, 1);
+    await expect(page.locator('#zoom-value')).toHaveText(`${Math.round(expectedScale * 100)}%`);
+    expect(Math.round(expectedScale * 100)).toBeLessThan(initialZoom);
+    expect(await readCsv(page)).toBe(exact);
+    await page.locator('#undo').click(); expect(await readCsv(page)).toBe('');
+    await page.locator('#redo').click(); expect(await readCsv(page)).toBe(exact);
+});
+
+test('reset areas requires confirmation; cancel is inert and undo restores every point, source and plane', async ({ page }) => {
+    await open(page);
+    const exact = `${HEADER}\n${csvFor(SKEW)}\n${csvFor(RECT, 2, 1, 2)}\n${csvFor(translated(RECT, -40, 5), 1, 0, 3)}`;
+    await importCsv(page, exact); await showPanel(page, 'layers');
+    const acceptDialogs = page.listeners('dialog');
+    for (const listener of acceptDialogs) page.off('dialog', listener);
+    const prompt = 'Recomeçar com uma área cobrindo toda a imagem? A imagem será mantida e você poderá desfazer.';
+    try {
+        const cancelled = page.waitForEvent('dialog');
+        const cancelClick = page.locator('#reset-areas').click();
+        const cancelDialog = await cancelled;
+        expect(cancelDialog.type()).toBe('confirm'); expect(cancelDialog.message()).toBe(prompt);
+        await cancelDialog.dismiss(); await cancelClick;
+        expect(await readCsv(page)).toBe(exact);
+        const confirmed = page.waitForEvent('dialog');
+        const confirmClick = page.locator('#reset-areas').click();
+        const confirmDialog = await confirmed;
+        expect(confirmDialog.message()).toBe(prompt); await confirmDialog.accept(); await confirmClick;
+        expect(await readCsv(page)).toBe(oneArea([[0, 0], [200, 0], [200, 160], [0, 160]]));
+        await expect(page.locator('#filename')).toHaveAttribute('title', 'generated.png · 200 × 160 px');
+        await expect(page.locator('#panel-shape')).toBeVisible();
+        await page.locator('#undo').click(); expect(await readCsv(page)).toBe(exact);
+        await showPanel(page, 'layers');
+        await expect(page.locator('#area-list option')).toHaveText(['1 · Source 1', '2 · Source 2 · atrás', '3 · Source 1']);
+        await page.locator('#redo').click();
+        expect(await readCsv(page)).toBe(oneArea([[0, 0], [200, 0], [200, 160], [0, 160]]));
+    } finally {
+        for (const listener of acceptDialogs) page.on('dialog', listener);
+    }
+});
+
+test('toolbar tabs expose exactly one chosen panel with correct ARIA and bounded mobile layout', async ({ page }) => {
+    await open(page); await draw(page);
+    await expect(page.locator('.tools button')).toHaveText(['Nova área', 'Mover tela', 'Forma', 'Precisão', 'Camadas']);
+    for (const chosen of ['shape', 'precision', 'layers', 'shape']) {
+        await showPanel(page, chosen);
+        for (const name of ['shape', 'precision', 'layers']) {
+            const trigger = page.locator(`[data-panel="${name}"]`);
+            await expect(trigger).toHaveAttribute('aria-controls', 'inspector');
+            await expect(trigger).toHaveAttribute('aria-pressed', String(name === chosen));
+            await expect(trigger).toHaveAttribute('aria-expanded', String(name === chosen));
+            if (name === chosen) await expect(page.locator(`#panel-${name}`)).toBeVisible();
+            else await expect(page.locator(`#panel-${name}`)).toBeHidden();
+        }
+        await expect(page.locator('[data-panel-content]:visible')).toHaveCount(1);
+        const metrics = await page.evaluate(() => ({
+            width: innerWidth, height: innerHeight, visualHeight: visualViewport.height,
+            canvasHeight: document.querySelector('#viewport').getBoundingClientRect().height,
+            bodyHeight: document.body.scrollHeight, bodyWidth: document.body.scrollWidth,
+            documentHeight: document.documentElement.scrollHeight, scrollX, scrollY
+        }));
+        expect(metrics.visualHeight).toBe(metrics.height);
+        if (metrics.width <= 700) expect(metrics.canvasHeight / metrics.visualHeight).toBeGreaterThanOrEqual(.55);
+        expect(metrics.bodyHeight).toBeLessThanOrEqual(metrics.height);
+        expect(metrics.documentHeight).toBeLessThanOrEqual(metrics.height);
+        expect(metrics.bodyWidth).toBeLessThanOrEqual(metrics.width);
+        expect(metrics.scrollX).toBe(0); expect(metrics.scrollY).toBe(0);
+    }
+    await page.locator('[data-panel="shape"]').click();
+    await expect(page.locator('#inspector')).toBeHidden();
+    for (const name of ['shape', 'precision', 'layers']) {
+        await expect(page.locator(`[data-panel="${name}"]`)).toHaveAttribute('aria-pressed', 'false');
+        await expect(page.locator(`[data-panel="${name}"]`)).toHaveAttribute('aria-expanded', 'false');
+    }
+    await showPanel(page, 'precision');
+    await page.getByRole('button', { name: 'Recolher ajustes' }).click();
+    await expect(page.locator('#inspector')).toBeHidden();
+    await expect(page.locator('[data-panel="precision"]')).toBeFocused();
+    expect(await readCsv(page)).toBe(oneArea(RECT));
+});
+
+test('precision tab numeric corner edits retain exact rectangle pairing and undo', async ({ page }) => {
+    await open(page); await draw(page);
+    await expect(page.locator('#x')).toBeHidden();
+    await showPanel(page, 'precision');
+    await page.locator('#corner').selectOption('0');
+    await page.locator('#x').fill('24'); await page.locator('#x').press('Tab');
+    expect(await readCsv(page)).toBe(oneArea([[24, 35], [150, 35], [150, 125], [24, 125]]));
+    await page.locator('#y').fill('28'); await page.locator('#y').press('Tab');
+    expect(await readCsv(page)).toBe(oneArea([[24, 28], [150, 28], [150, 125], [24, 125]]));
+    await page.locator('#undo').click();
+    expect(await readCsv(page)).toBe(oneArea([[24, 35], [150, 35], [150, 125], [24, 125]]));
+    await page.locator('#undo').click(); expect(await readCsv(page)).toBe(oneArea(RECT));
+});
+
+test('manual send dialog uses human labels and keeps import and download behind advanced details', async ({ page }) => {
+    await open(page); await draw(page);
+    await page.getByRole('button', { name: 'Preparar envio', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Enviar template ao bot', exact: true })).toBeVisible();
+    await expect(page.locator('.send-steps li')).toHaveText([
+        'Copiar dados.', 'Anexar a imagem original como Arquivo/documento no bot.',
+        'Colar os dados na legenda e enviar.'
+    ]);
+    await expect(page.getByLabel('Dados do template', { exact: true })).toHaveValue(oneArea(RECT));
+    await expect(page.getByRole('button', { name: 'Copiar dados', exact: true })).toBeVisible();
+    await expect(page.locator('#csv-dialog')).toContainText('O template passa pela aprovação da administração.');
+    await expect(page.locator('#csv-dialog')).toContainText('Este editor não envia arquivos.');
+    await expect(page.locator('#csv-import')).toBeHidden();
+    await expect(page.locator('#csv-download')).toBeHidden();
+    await expect(page.locator('#return-bot')).toBeHidden();
+    await expect(page.locator('body')).not.toContainText(/\bCSV\b/i);
+    await openDataOptions(page);
+    await expect(page.getByRole('button', { name: 'Aplicar dados', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Baixar dados', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Fechar instruções de envio', exact: true }).click();
+    await expect(page.locator('#csv-dialog')).toBeHidden();
+    expect(await readCsv(page)).toBe(oneArea(RECT));
+});
+
+// Synthetic SDK owns its callbacks in a closure. Only the real SDK surface is
+// global; observations/commands are test-local DOM attributes/events, not an
+// editor debug interface, identity, network transport or production state hook.
+function sdkScript(older = false) {
+    return `(${function (older) {
+        const root = document.documentElement, calls = [], handlers = new Map();
+        let popupCallback;
+        const record = (name, value = null) => {
+            calls.push({ name, value }); root.dataset.testSdkCalls = JSON.stringify(calls);
+        };
+        const sdk = { platform: 'android', initData: '', version: older ? '5.0' : '8.0',
+            colorScheme: 'dark', themeParams: { bg_color: '#123456', text_color: '#eeeeee' },
+            viewportStableHeight: 640 };
+        if (!older) Object.assign(sdk, {
+            ready: () => record('ready'), expand: () => record('expand'),
+            enableClosingConfirmation: () => record('enableClosingConfirmation'),
+            isVersionAtLeast: () => true,
+            onEvent: (name, handler) => { handlers.set(name, handler); record('onEvent', name); },
+            close: () => record('close'),
+            showPopup: (options, callback) => { popupCallback = callback; record('showPopup', options); }
+        });
+        document.addEventListener('test-sdk-command', event => {
+            const { name, value } = event.detail;
+            if (name === 'themeChanged') {
+                sdk.themeParams = value.params; sdk.colorScheme = value.scheme;
+                handlers.get(name)?.();
+            } else if (name === 'viewportChanged') {
+                sdk.viewportStableHeight = value; handlers.get(name)?.({ isStateStable: true });
+            } else if (name === 'popup') popupCallback?.(value);
+        });
+        root.dataset.testSdkCalls = '[]';
+        window.Telegram = { WebApp: sdk };
+    }.toString()})(${JSON.stringify(older)});`;
+}
+
+async function sdkCommand(page, name, value) {
+    await page.evaluate(detail => document.dispatchEvent(new CustomEvent('test-sdk-command', { detail })), { name, value });
+}
+
+async function sdkCalls(page) {
+    return page.locator('html').evaluate(element => JSON.parse(element.dataset.testSdkCalls ?? '[]'));
+}
+
+async function mockClipboard(page) {
+    await page.addInitScript(() => {
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+            writeText: async value => { document.documentElement.dataset.testCopied = value; }
+        } });
+    });
+}
+
+test('delayed embedded SDK updates theme and viewport; copy popup never closes without an explicit choice', async ({ page }) => {
+    let releaseSdk;
+    const gate = new Promise(resolve => { releaseSdk = resolve; });
+    await page.route(SDK_URL, async route => {
+        if (route.request().method() !== 'GET') return route.fallback();
+        await gate;
+        await route.fulfill({ contentType: 'application/javascript', body: sdkScript() });
+    });
+    await mockClipboard(page);
+    try {
+        await open(page); await draw(page);
+        await page.locator('#csv-open').click();
+        await expect(page.locator('#return-bot')).toBeHidden();
+        releaseSdk();
+        await expect.poll(async () => (await sdkCalls(page)).map(call => call.name)).toEqual([
+            'ready', 'expand', 'enableClosingConfirmation', 'onEvent', 'onEvent'
+        ]);
+        expect((await sdkCalls(page)).filter(call => call.name === 'onEvent').map(call => call.value))
+            .toEqual(['themeChanged', 'viewportChanged']);
+        await expect(page.locator('#return-bot')).toBeVisible();
+        expect(await page.locator('html').evaluate(element => element.style.getPropertyValue('--tg-theme-bg-color'))).toBe('#123456');
+        await sdkCommand(page, 'themeChanged', { params: { bg_color: '#abcdef', text_color: 'url(https://example.invalid/)' }, scheme: 'light' });
+        expect(await page.locator('html').evaluate(element => ({
+            background: element.style.getPropertyValue('--tg-theme-bg-color'),
+            text: element.style.getPropertyValue('--tg-theme-text-color'), scheme: element.style.getPropertyValue('color-scheme')
+        }))).toEqual({ background: '#abcdef', text: '', scheme: 'light' });
+        await sdkCommand(page, 'viewportChanged', 612);
+        await expect(page.locator('html')).toHaveAttribute('style', /--tg-viewport-stable-height: 612px/);
+        await expect(page.locator('#csv')).toHaveValue(oneArea(RECT));
+        await expect(page.locator('body')).not.toContainText(/\bCSV\b/i);
+        await page.getByRole('button', { name: 'Copiar dados', exact: true }).click();
+        await expect(page.locator('html')).toHaveAttribute('data-test-copied', oneArea(RECT));
+        await expect(page.locator('#csv-error')).toHaveText('Dados copiados. Anexe a imagem original no bot e cole os dados na legenda.');
+        const popups = (await sdkCalls(page)).filter(call => call.name === 'showPopup');
+        expect(popups).toHaveLength(1);
+        expect(popups[0].value).toEqual({
+            message: 'Dados copiados. Envie a imagem como arquivo ao bot e cole os dados na legenda.',
+            buttons: [{ id: 'close', type: 'default', text: 'Voltar ao bot' },
+                { id: 'continue', type: 'default', text: 'Continuar editando' }]
+        });
+        expect((await sdkCalls(page)).filter(call => call.name === 'close')).toHaveLength(0);
+        await sdkCommand(page, 'popup', 'continue');
+        expect((await sdkCalls(page)).filter(call => call.name === 'close')).toHaveLength(0);
+        await expect(page.locator('#csv-dialog')).toBeVisible();
+        await page.locator('#csv-copy').click();
+        await expect.poll(async () => (await sdkCalls(page)).filter(call => call.name === 'showPopup').length).toBe(2);
+        await sdkCommand(page, 'popup', 'close');
+        expect((await sdkCalls(page)).filter(call => call.name === 'close')).toHaveLength(1);
+        await page.getByRole('button', { name: 'Voltar ao bot', exact: true }).click();
+        expect((await sdkCalls(page)).filter(call => call.name === 'close')).toHaveLength(2);
+        await page.getByRole('button', { name: 'Fechar instruções de envio', exact: true }).click();
+        expect(await readCsv(page)).toBe(oneArea(RECT));
+        await page.locator('#undo').click(); expect(await readCsv(page)).toBe('');
+    } finally { releaseSdk(); }
+});
+
+test('failed official SDK request leaves standalone native open, draw, copy and export usable', async ({ page }) => {
+    await page.route(SDK_URL, route => route.request().method() === 'GET'
+        ? route.abort('failed') : route.fallback());
+    await mockClipboard(page);
+    await open(page); await draw(page);
+    expect(await readCsv(page)).toBe(oneArea(RECT));
+    await page.getByRole('button', { name: 'Preparar envio', exact: true }).click();
+    await expect(page.locator('#return-bot')).toBeHidden();
+    await page.getByRole('button', { name: 'Copiar dados', exact: true }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-test-copied', oneArea(RECT));
+    await openDataOptions(page);
+    const downloading = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Baixar dados', exact: true }).click();
+    const download = await downloading;
+    expect(download.suggestedFilename()).toBe('template.csv');
+    const stream = await download.createReadStream(), parts = [];
+    for await (const part of stream) parts.push(part);
+    expect(Buffer.concat(parts).toString('utf8')).toBe(oneArea(RECT));
+    await page.getByRole('button', { name: 'Fechar instruções de envio', exact: true }).click();
+    await page.locator('#undo').click(); expect(await readCsv(page)).toBe('');
+});
+
+test('older embedded SDK with missing optional methods does not break copy or geometry', async ({ page }) => {
+    await page.route(SDK_URL, route => route.request().method() === 'GET'
+        ? route.fulfill({ contentType: 'application/javascript', body: sdkScript(true) }) : route.fallback());
+    await mockClipboard(page);
+    await open(page); await draw(page);
+    await page.locator('#csv-open').click();
+    await expect(page.locator('#return-bot')).toBeVisible();
+    await page.locator('#csv-copy').click();
+    await expect(page.locator('html')).toHaveAttribute('data-test-copied', oneArea(RECT));
+    await page.locator('#return-bot').click();
+    expect(await sdkCalls(page)).toEqual([]);
+    await expect(page.locator('#csv-dialog')).toBeVisible();
+    await page.getByRole('button', { name: 'Fechar instruções de envio', exact: true }).click();
+    expect(await readCsv(page)).toBe(oneArea(RECT));
+    await page.locator('#undo').click(); expect(await readCsv(page)).toBe('');
 });
 
 async function touchSession(page) {

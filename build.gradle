@@ -103,7 +103,7 @@ tasks.register('buildCreator', Exec) {
     dependsOn 'installCreatorDependencies'
     description = 'Bundle the reviewed Konva-only editor and retain packaged runtime notices'
     workingDir creatorDirectory
-    inputs.files(['app.mjs', 'model.mjs', 'media.mjs', 'style.css', 'index.html', 'build.mjs',
+    inputs.files(['app.mjs', 'model.mjs', 'media.mjs', 'telegram.mjs', 'style.css', 'index.html', 'build.mjs',
         'package.json', 'package-lock.json'].collect { creatorDirectory.file(it) })
     inputs.property('nodeVersion', creatorNodeVersion)
     inputs.property('npmExecutable', creatorNpm)

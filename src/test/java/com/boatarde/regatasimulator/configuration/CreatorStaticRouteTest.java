@@ -64,6 +64,9 @@ class CreatorStaticRouteTest {
         String html = new ClassPathResource(base + "index.html").getContentAsString(StandardCharsets.UTF_8);
         assertThat(html).contains("/create/editor/" + script, "/create/editor/" + style)
             .doesNotContain("__EDITOR_", "cdn.jsdelivr", "unpkg.com");
+        assertThat(html).contains("https://telegram.org/js/telegram-web-app.js");
+        assertThat(manifest.path("hostedIntegrationScripts").get(0).path("url").asText())
+            .isEqualTo("https://telegram.org/js/telegram-web-app.js");
         String notice = new ClassPathResource(base + "licenses.txt").getContentAsString(StandardCharsets.UTF_8);
         assertThat(notice).contains("konva@10.7.1", "Permission is hereby granted", "Copyright");
         assertThat(manifest.path("runtimeDependencies")).hasSize(1);

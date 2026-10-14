@@ -3,6 +3,7 @@ import { clone, createDocument, validateDocument, addArea, updateArea, deleteAre
     duplicateArea, reorderArea, isRectangle, sourceOptions, importCsv, exportCsv,
     moveArea, moveCorner, moveEdge, rectify, viewToImage, zoomAt } from './model.mjs';
 import { loadLocalImage } from './media.mjs';
+import { initializeTelegram } from './telegram.mjs';
 
 const $ = id => document.getElementById(id);
 const viewport = $('viewport');
@@ -11,6 +12,7 @@ let doc = null, media = null, selectedId = null, tool = 'select', mode = 'rectan
 let view = { scale: 1, x: 0, y: 0 }, undo = [], redo = [], gesture = null;
 let loadVersion = 0, dirty = false, ghost = null, rectCandidate = null;
 let documentRevision = 0;
+let activePanel = 'shape', telegram = null, dragDepth = 0;
 const pointers = new Map();
 let suppressUntilRelease = false;
 const stage = new Konva.Stage({ container: 'surface', width: 1, height: 1 });
@@ -22,9 +24,11 @@ const modeFor = area => isRectangle(area) ? 'rectangle' : 'perspective';
 const areaOpacity = area => area.background ? .12 : .2;
 const editingDialogOpen = () => $('csv-dialog').open || $('rectify-dialog').open;
 const primaryPointer = event => event.button === 0 || event.pointerType === 'touch';
+const canStartGesture = event => Boolean(media) && primaryPointer(event) && !editingDialogOpen();
 const snapshot = () => ({ doc: doc && clone(doc), selectedId, mode });
+const readableError = error => String(error.message).replace(/\bCSV\b/gi, 'dados do template');
 function message(text, error = false) {
-    $('status').textContent = text;
+    $('status').textContent = String(text).replace(/\bCSV\b/gi, 'dados do template');
     $('status').dataset.error = String(error);
 }
 function guarded(action) {
@@ -60,7 +64,7 @@ function cancelGesture() {
 }
 function chooseTool(next) {
     cancelGesture(); tool = next;
-    controls();
+    controls(); paint();
     const instructions = {
         draw: 'Arraste sobre a imagem para desenhar uma área. Escape cancela.',
         pan: 'Arraste para mover a tela. Duas pontas ampliam.',
@@ -75,22 +79,43 @@ function selectArea(id, open = false) {
     if (open) panel(true);
     controls(); paint();
 }
-function panel(open) {
+function syncPanel() {
+    const open = !$('inspector').hidden;
+    $('inspector').dataset.activePanel = activePanel;
+    document.querySelectorAll('[data-panel]').forEach(button => {
+        const active = open && button.dataset.panel === activePanel;
+        button.setAttribute('aria-pressed', String(active));
+        button.setAttribute('aria-expanded', String(active));
+    });
+    document.querySelectorAll('[data-panel-content]').forEach(section => {
+        section.hidden = section.dataset.panelContent !== activePanel;
+    });
+}
+function panel(open, category = activePanel) {
+    activePanel = category;
     $('inspector').hidden = !open;
-    $('properties').setAttribute('aria-expanded', String(open));
+    syncPanel();
     requestAnimationFrame(() => { resize(); revealSelected(); });
 }
 function controls() {
     const area = selected();
     $('empty').hidden = Boolean(media);
-    $('draw').disabled = !media || doc.areas.length >= 128;
+    document.querySelectorAll('.tools, .camera').forEach(element => { element.hidden = !media; });
+    document.querySelector('.file-button').hidden = !media;
+    $('draw').disabled = !media || (doc.areas.length >= 128 && tool !== 'draw');
+    $('pan').disabled = !media;
     $('properties').disabled = !area;
+    $('precision').disabled = !area;
+    $('layers').disabled = !media;
+    $('reset-areas').disabled = !media;
+    $('return-bot').hidden = !telegram?.isEmbedded?.();
     $('undo').disabled = undo.length === 0;
     $('redo').disabled = redo.length === 0;
-    for (const name of ['select', 'draw', 'pan']) $(name).setAttribute('aria-pressed', String(tool === name));
+    for (const name of ['draw', 'pan']) $(name).setAttribute('aria-pressed', String(tool === name));
     $('area-list').replaceChildren(...(doc?.areas ?? []).map((a, i) =>
         new Option(`${i + 1} · Source ${a.source}${a.background ? ' · atrás' : ''}`, a.id)));
     $('area-list').value = selectedId ?? '';
+    $('area-list').disabled = !area;
     const choices = area ? sourceOptions(doc, area.id) : [];
     $('source').replaceChildren(...choices.map(slot => new Option(`Source ${slot}`, String(slot))));
     if (area && !choices.includes(area.source)) {
@@ -102,11 +127,13 @@ function controls() {
         $('mode').value = mode;
         const p = area.points[Number($('corner').value)];
         $('x').value = p.x; $('y').value = p.y;
-    } else if (!$('inspector').hidden) panel(false);
+    } else if (!$('inspector').hidden && activePanel !== 'layers') panel(false);
     for (const id of ['source','mode','background','corner','x','y','rectify','duplicate','delete','backward','forward']) $(id).disabled = !area;
+    document.querySelectorAll('[data-nudge]').forEach(button => { button.disabled = !area; });
     $('backward').disabled = !area || doc.areas[0]?.id === area.id;
     $('forward').disabled = !area || doc.areas.at(-1)?.id === area.id;
     $('zoom-value').textContent = `${Math.round(view.scale * 100)}%`;
+    syncPanel();
 }
 function polygon(points, options) {
     return new Konva.Line({ points: points.flatMap(p => [p.x * view.scale + view.x, p.y * view.scale + view.y]), closed: true, ...options });
@@ -174,8 +201,7 @@ function screen(event) {
 function imagePoint(p) { return viewToImage(p, view); }
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 function pointerDown(event) {
-    if (!primaryPointer(event)) return;
-    if (editingDialogOpen()) return;
+    if (!canStartGesture(event)) return;
     const p = screen(event); pointers.set(event.pointerId, p);
     viewport.setPointerCapture(event.pointerId); viewport.focus({ preventScroll: true });
     if (pointers.size >= 2) {
@@ -185,7 +211,7 @@ function pointerDown(event) {
         return;
     }
     if (suppressUntilRelease) return;
-    if (tool === 'draw' && media) {
+    if (tool === 'draw') {
         gesture = { kind: 'draw', start: imagePoint(p), screen: p }; return;
     }
     const hit = stage.getIntersection(p);
@@ -244,7 +270,7 @@ function pointerUp(event) {
             const x = Math.round(Math.min(from.x, to.x)), y = Math.round(Math.min(from.y, to.y));
             const width = Math.round(Math.max(from.x, to.x)) - x, height = Math.round(Math.max(from.y, to.y)) - y;
             const next = addArea(doc, { x, y, width, height });
-            tool = 'select'; commit(next, next.areas.at(-1).id, 'rectangle'); panel(true);
+            tool = 'select'; commit(next, next.areas.at(-1).id, 'rectangle'); panel(true, 'shape');
             message('Área criada. Ajuste os cantos, bordas ou coordenadas.');
         });
     } else if (live?.before && JSON.stringify(doc) !== JSON.stringify(live.before.doc)) {
@@ -253,6 +279,10 @@ function pointerUp(event) {
     controls(); paint();
 }
 viewport.addEventListener('pointerdown', pointerDown);
+viewport.addEventListener('click', event => {
+    if (!media && !editingDialogOpen() && !event.target.closest('button')) $('image-file').click();
+});
+$('open-image').addEventListener('click', () => $('image-file').click());
 viewport.addEventListener('pointermove', pointerMove);
 viewport.addEventListener('pointerup', pointerUp);
 viewport.addEventListener('pointercancel', () => { cancelGesture(); suppressUntilRelease = pointers.size > 0; pointers.clear(); suppressUntilRelease = false; });
@@ -267,14 +297,19 @@ window.addEventListener('blur', () => { cancelGesture(); pointers.clear(); suppr
 function zoom(factor) {
     cancelGesture(); view = zoomAt(view, { x: stage.width() / 2, y: stage.height() / 2 }, factor); controls(); paint();
 }
-for (const name of ['select','draw','pan']) $(name).addEventListener('click', () => chooseTool(name));
-$('properties').addEventListener('click', () => panel($('inspector').hidden));
-$('close-panel').addEventListener('click', () => { panel(false); $('properties').focus(); });
+for (const name of ['draw','pan']) $(name).addEventListener('click', () => chooseTool(tool === name ? 'select' : name));
+document.querySelectorAll('[data-panel]').forEach(button => button.addEventListener('click', () => {
+    cancelGesture();
+    panel($('inspector').hidden || activePanel !== button.dataset.panel, button.dataset.panel);
+}));
+$('close-panel').addEventListener('click', () => {
+    const trigger = document.querySelector(`[data-panel="${activePanel}"]`);
+    panel(false); trigger.focus();
+});
 $('zoom-in').addEventListener('click', () => zoom(1.25));
 $('zoom-out').addEventListener('click', () => zoom(.8));
 $('zoom-value').addEventListener('click', () => zoom(1 / view.scale));
-$('fit').addEventListener('click', () => { cancelGesture(); fit(); });
-$('fit-areas').addEventListener('click', () => { cancelGesture(); fit(true); });
+$('fit').addEventListener('click', () => { cancelGesture(); fit(true); });
 $('area-list').addEventListener('change', () => selectArea($('area-list').value));
 $('corner').addEventListener('change', controls);
 function changeArea(transform, nextMode = mode) {
@@ -301,6 +336,16 @@ $('duplicate').addEventListener('click', () => guarded(() => {
 }));
 $('delete').addEventListener('click', () => guarded(() => {
     const next = deleteArea(doc, selectedId); commit(next, next.areas[0]?.id ?? null);
+}));
+$('reset-areas').addEventListener('click', () => guarded(() => {
+    if (!media || !doc) return;
+    if (doc.areas.length && !confirm('Recomeçar com uma área cobrindo toda a imagem? A imagem será mantida e você poderá desfazer.')) return;
+    cancelGesture();
+    const next = addArea(createDocument(doc.width, doc.height), {
+        x: 0, y: 0, width: doc.width, height: doc.height
+    });
+    tool = 'select'; commit(next, next.areas[0].id, 'rectangle'); panel(true, 'shape');
+    message('Áreas reiniciadas. A imagem foi mantida. Você pode desfazer.');
 }));
 for (const [name, direction] of [['backward',-1],['forward',1]]) $(name).addEventListener('click', () => guarded(() => commit(reorderArea(doc, selectedId, direction), selectedId, mode)));
 $('undo').addEventListener('click', () => {
@@ -350,14 +395,63 @@ async function load(file) {
         cancelGesture(); pointers.clear(); suppressUntilRelease = false;
         media?.dispose(); media = incoming; doc = createDocument(incoming.width, incoming.height);
         selectedId = null; undo = []; redo = []; dirty = false; mode = 'rectangle'; tool = 'select';
+        activePanel = 'shape'; panel(false);
         $('filename').textContent = file.name; $('filename').title = `${file.name} · ${doc.width} × ${doc.height} px`;
         controls(); resize(); fit();
-        message('Imagem local aberta. Use + Área para começar. Nenhum arquivo foi enviado.');
+        message('Imagem aberta. Use Nova área e arraste para marcar onde a foto entra.');
     } catch (error) {
         incoming?.dispose(); if (version === loadVersion) message(error.message, true);
     }
 }
 $('image-file').addEventListener('change', event => { const file = event.target.files[0]; event.target.value = ''; void load(file); });
+function receiveFiles(files) {
+    if (files.length !== 1) {
+        message('Abra uma imagem por vez: escolha um único arquivo PNG ou JPEG.', true);
+        return;
+    }
+    const file = files[0];
+    if (!['', 'image/png', 'image/jpeg'].includes(file.type.toLowerCase())) {
+        message('Escolha uma imagem PNG ou JPEG. Outros tipos de arquivo não são aceitos.', true);
+        return;
+    }
+    void load(file);
+}
+document.addEventListener('paste', event => {
+    const target = event.target;
+    if (target instanceof Element && (target.closest('input,textarea,select') || target.isContentEditable)) return;
+    const files = [...(event.clipboardData?.files ?? [])];
+    if (!files.length) return;
+    event.preventDefault(); receiveFiles(files);
+});
+function clearDropHint() {
+    dragDepth = 0; $('drop-hint').hidden = true;
+}
+// Never follow a dropped URL or let the browser navigate away with a file.
+document.addEventListener('dragenter', event => {
+    event.preventDefault();
+    if ([...(event.dataTransfer?.types ?? [])].includes('Files')) {
+        dragDepth++; $('drop-hint').hidden = false;
+    }
+});
+document.addEventListener('dragover', event => {
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = [...event.dataTransfer.types].includes('Files') ? 'copy' : 'none';
+});
+document.addEventListener('dragleave', event => {
+    event.preventDefault();
+    if (dragDepth > 0 && --dragDepth === 0) $('drop-hint').hidden = true;
+});
+document.addEventListener('drop', event => {
+    event.preventDefault(); clearDropHint();
+    const files = [...(event.dataTransfer?.files ?? [])];
+    if (!files.length) {
+        message('Arraste um arquivo local PNG ou JPEG. Links não abrem imagens aqui.', true);
+        return;
+    }
+    receiveFiles(files);
+});
+document.addEventListener('dragend', clearDropHint);
+window.addEventListener('blur', clearDropHint);
 window.addEventListener('beforeunload', event => {
     if (dirty) { event.preventDefault(); event.returnValue = ''; }
 });
@@ -371,15 +465,23 @@ $('csv-open').addEventListener('click', () => {
 $('csv-import').addEventListener('click', () => {
     try {
         const next = importCsv($('csv').value, doc.width, doc.height);
-        if (doc.areas.length && !confirm('Substituir as áreas pelo CSV? A imagem será preservada.')) return;
+        if (doc.areas.length && !confirm('Substituir as áreas pelos dados do template? A imagem será preservada.')) return;
         commit(next, next.areas[0].id); $('csv-dialog').close(); panel(true);
-        message('CSV importado. Coordenadas originais preservadas.');
-    } catch (error) { $('csv-error').textContent = error.message; }
+        message('Dados aplicados. Coordenadas originais preservadas.');
+    } catch (error) { $('csv-error').textContent = readableError(error); }
 });
 $('csv-copy').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(exportCsv(doc)); $('csv-error').textContent = 'CSV copiado.'; }
-    catch { $('csv').value = exportCsv(doc); $('csv').focus(); $('csv').select(); $('csv-error').textContent = 'Selecione e copie o CSV; a área de transferência não está disponível.'; }
+    try {
+        await navigator.clipboard.writeText(exportCsv(doc));
+    } catch {
+        $('csv').value = exportCsv(doc); $('csv').focus(); $('csv').select();
+        $('csv-error').textContent = 'Selecione e copie os dados; a área de transferência não está disponível.';
+        return;
+    }
+    $('csv-error').textContent = 'Dados copiados. Anexe a imagem original no bot e cole os dados na legenda.';
+    try { telegram?.notifyCopied?.(); } catch { /* Optional feedback must not undo a successful copy. */ }
 });
+$('return-bot').addEventListener('click', () => telegram?.close?.());
 $('csv-download').addEventListener('click', () => {
     const url = URL.createObjectURL(new Blob([exportCsv(doc)], { type: 'text/csv;charset=utf-8' }));
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'template.csv'; anchor.click();
@@ -417,8 +519,18 @@ $('rect-apply').addEventListener('click', () => guarded(() => {
     commit(updateArea(doc, selectedId, rectCandidate), selectedId, 'rectangle'); $('rectify-dialog').close();
 }));
 $('rectify-dialog').addEventListener('close', () => { ghost = null; rectCandidate = null; controls(); paint(); $('rectify').focus(); });
-function height() { document.documentElement.style.setProperty('--app-height', `${window.visualViewport?.height ?? window.innerHeight}px`); }
+function height() {
+    const browserHeight = window.visualViewport?.height ?? window.innerHeight;
+    const telegramHeight = Number.parseFloat(document.documentElement.style.getPropertyValue('--tg-viewport-stable-height'));
+    const usableHeight = Number.isFinite(telegramHeight) && telegramHeight > 0
+        ? Math.min(browserHeight, telegramHeight) : browserHeight;
+    document.documentElement.style.setProperty('--app-height', `${usableHeight}px`);
+}
 height();
+telegram = initializeTelegram({ onViewportChanged: () => {
+    cancelGesture(); height(); resize(); revealSelected(); controls();
+} });
+$('telegram-sdk').addEventListener('load', controls);
 new ResizeObserver(() => { cancelGesture(); resize(); revealSelected(); }).observe(viewport);
 window.addEventListener('resize', () => { height(); cancelGesture(); });
 window.visualViewport?.addEventListener('resize', height);

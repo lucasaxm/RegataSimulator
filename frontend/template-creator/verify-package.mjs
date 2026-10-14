@@ -46,7 +46,11 @@ try {
     assert(html.includes(`/create/editor/${manifest.assets.script}`));
     assert(html.includes(`/create/editor/${manifest.assets.style}`));
     assert(!html.includes('__EDITOR_'));
-    assert(!/(?:src|href)\s*=\s*["']\s*(?:https?:|\/\/)/i.test(html), 'Remote editor assets');
+    const remote = [...html.matchAll(/(src|href)\s*=\s*["']\s*((?:https?:|\/\/)[^"']*)["']/gi)];
+    assert.deepEqual(remote.map(match => [match[1], match[2]]),
+        [['src', 'https://telegram.org/js/telegram-web-app.js']], 'Only the official Telegram SDK may be remote');
+    assert.deepEqual(manifest.hostedIntegrationScripts.map(item => item.url),
+        ['https://telegram.org/js/telegram-web-app.js']);
     assert.deepEqual(manifest.runtimeDependencies.map(item => [item.name, item.version, item.license]),
         [['konva', '10.7.1', 'MIT']]);
     assert(manifest.runtimeDependencies[0].bundledInputs.length > 0);
