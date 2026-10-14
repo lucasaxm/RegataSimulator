@@ -49,6 +49,8 @@ for (const telegram of [false, true]) {
             const html = await get('/create/editor/');
             assert.equal(html.status, 200);
             assert.match(html.body, /https:\/\/telegram\.org\/js\/telegram-web-app\.js/);
+            assert.match(html.body, /href="\/create\/legacy"/);
+            assert.doesNotMatch(html.body, /href="\/create"/);
             const csp = html.headers['content-security-policy'];
             assert.ok(csp.endsWith(telegram
                 ? "frame-ancestors 'self' https://*.telegram.org https://telegram.org"

@@ -30,16 +30,30 @@ class CreatorStaticRouteTest {
     @Autowired private ObjectMapper mapper;
 
     @ParameterizedTest
-    @ValueSource(strings = {"/create/editor", "/create/editor/"})
+    @ValueSource(strings = {"/create", "/create/", "/create/editor", "/create/editor/"})
     void anonymousEditorRoutesForwardOnlyToPackagedEditor(String route) throws Exception {
         mvc.perform(get(route)).andExpect(status().isOk())
-            .andExpect(forwardedUrl("/create/editor/index.html"));
+            .andExpect(forwardedUrl("/create/editor/index.html"))
+            .andExpect(header().string("Content-Security-Policy",
+                "frame-ancestors 'self' https://*.telegram.org https://telegram.org"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/create/legacy", "/create/legacy/"})
+    void anonymousLegacyFallbackForwardsToOriginalCreator(String route) throws Exception {
+        mvc.perform(get(route)).andExpect(status().isOk())
+            .andExpect(forwardedUrl("/create/index.html"));
     }
 
     @Test
-    void legacyCreatorForwardIsUnchanged() throws Exception {
-        mvc.perform(get("/create")).andExpect(status().isOk())
-            .andExpect(forwardedUrl("/create/index.html"));
+    void legacyFallbackRetainsOriginalHtmlAndAbsoluteAssets() throws Exception {
+        String html = new ClassPathResource("static/create/index.html").getContentAsString(StandardCharsets.UTF_8);
+        assertThat(html).contains("href=\"/create/styles.css\"", "src=\"/create/index.js\"");
+        for (String name : new String[] {"index.html", "index.js", "styles.css"}) {
+            byte[] bytes = new ClassPathResource("static/create/" + name).getContentAsByteArray();
+            mvc.perform(get("/create/" + name)).andExpect(status().isOk())
+                .andExpect(content().bytes(bytes));
+        }
     }
 
     @Test
@@ -65,6 +79,8 @@ class CreatorStaticRouteTest {
         assertThat(html).contains("/create/editor/" + script, "/create/editor/" + style)
             .doesNotContain("__EDITOR_", "cdn.jsdelivr", "unpkg.com");
         assertThat(html).contains("https://telegram.org/js/telegram-web-app.js");
+        assertThat(html).contains("href=\"/create/legacy\"")
+            .doesNotContain("href=\"/create\"");
         assertThat(manifest.path("hostedIntegrationScripts").get(0).path("url").asText())
             .isEqualTo("https://telegram.org/js/telegram-web-app.js");
         String notice = new ClassPathResource(base + "licenses.txt").getContentAsString(StandardCharsets.UTF_8);

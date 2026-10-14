@@ -1,14 +1,18 @@
-# Current template creation: end to end
+# Legacy editor history and preserved template submission flow
 
-This describes the active implementation, not the intended redesign. Core domain and safety rules remain in the [project guide](../project-map.md).
+The browser behavior and friction below describe the **old editor**, historically the `/create` default, not the new Konva editor. User-authorized source adoption is implemented on `spike/template-creator-text`, not yet deployed/live: `/create` and `/create/` forward to packaged `/create/editor/index.html`; `/create/editor` and `/create/editor/` remain available. `/create/legacy` and `/create/legacy/` forward to untouched old `/create/index.html`, with absolute `/create/index.js` and `/create/styles.css` still reachable. The new **Criador anterior** link points to `/create/legacy`. No file moves, resource-handler changes or security/server/host changes; the existing bot `/create` URL stays unchanged.
 
-## 1. Open the creator and prepare geometry
+Implemented source journey: **bot `/create` → packaged Konva editor → prepare/copy data → manual document/caption → chat preview → submitter confirmation → administrator moderation → publication**. Legacy fallback: **Criador anterior → `/create/legacy` → old editor → the same bot workflow**. Backend submission/rendering/moderation contracts below remain shared and unchanged. Core domain and safety rules remain in the [project guide](../project-map.md).
 
-The user opens `https://regsim.boatarde.dev/create` through the bot's Create Template button. [WebConfig](../../src/main/java/com/boatarde/regatasimulator/configuration/WebConfig.java) forwards `/create` to the static page. [SecurityConfig](../../src/main/java/com/boatarde/regatasimulator/configuration/SecurityConfig.java) permits the creator assets; existing `/api/**` operations require ADMIN except the explicitly public login/CSRF endpoints. Public static GETs do not imply a public upload API or a general CSRF exemption.
+Next milestone is the existing pipeline release plus focused smokecheck with explicit live approval, not later text/color/native-preview/auth features. Source adoption is not permission to push/merge/deploy, change bot links or perform live operations, nor proof of a deployed artifact. Rollback follows [the deployment runbook](../deployment-setup.md#release-and-rollback) using the prior compatible artifact/captured unit; an older JAR may lack `/create/legacy` and restores its original `/create`.
+
+## 1. Historical legacy editor: open and prepare geometry
+
+The bot's Create Template button uses `/create` on the configured HTTPS origin; that URL remains unchanged under adoption. Historically [WebConfig](../../src/main/java/com/boatarde/regatasimulator/configuration/WebConfig.java) forwarded `/create` to the old static page; the implemented source contract makes that editor reachable through `/create/legacy` instead. This describes implemented source routing, not verified live hosting. [SecurityConfig](../../src/main/java/com/boatarde/regatasimulator/configuration/SecurityConfig.java) permits the creator assets; existing `/api/**` operations require ADMIN except the explicitly public login/CSRF endpoints. Public static GETs do not imply a public upload API or a general CSRF exemption.
 
 The checked-in code does not create/configure the launch button or handle `/start` as a creator-launch command. Do not infer the current launch type from the word “button”; menu configuration may be external.
 
-The frontend is [HTML](../../src/main/resources/static/create/index.html), [JavaScript](../../src/main/resources/static/create/index.js) and [CSS](../../src/main/resources/static/create/styles.css), with no framework build. `static/create2/` is empty, not an alternate working editor. Dependencies are Bootstrap **5.3.0**, Clipboard.js **2.0.11**, unversioned Toastify CDN assets and Telegram's hosted WebApp SDK. None has an SRI attribute in this page; the current CSP specifies frame ancestors, not a script-source policy.
+The legacy frontend is [HTML](../../src/main/resources/static/create/index.html), [JavaScript](../../src/main/resources/static/create/index.js) and [CSS](../../src/main/resources/static/create/styles.css), with no framework build. `static/create2/` is empty, not an alternate working editor. Dependencies are Bootstrap **5.3.0**, Clipboard.js **2.0.11**, unversioned Toastify CDN assets and Telegram's hosted WebApp SDK. None has an SRI attribute in this page; the existing Spring CSP specifies frame ancestors, not a script-source policy.
 
 `imageLoader.change`, paste and drop handlers read a file into a DataURL and load an `Image`. They **do not upload it**. Loading an image resets the areas to one full-canvas area. `+` clones the selected area's geometry/background and chooses a new source slot; it does not start drawing a fresh area.
 
@@ -28,7 +32,7 @@ Telegram integration uses expansion, closing confirmation, theme parameters, vie
 
 [TelegramRouter.dispatch/upload](../../src/main/java/com/boatarde/regatasimulator/adapter/telegram/TelegramRouter.java) accepts private user messages containing documents declared PNG/JPEG. A caption beginning `source:` enters source submission; otherwise it is parsed as template CSV. Missing captions and malformed CSV are ignored by this routing path, so several mistakes produce no actionable reply. Later service failures receive a generic failure message.
 
-[JsonDBUtils.parseTemplateCsv](../../src/main/java/com/boatarde/regatasimulator/util/JsonDBUtils.java) requires the exact header, 11 nonblank integer fields per row, background 0/1, at most 128 areas and a `64 * 1024`-character input bound. The browser neither checks these limits nor predicts caption transport limits. Telegram's [Bot API](https://core.telegram.org/bots/api#senddocument) documents a 1,024-character outgoing document-caption limit; incoming user-client limits may differ. A 64K parser bound is not evidence that a large CSV can travel in a caption.
+[JsonDBUtils.parseTemplateCsv](../../src/main/java/com/boatarde/regatasimulator/util/JsonDBUtils.java) requires the exact header, 11 nonblank integer fields per row, background 0/1, at most 128 areas and a `64 * 1024`-character input bound. The legacy browser neither checks these limits nor predicts caption transport limits; this is not a description of the new editor's validation. Telegram's [Bot API](https://core.telegram.org/bots/api#senddocument) documents a 1,024-character outgoing document-caption limit; incoming user-client limits may differ. A 64K parser bound is not evidence that a large CSV can travel in a caption.
 
 ## 3. Validate, store and render the chat preview
 
@@ -91,7 +95,7 @@ REVIEW records already exist before confirmation, and the admin gallery/API is n
 
 Once approved, the template becomes a publication candidate. `MemeService.publish()` renders/sends before committing source/template weight changes and history; send-only photo retries reuse that artifact.
 
-## Verified friction and defects
+## Historical legacy-editor friction and defects
 
 | Observation | Evidence/impact |
 | --- | --- |
@@ -107,4 +111,4 @@ Once approved, the template becomes a publication candidate. `MemeService.publis
 
 Touch coordinate conversion **does** account for CSS canvas scaling. Whole-area movement checks **every** proposed corner; it is not a missing-boundary-check bug. The real gap is zoom/gesture arbitration, visual/model separation and usable hit targets.
 
-The shared standalone page confirmed the public layout and disabled-zoom policy, but had no selected file or Telegram identity. Real mobile behavior and a new live submission were not exercised. Existing [renderer](../../src/test/java/com/boatarde/regatasimulator/adapter/media/ImageMagickRendererTest.java), [submission](../../src/test/java/com/boatarde/regatasimulator/service/SubmissionServiceTest.java) and [callback](../../src/test/java/com/boatarde/regatasimulator/service/ReviewCallbackServiceTest.java) tests provide characterization starting points, not a proof that a new editor works.
+The historical standalone-page inspection confirmed the legacy layout and disabled-zoom policy, but had no selected file or Telegram identity; it did not exercise real mobile behavior or a new live submission. Separately, the user reports successful testing of the new editor inside Telegram through the temporary HTTPS preview, without recorded device/OS/client/scenario coverage or complete submission/review proof. Do not attribute the legacy defects above to that candidate or treat either report as deployed-artifact evidence. Existing [renderer](../../src/test/java/com/boatarde/regatasimulator/adapter/media/ImageMagickRendererTest.java), [submission](../../src/test/java/com/boatarde/regatasimulator/service/SubmissionServiceTest.java) and [callback](../../src/test/java/com/boatarde/regatasimulator/service/ReviewCallbackServiceTest.java) tests provide characterization starting points, not a proof that a new editor works.

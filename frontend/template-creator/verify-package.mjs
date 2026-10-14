@@ -45,6 +45,8 @@ try {
     const html = (await read('index.html')).toString();
     assert(html.includes(`/create/editor/${manifest.assets.script}`));
     assert(html.includes(`/create/editor/${manifest.assets.style}`));
+    assert(html.includes('href="/create/legacy"'), 'Missing legacy fallback link');
+    assert(!html.includes('href="/create"'), 'Legacy fallback must not reopen the default editor');
     assert(!html.includes('__EDITOR_'));
     const remote = [...html.matchAll(/(src|href)\s*=\s*["']\s*((?:https?:|\/\/)[^"']*)["']/gi)];
     assert.deepEqual(remote.map(match => [match[1], match[2]]),

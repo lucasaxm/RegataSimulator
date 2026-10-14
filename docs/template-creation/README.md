@@ -1,19 +1,31 @@
 # Template creation: editor and remaining design
 
-**Priority: improve/replace the legacy image editor first, then iterate the wider journey.** `frontend/template-creator/` is the Konva-only source/build package targeting public `/create/editor/`. Finish acceptance of the useful image-only release candidate with integrated Telegram SDK UX and unchanged manual bot document/caption upload, submitter confirmation and administrator review; do not wait for text/eyedropper/native preview/direct submission or slices 4–6. No canonical `/create` change or live deployment now: keep legacy fallback until phone/Telegram acceptance and separately authorized operator release. The isolated spike stays unchanged. Keep contracts/design here, not credentials, user images or historical result timelines. See the [project guide](../project-map.md#image-only-editor-current-first-slice) and [maintenance](../maintenance.md#editor-build-and-verification) for current contracts and verification boundaries.
+**Priority: release the useful image-only editor through the existing pipeline, then iterate the wider journey.** `frontend/template-creator/` is the Konva-only source/build package. User-authorized default-route adoption is implemented on `spike/template-creator-text`, not yet deployed/live. Preserve integrated Telegram SDK UX, manual bot document/caption upload, submitter confirmation and administrator review; text/color/native preview/identity/direct submission do not block this release. The isolated spike stays unchanged. Keep contracts/design here, not credentials, user images or historical result timelines. See the [project guide](../project-map.md#image-only-editor-current-first-slice) and [maintenance](../maintenance.md#editor-build-and-verification) for current contracts and verification boundaries.
 
 | Document | Purpose |
 | --- | --- |
-| [Current flow](current-flow.md) | Legacy `/create` → Telegram → preview → moderation → publication flow, rendering semantics and friction |
+| [Current flow](current-flow.md) | Historical legacy editor at `/create/legacy`; preserved Telegram → preview → moderation → publication flow and rendering semantics |
 | [Implementation proposal](proposal.md) | Implemented image-only foundation, remaining color/text/backend slices, complete journey and acceptance gates |
 | [Mixed-area spike](spike.md) | Local runnable Konva/Moveable comparison, exact commands, retained failing candidate and verified limits |
 | [Text areas](text-areas.md) | Source-linked description patterns, typography/overflow and production rendering/font/versioning gates |
 
 ## Recommendation in brief
 
+**Implemented source route contract (deployment pending):**
+
+| Entry | Forward target / behavior |
+| --- | --- |
+| `/create`, `/create/` | Packaged new `/create/editor/index.html` |
+| `/create/editor`, `/create/editor/` | Retained new-editor aliases |
+| `/create/legacy`, `/create/legacy/` | Untouched old `/create/index.html` |
+| `/create/index.js`, `/create/styles.css` | Old absolute assets remain reachable |
+| **Criador anterior** | Link to `/create/legacy` |
+
+The existing bot **`/create` URL stays unchanged**. No file moves, resource-handler changes or security/server/host changes. This source contract is not proof of a deployed artifact and grants no push/merge/deploy, bot-link or live-operation authority.
+
 First deliver **open image → define/edit areas → prepare/copy data → manually attach original image as a document and paste its caption in the bot → confirm → administrator review**. Improve the editor, not submission backends, in this release candidate. Later **in-app native preview → direct send for approval** can remove manual steps after its own identity/rendering/persistence gates.
 
-- Use **Konva** in the real tool, with rectangle/perspective modes, anchored rectification, edge-pair resizing, precision controls and undo. Moveable remains only in the unchanged comparison spike. Actual native-phone acceptance is still required.
+- Use **Konva** in the real tool, with rectangle/perspective modes, anchored rectification, edge-pair resizing, precision controls and undo. Moveable remains only in the unchanged comparison spike. Keep user-reported Telegram acceptance distinct from unrecorded device coverage and artifact smokechecks.
 - Give desktop and mobile the same template-pixel color sampler; native screen eyedroppers are optional, not a mobile dependency. Keep the canvas/selected region visible while using compact contextual font/color/geometry panels, including keyboard-open editing.
 - Add typed text boxes bound to the same source slots as their images, with safe description placeholders and explicit typography/overflow rules; this currently works only in the spike.
 - Keep original-image coordinates independent of viewport size/zoom; retain the existing quadrilateral, source-slot and two-plane rendering semantics.
@@ -25,12 +37,12 @@ First deliver **open image → define/edit areas → prepare/copy data → manua
 
 The image-only editor, optional official Telegram SDK UX and restricted HTTPS preview mode are implemented. **The user reports that testing the candidate inside Telegram through the temporary HTTPS preview went well.** This is user-reported Telegram-hosted acceptance, not just an SDK double or browser emulation. Device/OS/client versions and individual scenarios were not recorded, so it does not establish Android/iOS/keyboard/performance coverage, successful manual submission/moderation, authenticated creator APIs or release approval. Temporary tunnels are testing tools, not hosting; see [maintenance](../maintenance.md#editor-build-and-verification) for exposure and shutdown limits.
 
-**Next phase: image-only release readiness and separately approved legacy adoption**, not text or direct submission:
+**Next milestone: existing pipeline release plus focused smokecheck**, not another feature phase or a new decision to adopt `/create`:
 
-1. Close the remaining focused phone checks: portrait/landscape and keyboard-open precision editing, gestures/undo/reset/image replacement, PNG/JPEG opening and copy/manual-copy handoff. Cover supported Android/iOS browser and Telegram clients; retain the successful Telegram report rather than treating integration as wholly untested.
-2. Confirm the preserved original-document/caption → submitter confirmation → administrator review journey under explicitly authorized test conditions. Do not infer that this was exercised from the general Telegram report or perform production mutations as routine verification.
-3. Verify the release candidate with the maintenance-floor JDK and applicable clean build, frontend/browser/package and security gates. Earlier local passes and configured CI are not current release parity.
-4. Seek explicit operator approval for rollout and any canonical `/create` switch; retain a reachable legacy fallback and rollback plan. No push, deployment or bot-link change is authorized by acceptance documentation.
+1. Verify the candidate and release gates with the **21.0.12.1 maintenance-floor JDK** and applicable clean build, frontend/browser/package and security checks. Earlier local passes and configured CI are not current release parity; do not bypass findings/incomplete scans.
+2. Obtain explicit operator approval for the live release through the [existing deployment pipeline/runbook](../deployment-setup.md#release-and-rollback). Source adoption does not establish a deployed artifact, require host/security changes or authorize push/merge/deploy, bot-link changes or live operations.
+3. Smokecheck `/create` and `/create/`, both editor aliases, both legacy aliases, new hashed assets, old absolute JS/CSS and **Criador anterior** on the approved artifact. Check image opening/editing and copy/manual-copy handoff through the unchanged bot URL. Keep device/keyboard/performance limits explicit, without requiring the entire future-feature matrix before this useful release.
+4. The original-document/caption → submitter confirmation → administrator review journey stays unchanged; any live mutation to verify it needs explicit authorization. Do not infer complete journey proof from the Telegram report. Retain `/create/legacy` as candidate fallback; rollback uses the prior compatible artifact/captured unit per the deployment runbook. An older JAR may lack `/create/legacy` and restores its original `/create`; artifact rollback does not undo data/schema writes.
 
 After this first useful image-editor delivery, proceed with portable color/text UX, native text/font rendering, versioned definitions and verified creator identity, then in-app native preview/direct submission as detailed in the [implementation proposal](proposal.md#incremental-delivery-and-acceptance).
 
@@ -53,4 +65,4 @@ After this first useful image-editor delivery, proceed with portable color/text 
 
 The exact menu/inline/keyboard launch configuration is not defined in the repository and must be checked with a dedicated development bot before identity integration. Standalone editor access establishes no Telegram identity; an SDK object or bot-launched appearance is not authentication evidence.
 
-Model/media tests, controlled Telegram SDK unit doubles, Chromium emulation and package checks are distinct from the spike; their presence is not overall-green evidence or real-device proof. The user-reported successful Telegram test does not close the remaining Android Brave/iOS/client matrix, keyboard usability and performance gates. Direct-submission round-trip belongs to the later slice, not this candidate. Older Java 21 is not maintenance-floor parity. No production-bot tests or live upload/render/notification/publishing/deployment are authorized by this status.
+Model/media tests, controlled Telegram SDK unit doubles, Chromium emulation and package checks are distinct from the spike; their presence is not overall-green evidence or real-device proof. The user-reported successful Telegram test does not prove an unspecified Android Brave/iOS/client matrix, keyboard usability or performance coverage. These are verification limits, not a requirement to finish later text/color/native-preview/auth slices before the image-only release. Direct-submission round-trip belongs to the later slice, not this candidate. Older Java 21 is not maintenance-floor parity. No production-bot tests or live upload/render/notification/publishing/deployment are authorized by this status.
