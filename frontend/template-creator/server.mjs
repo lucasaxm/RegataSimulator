@@ -1,7 +1,15 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { networkInterfaces } from 'node:os';
 import { buildEditor, outputDirectory } from './build.mjs';
+
+const lan = process.argv.slice(2).includes('--lan');
+const addresses = [...new Set(Object.values(networkInterfaces()).flat()
+    .filter(address => address.family === 'IPv4' && !address.internal
+        && /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(address.address))
+    .map(address => address.address))];
+const allowedHosts = new Set(['127.0.0.1:4174', ...(lan ? addresses.map(address => `${address}:4174`) : [])]);
 
 // Rebuild before binding: never serve stale resources or source/user files.
 const manifest = await buildEditor();
@@ -15,7 +23,7 @@ const server = createServer((request, response) => {
     response.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Cache-Control', 'no-store');
-    if (request.headers.host !== '127.0.0.1:4174') {
+    if (!allowedHosts.has(request.headers.host)) {
         response.writeHead(403).end();
         return;
     }
@@ -38,5 +46,11 @@ const server = createServer((request, response) => {
 });
 server.requestTimeout = 10_000;
 server.headersTimeout = 10_000;
-server.listen(4174, '127.0.0.1', () => console.log('Editor: http://127.0.0.1:4174/create/editor/'));
+server.listen(4174, lan ? '0.0.0.0' : '127.0.0.1', () => {
+    console.log('Editor: http://127.0.0.1:4174/create/editor/');
+    if (lan) {
+        console.log('LAN preview: use a trusted Wi-Fi network; no backend or uploads are enabled.');
+        for (const address of addresses) console.log(`Phone: http://${address}:4174/create/editor/`);
+    }
+});
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => server.close());

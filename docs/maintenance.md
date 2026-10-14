@@ -39,6 +39,8 @@ From repository root, use the tracked package/lockfile, with no global dependenc
 
 `npm start --prefix frontend/template-creator` rebuilds/serves only **http://127.0.0.1:4174/create/editor/**, without Spring, bot registration, storage or schedules. It is not the spike server at port 4173. Public packaged `/create/editor/` is image-only; legacy `/create` remains unchanged. Build/test Node/npm is not required on the VPS.
 
+For phone testing, use `npm start --prefix frontend/template-creator -- --lan` on trusted Wi-Fi. This explicitly binds all IPv4 interfaces, accepts only loopback/current private-interface Host addresses, and prints phone URLs on port 4174. The phone and Mac must share a reachable network; do not expose/forward this unauthenticated preview to the internet. It still serves only generated editor assets, never selected images or backend APIs. Plain HTTP may lack clipboard access; use the existing manual-copy fallback. Default/automated browser runs remain loopback-only. After each delivered editor slice, restart the LAN preview with fresh assets and provide the current phone URL, as requested by the owner.
+
 PR/release workflows configure Node 22.23.1, clean Gradle packaging, `frontendCheck`, npm audit, explicit Chromium provisioning, browser and package checks alongside existing Java/Node/Maven gates. Their presence is not evidence of a green run. Tests use generated fixtures, never `spikes/example/` or private media. Real Android Brave/iOS/Telegram WebView and keyboard-open acceptance remain rollout gates; emulation is not release/device parity. See [current editor contracts](project-map.md#image-only-editor-current-first-slice) and [remaining plan](template-creation/proposal.md).
 
 ## Release validation
