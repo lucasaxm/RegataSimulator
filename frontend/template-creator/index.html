@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <title>Criar template · Regata</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="__EDITOR_STYLE__">
+  <script type="module" src="__EDITOR_SCRIPT__"></script>
+</head>
+<body>
+<div id="editor">
+  <header class="appbar">
+    <label class="file-button" title="Abrir ou trocar imagem">Abrir imagem<input id="image-file" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg"></label>
+    <span id="filename" title="Nenhuma imagem carregada">Novo template</span>
+    <button id="undo" aria-label="Desfazer" title="Desfazer (Ctrl/Cmd+Z)" disabled>↶</button>
+    <button id="redo" aria-label="Refazer" title="Refazer (Ctrl/Cmd+Shift+Z)" disabled>↷</button>
+    <button id="csv-open" aria-label="Importar ou exportar CSV" title="CSV de compatibilidade">CSV</button>
+  </header>
+  <main>
+    <section class="workspace" aria-label="Editor de áreas">
+      <div id="viewport" role="application" tabindex="0" aria-label="Imagem e áreas. Use os controles de precisão para editar sem arrastar.">
+        <div id="surface"></div>
+        <div id="empty"><h1>Comece pela imagem</h1><p>Abra um PNG ou JPEG e desenhe onde<br>as imagens das sources devem entrar.</p><p class="subtle">Tudo fica neste navegador. Nenhum arquivo é enviado.</p></div>
+      </div>
+      <div class="camera" aria-label="Zoom e enquadramento">
+        <button id="zoom-out" aria-label="Diminuir zoom">−</button><button id="zoom-value" title="Ver em 100%">100%</button><button id="zoom-in" aria-label="Aumentar zoom">+</button><button id="fit">Ajustar</button><button id="fit-areas" title="Enquadrar imagem e áreas">Áreas</button>
+      </div>
+      <nav class="tools" aria-label="Ferramentas">
+        <button id="select" aria-pressed="true">Selecionar</button><button id="draw" aria-pressed="false" disabled>+ Área</button><button id="pan" aria-pressed="false">Mover tela</button><button id="properties" aria-expanded="false" aria-controls="inspector" disabled>Ajustes</button>
+      </nav>
+    </section>
+    <aside id="inspector" aria-label="Áreas e propriedades" hidden>
+      <div class="panel-heading"><label>Área<select id="area-list" aria-label="Área selecionada"></select></label><button id="close-panel" aria-label="Recolher ajustes">⌄</button></div>
+      <div class="panel-content">
+        <div class="row"><label>Source<select id="source"></select></label><label>Forma<select id="mode"><option value="rectangle">Retângulo</option><option value="perspective">Perspectiva</option></select></label></div>
+        <label class="check"><input id="background" type="checkbox">Atrás do template</label>
+        <div class="row"><label>Canto fixo / ponto<select id="corner"><option value="0">Superior esquerdo</option><option value="1">Superior direito</option><option value="2">Inferior direito</option><option value="3">Inferior esquerdo</option></select></label></div>
+        <div class="row"><label>X<input id="x" type="number" min="-10000" max="10000" step="1"></label><label>Y<input id="y" type="number" min="-10000" max="10000" step="1"></label></div>
+        <div class="nudges" aria-label="Mover área em pixels originais"><button data-nudge="-1,0" aria-label="Mover área um pixel à esquerda">←</button><button data-nudge="0,-1" aria-label="Mover área um pixel para cima">↑</button><button data-nudge="0,1" aria-label="Mover área um pixel para baixo">↓</button><button data-nudge="1,0" aria-label="Mover área um pixel à direita">→</button></div>
+        <button id="rectify">Transformar em retângulo…</button>
+        <div class="row"><button id="duplicate">Duplicar</button><button id="delete" class="danger">Excluir</button></div>
+        <div class="row"><button id="backward">Recuar</button><button id="forward">Avançar</button></div>
+        <p class="subtle">Arraste um canto ou o meio de uma borda. Retângulos mantêm os ângulos; perspectiva permite ajustar cada canto. Duas pontas movem e ampliam a tela.</p>
+      </div>
+    </aside>
+  </main>
+  <output id="status" aria-live="polite">Editor de imagens. Texto e envio direto serão disponibilizados em uma próxima etapa.</output>
+</div>
+<dialog id="csv-dialog" aria-labelledby="csv-title">
+  <form method="dialog" class="dialog-heading"><h2 id="csv-title">CSV de compatibilidade</h2><button aria-label="Fechar CSV">✕</button></form>
+  <p>Use com o envio atual do bot. A imagem não está incluída; envie o arquivo original com este CSV na legenda.</p>
+  <label>Coordenadas<textarea id="csv" rows="7" maxlength="65536" spellcheck="false"></textarea></label>
+  <p id="csv-error" role="alert"></p>
+  <div class="row"><button id="csv-import">Importar</button><button id="csv-copy">Copiar</button><button id="csv-download">Baixar</button></div>
+  <p class="subtle">Imagens apenas. Não há suporte a texto, prévia nativa ou envio direto neste primeiro editor.</p>
+  <a href="/create" target="_blank" rel="noopener">Criador anterior</a> · <a href="/create/editor/licenses.txt" target="_blank" rel="noopener">Licenças</a>
+</dialog>
+<dialog id="rectify-dialog" aria-labelledby="rectify-title">
+  <form method="dialog" class="dialog-heading"><h2 id="rectify-title">Transformar em retângulo</h2><button aria-label="Cancelar retângulo">✕</button></form>
+  <p>O canto fixo não se move. Sem novas dimensões, o canto oposto também fica no mesmo lugar. A linha tracejada mostra o resultado.</p>
+  <label>Canto fixo<select id="anchor"><option value="0">Superior esquerdo</option><option value="1">Superior direito</option><option value="2">Inferior direito</option><option value="3">Inferior esquerdo</option></select></label>
+  <div class="row"><label>Largura opcional<input id="rect-width" type="number" min="1" max="20000" step="1"></label><label>Altura opcional<input id="rect-height" type="number" min="1" max="20000" step="1"></label></div>
+  <output id="rect-result" aria-live="polite"></output>
+  <div class="row"><button id="rect-cancel">Cancelar</button><button id="rect-apply">Aplicar</button></div>
+</dialog>
+</body>
+</html>

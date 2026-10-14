@@ -16,7 +16,9 @@ Base package: `com.boatarde.regatasimulator`.
 | `controller`, `dto`, `configuration` | Thin HTTP adapters, safe projections, security/runtime configuration |
 | `models` | Persisted records, review status and template geometry |
 | `src/main/resources/application*.yml` | Shared/profile configuration |
-| `src/main/resources/static` | Browser source; no npm/framework build required |
+| `src/main/resources/static` | Legacy browser source, including unchanged `/create` |
+| `frontend/template-creator` | New image-only Konva editor, package/lockfile, esbuild build and model/media/browser tests |
+| `spikes/template-creator` | Separate unchanged mixed-area comparison, never packaged |
 | `src/test/java`, `src/test/js` | Java regressions and separate Node fixtures |
 | `.github/workflows`, `scripts` | CI, dependency scanning and artifact deployment |
 
@@ -28,12 +30,31 @@ Use Java 21 and the checked-in Gradle wrapper. Release/CI requires patched Java;
 
 - `./gradlew test` — normal Java verification.
 - `./gradlew clean build` — clean compile/test/package; `./gradlew bootJar` — executable JAR.
+- `./gradlew frontendCheck` — editor syntax and pure model/media tests; browser/audit/JAR checks remain separate.
 - `./gradlew test --tests 'fully.qualified.TestClass'` — focused regression.
 - `node --test src/test/js/*.test.cjs` — browser/deployment/scanner fixtures, separate from Gradle.
 - `node --check path/to/edited.js` — browser JS syntax.
 - `./gradlew verifyMaintenanceJava clean build` and `./gradlew dependencyScan` — release gates.
 
 Tests use JUnit Jupiter/Mockito, real temporary JsonDB/SQLite and generated ImageIO fixtures; external bot/render boundaries are mocked. Update known-failure characterizations when fixed; do not preserve missing authorization as valid behavior. Java editor non-project/package warnings can be import problems: check Gradle before changing valid packages. Reports live under `build/reports/tests/test` and `build/test-results/test`, not documentation timelines.
+
+### Image-only editor: current first slice
+
+`frontend/template-creator/` is implemented source, not just a proposal or the spike. It uses vanilla JavaScript and **Konva 10.7.1 only at browser runtime**, with esbuild 0.28.2 and Playwright 1.64.0 as build/test tools. Package/lockfile and CI Node **22.23.1** are authoritative. Gradle `installCreatorDependencies` uses `npm ci --ignore-scripts --include=dev --include=optional`; retain optional platform binaries rather than enabling lifecycle scripts. `buildCreator` emits hashed self-hosted JS/CSS, shell, manifest/inventory and Konva notice into `build/generated-resources/creator/static/create/editor/`. `processResources` packages them in the executable JAR and removes stale editor hashes. There is no handwritten editor shell under `src/main/resources/static`, canvas-library CDN or Node/npm VPS runtime requirement.
+
+Public **`/create/editor/`** (also forwarded without the trailing slash) is local image editing/CSV export only. Legacy **`/create`** and its Telegram document/caption workflow remain unchanged. Public static access does not introduce upload/identity APIs or loosen ADMIN/CSRF/CORS/frame policy.
+
+For standalone development, install with `npm ci --ignore-scripts --include=dev --include=optional --prefix frontend/template-creator`, then `npm start --prefix frontend/template-creator`. Open **http://127.0.0.1:4174/create/editor/**; this fixed loopback server rebuilds the editor and serves only its assets, without starting Spring, registering the bot or enabling schedules. See [maintenance](maintenance.md#editor-build-and-verification) for the independent checks.
+
+The canvas-first desktop/mobile UI has a contextual, internally scrolling panel, local image choice, draw/select/pan/zoom, numeric/nudge editing, duplicate/delete/reorder, background/source choices and undo/redo. Geometry is a pure original-image-pixel model, independent of viewport/DPR/Konva JSON. Rectangle corners fix their opposites; edges move a pair; perspective permits independent corners and paired-edge translation. Anchored rectangle conversion shows a ghost and requires Apply/Cancel, with one undoable commit. These overlays are editing guides, not native meme previews.
+
+CSV remains image-only with the existing 11-column header. The editor accepts ordered contiguous **Area** indices starting at **0 or 1**, exporting **1-based** rows; backend validation still requires **1..N**. Source slots remain contiguous from 1 with repeats supported. The adjacency picker retains imported original values outside its narrower choices. Keep convex geometry within ±10,000 and positive-area image overlap; off-canvas points are not clamped.
+
+Local PNG/JPEG input is limited to 20 MiB, 40MP and 10,000 pixels per dimension. The initial header read is at most 1 MiB; JPEG metadata/dimensions must fit within that window before SOS. Before creating an object URL or decoding, the private async `inspectPngMetadata(file, head)` walks PNG chunk headers through IEND, including eXIf after IDAT and beyond the initial window. It skips IDAT payloads, reuses cached header bytes when they fit, and limits the walk to 2,048 chunks and 1 MiB of inspected headers/EXIF bytes. IEND must end exactly at EOF; duplicate eXIf and non-1 EXIF orientation are rejected. Normalize/save a copy before placing points; the editor does not reorient/reencode originals.
+
+Full `createImageBitmap` raster decode is mandatory, dimensions must match, and temporary bitmaps are closed, including late completion after timeout/cancellation. Corrupt PNG pixels can pass image onload/`decode()` yet fail bitmap decoding; the full bitmap decode provides decode verification without an additional 1×1 canvas probe. Unsupported browsers fail closed. The shared 15-second deadline covers image loading and full bitmap decoding, not header/metadata I/O; it provides neither a hard browser allocation bound nor guaranteed decoder cancellation. Future color sampling uses the separately planned bounded scratch canvas.
+
+Use generated fixtures, not the user's untracked `spikes/example/` media or private images; leave that media untouched. No text/color eyedropper, backend native preview, direct Mini App submit, identity/draft APIs or durable local draft recovery exists yet. Automated Chromium emulation and configured CI gates do not prove real Android Brave/iOS/Telegram WebView performance, virtual-keyboard behavior or release parity; those remain required. The [proposal](template-creation/proposal.md) retains the full remaining plan. Moveable and its known failure stay confined to the untouched spike.
 
 ### Runtime setup and side effects
 
@@ -78,4 +99,4 @@ Retries retain the **same photo/file**, not source selection or rendering. Publi
 
 ## Future work boundaries
 
-Frontend redesign is a separate scope. Durable retries, cross-process coordination, stronger credential encryption, distributed throttling and alerts require explicit design; synchronous services/cooperative locks do not already provide them. Keep [maintenance](maintenance.md) and operations guides current when contracts change.
+The template editor's first image-only slice is implemented; broader frontend redesign and the remaining [creator slices](template-creation/proposal.md#incremental-delivery-and-acceptance) are separate scope. Durable retries, cross-process coordination, stronger credential encryption, distributed throttling and alerts require explicit design; synchronous services/cooperative locks do not already provide them. Keep [maintenance](maintenance.md) and operations guides current when contracts change.

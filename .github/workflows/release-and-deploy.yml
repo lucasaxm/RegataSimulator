@@ -45,6 +45,19 @@ jobs:
           bash -n scripts/deploy-release.sh
           bash -n scripts/run-service.sh
           ./gradlew dependencyScan
+      - name: Editor syntax and model/media unit tests
+        run: ./gradlew frontendCheck
+      - name: Locked npm security gate (including build/test tools)
+        working-directory: frontend/template-creator
+        run: npm run audit
+      - name: Install isolated editor browser
+        working-directory: frontend/template-creator
+        run: npm exec playwright install --with-deps chromium
+      - name: Editor browser and packaged-resource gates
+        working-directory: frontend/template-creator
+        run: |
+          npm run test:browser
+          npm run verify:package
       - name: Retain dependency/security/license evidence
         if: always()
         uses: actions/upload-artifact@v4

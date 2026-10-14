@@ -33,6 +33,19 @@ jobs:
         run: chmod +x gradlew
       - name: Build with Gradle
         run: ./gradlew verifyMaintenanceJava clean build
+      - name: Editor syntax and model/media unit tests
+        run: ./gradlew frontendCheck
+      - name: Locked npm security gate (including build/test tools)
+        working-directory: frontend/template-creator
+        run: npm run audit
+      - name: Install isolated editor browser
+        working-directory: frontend/template-creator
+        run: npm exec playwright install --with-deps chromium
+      - name: Editor browser and packaged-resource gates
+        working-directory: frontend/template-creator
+        run: |
+          npm run test:browser
+          npm run verify:package
       - name: Browser and scanner fixture tests
         run: node --test src/test/js/*.test.cjs
       - name: Resolved dependency security gate
