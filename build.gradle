@@ -71,6 +71,80 @@ tasks.named('test') {
     useJUnitPlatform()
 }
 
+def creatorDirectory = layout.projectDirectory.dir('frontend/template-creator')
+def creatorResources = layout.buildDirectory.dir('generated-resources/creator')
+def creatorOutput = creatorResources.map { it.dir('static/create/editor') }
+def creatorNode = providers.gradleProperty('nodeExecutable').getOrElse('node')
+def creatorNpm = providers.gradleProperty('npmExecutable').getOrElse('npm')
+def creatorNodeVersion = providers.exec {
+    commandLine creatorNode, '--version'
+}.standardOutput.asText.map { it.trim() }
+def creatorPlatform = System.getProperty('os.name').toLowerCase().contains('mac') ? 'darwin' :
+    (System.getProperty('os.name').toLowerCase().contains('windows') ? 'win32' : 'linux')
+def creatorArchitecture = ['aarch64', 'arm64'].contains(System.getProperty('os.arch')) ? 'arm64' : 'x64'
+def creatorBinary = "node_modules/@esbuild/${creatorPlatform}-${creatorArchitecture}/" +
+    (creatorPlatform == 'win32' ? 'esbuild.exe' : 'bin/esbuild')
+
+tasks.register('installCreatorDependencies', Exec) {
+    description = 'Install the locked editor build/runtime/test graph without npm lifecycle scripts'
+    workingDir creatorDirectory
+    inputs.files(creatorDirectory.file('package.json'), creatorDirectory.file('package-lock.json'))
+    inputs.property('nodeVersion', creatorNodeVersion)
+    inputs.property('npmExecutable', creatorNpm)
+    inputs.property('platform', "${creatorPlatform}-${creatorArchitecture}")
+    // Snapshot modules too: changed/missing critical packages or binaries must not reuse stale dependencies.
+    outputs.dir(creatorDirectory.dir('node_modules'))
+    outputs.file(creatorDirectory.file('node_modules/.package-lock.json'))
+    outputs.file(creatorDirectory.file(creatorBinary))
+    commandLine creatorNpm, 'ci', '--ignore-scripts', '--include=dev', '--include=optional'
+}
+
+tasks.register('buildCreator', Exec) {
+    dependsOn 'installCreatorDependencies'
+    description = 'Bundle the reviewed Konva-only editor and retain packaged runtime notices'
+    workingDir creatorDirectory
+    inputs.files(['app.mjs', 'model.mjs', 'media.mjs', 'telegram.mjs', 'style.css', 'index.html', 'build.mjs',
+        'package.json', 'package-lock.json'].collect { creatorDirectory.file(it) })
+    inputs.property('nodeVersion', creatorNodeVersion)
+    inputs.property('npmExecutable', creatorNpm)
+    outputs.dir(creatorOutput)
+    commandLine creatorNpm, 'run', 'build'
+}
+
+tasks.named('processResources') {
+    dependsOn 'buildCreator'
+    from(creatorResources)
+    doFirst {
+        // Copy tasks must not accumulate old hashed assets across non-clean builds.
+        def editor = new File(destinationDir, 'static/create/editor').toPath().toAbsolutePath().normalize()
+        def expected = layout.buildDirectory.dir('resources/main/static/create/editor').get().asFile.toPath().toAbsolutePath().normalize()
+        if (editor != expected) {
+            throw new GradleException('Refusing editor cleanup outside the owned resource destination')
+        }
+        def current = editor
+        while (current != null && current != projectDir.toPath()) {
+            if (java.nio.file.Files.isSymbolicLink(current)) {
+                throw new GradleException('Refusing symlink in editor resource destination')
+            }
+            current = current.parent
+        }
+        project.delete(editor.toFile())
+    }
+}
+
+tasks.register('frontendCheck', Exec) {
+    dependsOn 'installCreatorDependencies'
+    description = 'Parse editor/build/browser sources and run secret-free model/media unit tests'
+    workingDir creatorDirectory
+    commandLine creatorNpm, 'run', 'check'
+    doLast {
+        project.exec {
+            workingDir creatorDirectory
+            commandLine creatorNpm, 'test'
+        }
+    }
+}
+
 tasks.register('offlineStore', JavaExec) {
     description = 'Explicit offline migration/export; never starts the Spring application'
     classpath = sourceSets.main.runtimeClasspath
