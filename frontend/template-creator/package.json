@@ -6,7 +6,7 @@
   "engines": { "node": ">=22.23.1 <23" },
   "scripts": {
     "check": "node build.mjs --check",
-    "test": "node --test test/model.test.mjs test/media.test.mjs test/telegram.test.mjs",
+    "test": "node --test test/model.test.mjs test/media.test.mjs test/telegram.test.mjs test/server.test.mjs",
     "test:browser": "playwright test",
     "build": "node build.mjs",
     "start": "node server.mjs",
