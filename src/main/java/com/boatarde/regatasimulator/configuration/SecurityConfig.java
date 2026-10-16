@@ -47,6 +47,7 @@ public class SecurityConfig {
     }
 
     @Bean
+    @org.springframework.core.annotation.Order(2)
     public SecurityFilterChain securityFilterChain(HttpSecurity http,LoginAttemptLimiter limiter) throws Exception {
         PathPatternRequestMatcher api = PathPatternRequestMatcher.withDefaults().matcher("/api/**");
         HttpSessionRequestCache requestCache = new HttpSessionRequestCache();
