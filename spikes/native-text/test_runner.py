@@ -151,7 +151,8 @@ class RunnerTest(unittest.TestCase):
         invalid = ["run", "--java-home", "/jdk", "--fonts", "/fonts", "--magick", "/magick",
                    "--output", str(self.root / "new"), "--profile", "smoke", "--rounds", "6"]
         with patch.object(runner, "launch") as launch, patch("sys.stderr", new=io.StringIO()):
-            for argv in (["prepare-fonts"], invalid):
+            invalid_visual = ["visual" if value == "smoke" else "2" if value == "6" else value for value in invalid]
+            for argv in (["prepare-fonts"], invalid, invalid_visual):
                 with self.assertRaises(SystemExit):
                     runner.main(argv)
             launch.assert_not_called()
@@ -193,12 +194,15 @@ class RunnerTest(unittest.TestCase):
             runner, "run_child", side_effect=child), patch("builtins.print"):
             runner.launch(args, time.monotonic() + 30)
         self.assertIn("--release", calls[1])
-        self.assertEqual(len([value for value in calls[1] if value.endswith(".java")]), 2)
+        java_sources = {Path(value).name for value in calls[1] if value.endswith(".java")}
+        self.assertEqual(java_sources, {"ProcessRunner.java", "NativeTextPoc.java", "VisualCorrectnessPoc.java",
+                        "MagickCaptionFitter.java", "MagickCaptionFitterTest.java"})
         self.assertEqual(calls[2][-6:], ["run", "/native/magick", str(self.fonts), str(output), "smoke", "1"])
         self.assertIn("-Xmx256m", calls[2])
         metrics = json.loads((output / "external-metrics.json").read_text())
         self.assertIsNone(metrics["peakSampledTreeRssKiB"])
         self.assertIn("not a cgroup", metrics["warning"])
+        self.assertLessEqual({"MagickCaptionFitter.java", "MagickCaptionFitterTest.java"}, metrics["sourceSha256"].keys())
         with self.assertRaises(FileExistsError):
             runner.private_write(output, "external-metrics.json", b"replacement")
 

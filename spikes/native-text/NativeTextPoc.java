@@ -65,7 +65,7 @@ public final class NativeTextPoc {
 
     public static void main(String[] args) throws Exception {
         if (args.length < 2 || Runtime.version().feature() != 21) {
-            throw new IllegalArgumentException("Use Java 21: self-test FONT_DIR | run MAGICK FONT_DIR NEW_OUTPUT smoke|boundary ROUNDS");
+            throw new IllegalArgumentException("Use Java 21: self-test FONT_DIR | run MAGICK FONT_DIR NEW_OUTPUT smoke|boundary|visual ROUNDS");
         }
         Map<String, Face> faces = loadFonts(Path.of(args[args[0].equals("self-test") ? 1 : 2]));
         selfTests(faces);
@@ -73,11 +73,12 @@ public final class NativeTextPoc {
             System.out.println("PASS pure model/layout/font tests; no native processes");
             return;
         }
-        if (!args[0].equals("run") || args.length != 6 || !List.of("smoke", "boundary").contains(args[4])) {
+        if (!args[0].equals("run") || args.length != 6 || !List.of("smoke", "boundary", "visual").contains(args[4])) {
             throw new IllegalArgumentException("Invalid experiment arguments");
         }
         int rounds = Integer.parseInt(args[5]);
         if (rounds < 1 || rounds > 5) throw new IllegalArgumentException("Rounds must be 1..5");
+        if (args[4].equals("visual") && rounds != 1) throw new IllegalArgumentException("Visual evidence requires exactly one round");
         Path target = Path.of(args[3]).toAbsolutePath().normalize();
         if (!target.getParent().toRealPath().equals(target.getParent()) || Files.exists(target)) {
             throw new IllegalArgumentException("Output must be a new canonical directory");
@@ -86,19 +87,30 @@ public final class NativeTextPoc {
         NativeTextPoc experiment = new NativeTextPoc(Path.of(args[1]).toRealPath(), target, faces);
         try {
             experiment.metadata(args[4], rounds);
-            experiment.literalProbes();
-            experiment.fontAndFitCases();
-            for (int i = 0; i < rounds; i++) experiment.scenes(i);
-            if (args[4].equals("boundary")) experiment.boundaryCases();
+            if (args[4].equals("visual")) {
+                VisualCorrectnessPoc.run(experiment.executable, Path.of(args[2]), target);
+                List<String> visualRows = Files.readAllLines(target.resolve("visual-checks.csv"));
+                long visualFailures = visualRows.stream().filter(row -> row.contains(",\"FAIL\",")).count();
+                long visualLimits = visualRows.stream().filter(row -> row.contains(",\"LIMITATION\",")).count();
+                System.out.printf(Locale.ROOT, "Visual evidence: failures=%d limitations=%d output=%s%n", visualFailures, visualLimits, target);
+                experiment.failures += Math.toIntExact(visualFailures);
+            } else {
+                experiment.literalProbes();
+                experiment.fontAndFitCases();
+                for (int i = 0; i < rounds; i++) experiment.scenes(i);
+                if (args[4].equals("boundary")) experiment.boundaryCases();
+            }
         } finally {
             Files.write(target.resolve("checks.csv"), experiment.checks, StandardCharsets.UTF_8);
             Files.write(target.resolve("measurements.csv"), experiment.timings, StandardCharsets.UTF_8);
             Files.write(target.resolve("commands.csv"), experiment.commands, StandardCharsets.UTF_8);
         }
-        long rejected = experiment.checks.stream().filter(row -> row.contains("\"CAPACITY_REJECTED\"")).count();
-        System.out.printf(Locale.ROOT, "Completed checks=%d failures=%d capacityRejected=%d nativeProcesses=%d output=%s%n",
-            experiment.checks.size() - 1, experiment.failures, rejected, experiment.processCount, target);
-        if (experiment.failures != 0) throw new AssertionError("Experiment has failed correctness gates; inspect checks.csv");
+        if (!args[4].equals("visual")) {
+            long rejected = experiment.checks.stream().filter(row -> row.contains("\"CAPACITY_REJECTED\"")).count();
+            System.out.printf(Locale.ROOT, "Completed checks=%d failures=%d capacityRejected=%d nativeProcesses=%d output=%s%n",
+                experiment.checks.size() - 1, experiment.failures, rejected, experiment.processCount, target);
+        }
+        if (experiment.failures != 0) throw new AssertionError("Experiment has failed correctness gates; inspect checks.csv or visual-checks.csv for visual profile");
     }
 
     private static Map<String, Face> loadFonts(Path directory) throws Exception {
@@ -236,7 +248,9 @@ public final class NativeTextPoc {
         return image;
     }
 
-    private static void selfTests(Map<String, Face> faces) {
+    private static void selfTests(Map<String, Face> faces) throws Exception {
+        int fitterChecks = MagickCaptionFitterTest.run();
+        System.out.println("PASS MagickCaptionFitter pure checks=" + fitterChecks);
         Face face = faces.get("Sans-Regular");
         require(graphemes("e\u0301👨‍👩‍👧‍👦🇧🇷").size() == 3, "grapheme boundaries");
         require(resolve(new TextArea("Olá {{source.description}}", 1), Map.of(1, "%[fx:1+1] {{x}}"))
@@ -281,7 +295,8 @@ public final class NativeTextPoc {
         // -version is a standalone query, not a conversion with an output image.
         if (arguments.length != 1 || !arguments[0].equals("-version")) command.addAll(LIMITS);
         command.addAll(List.of(arguments).subList(offset, arguments.length));
-        ProcessBuilder builder = new ProcessBuilder(command).directory(job.toFile());
+        // Fitter parsers must reject diagnostics as extra data, including exit-zero stderr.
+        ProcessBuilder builder = new ProcessBuilder(command).directory(job.toFile()).redirectErrorStream(true);
         builder.environment().put("MAGICK_TEMPORARY_PATH", job.toString());
         long remaining = jobDeadline - System.nanoTime();
         if (remaining <= 0) throw new IOException("Whole-job experiment deadline exceeded");
@@ -329,6 +344,7 @@ public final class NativeTextPoc {
     }
 
     private Path rawMagickText(Path job, String name, String text, boolean file, boolean caption) throws Exception {
+        MagickCaptionFitter.validateText(text);
         Path input = job.resolve(name + ".txt");
         Files.writeString(input, text, StandardCharsets.UTF_8);
         String value = file ? "@" + input : text;
@@ -336,10 +352,11 @@ public final class NativeTextPoc {
         Face face = faces.get("Sans-Regular");
         if (caption) {
             nativeCommand(job, "-density", "72", "-font", face.path().toString(), "-pointsize", "24", "-background", "none",
-                "-fill", "white", "-size", "700x", "caption:" + value, result.toString());
+                "-fill", "white", "-stroke", "none", "-define", "caption:split=true",
+                "-size", "700x", "caption:" + value, result.toString());
         } else {
             nativeCommand(job, "-density", "72", "-font", face.path().toString(), "-pointsize", "24", "-background", "none",
-                "-fill", "white", "-size", "700x120", "xc:none", "-gravity", "NorthWest", "-annotate", "+8+8", value, result.toString());
+                "-fill", "white", "-stroke", "none", "-size", "700x120", "xc:none", "-gravity", "NorthWest", "-annotate", "+8+8", value, result.toString());
         }
         return result;
     }
@@ -369,35 +386,26 @@ public final class NativeTextPoc {
 
     private Raster nativeCaption(Path job, Face face, String text, int width, int height, int requested, int outline, Color boxFill)
         throws Exception {
-        // Validate with the same policy, but native caption metrics/wrapping determine its own fit.
-        fit(text, face, width, height, requested, outline);
+        // Admission only: the Java2D fit is a separate comparison, never a native-fit oracle.
+        MagickCaptionFitter.validateAdmission(text, width, height, requested);
+        if (width <= INSET * 2 || height <= INSET * 2 || outline < 0 || outline > 4)
+            throw new IllegalArgumentException("Box/style exceeds experiment limits");
+        if (face.font().canDisplayUpTo(text.replace("\n", "")) != -1) throw new IllegalArgumentException("Unsupported glyph");
         Path textFile = job.resolve("caption.txt");
+        if (!Files.exists(textFile)) Files.createFile(textFile,
+            PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
         Files.writeString(textFile, text, StandardCharsets.UTF_8);
         Path candidate = job.resolve("caption.png");
-        String fitted = nativeCommand(job, "-density", "72", "-font", face.path().toString(),
-            "-define", "caption:max-pointsize=" + requested, "-define", "caption:start-pointsize=" + requested,
-            "-background", "none", "-fill", "white", "-stroke", "black", "-strokewidth", Integer.toString(outline),
-            "-size", (width - INSET * 2) + "x" + (height - INSET * 2), "caption:@" + textFile,
-            "-format", "%[caption:pointsize]", "info:").strip();
-        double pointSize;
-        try { pointSize = Double.parseDouble(fitted); }
-        catch (NumberFormatException invalid) { throw new IOException("Invalid native fitted-size response"); }
-        if (!Double.isFinite(pointSize) || pointSize < 1 || pointSize > requested) throw new IOException("Invalid native fitted size");
-        int chosen = 0;
-        // Verify free-height output at the native suggested size: fixed-height
-        // creation alone would hide overflow. Any correction still has a finite bound.
-        for (int size = (int) Math.floor(pointSize); size >= 1; size--) {
-            nativeCommand(job, "-density", "72", "-font", face.path().toString(), "-pointsize", Integer.toString(size),
-                "-background", "none", "-fill", "white", "-stroke", "black", "-strokewidth", Integer.toString(outline),
-                "-size", (width - INSET * 2) + "x", "caption:@" + textFile, candidate.toString());
-            int[] dimensions = dimensions(job, candidate);
-            if (dimensions[0] <= width - INSET * 2 && dimensions[1] <= height - INSET * 2) { chosen = size; break; }
-        }
-        if (chosen == 0) throw new IllegalArgumentException("Native text cannot fit");
+        List<String> base = List.of("-density", "72", "-font", face.path().toString(), "-background", "none",
+            "-fill", "white", "-stroke", outline == 0 ? "none" : "black", "-strokewidth", Integer.toString(outline),
+            "-gravity", "NorthWest");
+        MagickCaptionFitter.Result fitted = MagickCaptionFitter.fit(new MagickCaptionFitter.Request(text,
+            width - INSET * 2, height - INSET * 2, requested, false, base, textFile, candidate),
+            arguments -> nativeCommand(job, arguments));
         Path result = job.resolve("native-box.png");
         nativeCommand(job, "-size", width + "x" + height, boxFill == null ? "xc:none" : "xc:" + rgb(boxFill),
             candidate.toString(), "-geometry", "+" + INSET + "+" + INSET, "-compose", "Over", "-composite", result.toString());
-        return new Raster(result, chosen);
+        return new Raster(result, fitted.size());
     }
 
     private void fontAndFitCases() throws Exception {

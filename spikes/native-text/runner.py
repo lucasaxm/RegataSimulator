@@ -353,7 +353,8 @@ def launch(args, deadline):
     java, javac = executable(home / "bin/java"), executable(home / "bin/javac")
     magick = executable(args.magick) if output is not None else None
     sources = [REPO / "src/main/java/com/boatarde/regatasimulator/util/ProcessRunner.java",
-               HERE / "NativeTextPoc.java"]
+               HERE / "NativeTextPoc.java", HERE / "VisualCorrectnessPoc.java",
+               HERE / "MagickCaptionFitter.java", HERE / "MagickCaptionFitterTest.java"]
     if any(not clean_path(source).is_file() for source in sources):
         raise Failure("Standalone Java sources must be regular files")
     with tempfile.TemporaryDirectory(prefix="native-text-", dir=Path(tempfile.gettempdir()).resolve()) as temporary:
@@ -390,7 +391,7 @@ def launch(args, deadline):
                 metrics = {"elapsedSeconds": elapsed, "peakSampledTreeRssKiB": sampler.peak,
                            "samplesIntervalMs": 50, "samplingStatus": sampler.reason,
                            "succeeded": succeeded, "warning": RSS_WARNING,
-                           "successMeaning": "Child completed; inspect checks.csv for CAPACITY_REJECTED. Not release readiness.",
+                           "successMeaning": "Child completed; inspect checks.csv for CAPACITY_REJECTED and visual-checks.csv for FAIL/LIMITATION. Not release readiness.",
                            "sourceSha256": {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
                                             for path in [*sources, Path(__file__)]}}
                 private_write(output, "external-metrics.json", json.dumps(metrics, indent=2).encode() + b"\n")
@@ -414,10 +415,12 @@ def main(argv=None):
         if command == "run":
             child.add_argument("--magick", required=True)
             child.add_argument("--output", required=True)
-            child.add_argument("--profile", required=True, choices=("smoke", "boundary"))
+            child.add_argument("--profile", required=True, choices=("smoke", "boundary", "visual"))
             child.add_argument("--rounds", required=True, type=int, choices=range(1, 6))
             child.add_argument("--sample-rss", action="store_true")
     args = parser.parse_args(argv)
+    if args.command == "run" and args.profile == "visual" and args.rounds != 1:
+        parser.error("Visual evidence requires exactly one round")
     if os.name != "posix":
         parser.error("Only POSIX process-group isolation is supported")
     deadline = time.monotonic() + 295  # Reserve five seconds for bounded termination/drain.
